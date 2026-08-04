@@ -11,7 +11,7 @@ enum CLI {
     Использование:
       ClaudeWeek                 запустить приложение в строке меню
       ClaudeWeek --json          напечатать состояние недели в JSON и выйти
-      ClaudeWeek --provider=X    источник данных: local (official будет в M3)
+      ClaudeWeek --provider=X    источник данных: official, local или auto
       ClaudeWeek --config=ПУТЬ   свой файл конфигурации
       ClaudeWeek --calibrate=N   подогнать локальную оценку под официальные N %
                                  (число берётся из /usage внутри Claude Code)
@@ -136,41 +136,62 @@ enum CLI {
         return 0
     }
 
+    /// Одна строка о том, почему вывод выглядит именно так.
+    private static func note(
+        percent: Output.Percent?,
+        snapshot: UsageSnapshot?,
+        failure: Error?
+    ) -> String? {
+        if percent == nil {
+            let reason = (failure as? UsageError)?.errorDescription ?? failure?.localizedDescription
+            return reason ?? "проценты недоступны: задайте weeklyBudget или calibration в \(ConfigStore.fileURL.path)"
+        }
+        if snapshot?.isEstimate == true {
+            return "локальная оценка: официальный источник недоступен"
+        }
+        return snapshot?.shapeIsEstimate == true
+            ? "итог официальный; разбивка по суткам восстановлена по транскриптам"
+            : nil
+    }
+
     static func run(config: Config) async -> Int32 {
         let now = Date()
-        let window = WeekWindow(containing: now, config: config)
-        let provider = LocalProvider(config: config)
-
         let started = Date()
+
+        // Снимок берём тем же путём, что и приложение: официальный источник
+        // с падением на локальную оценку. Иначе `--json` показывал бы не то,
+        // что видно в строке меню.
+        var snapshot: UsageSnapshot?
+        var failure: Error?
+        do {
+            snapshot = try await ResolvingProvider(config: config).fetch()
+        } catch {
+            failure = error
+        }
+        let elapsed = Date().timeIntervalSince(started)
+
+        // Окно официального источника, а без него — рассчитанное по конфигу.
+        let window = snapshot?.window ?? WeekWindow(containing: now, config: config)
+        let local = LocalProvider(config: config)
+
+        // Локальный скан нужен и при официальном источнике: он даёт стоимость
+        // и диагностику обхода, которых в ответе API нет.
         let usage: LocalUsage
         do {
-            usage = try await provider.scan(window: window, now: now)
+            usage = try await local.scan(window: window, now: now)
         } catch {
             FileHandle.standardError.write(Data("не смог прочитать транскрипты: \(error)\n".utf8))
             return 1
         }
-        let elapsed = Date().timeIntervalSince(started)
 
-        // Бюджет может быть не задан — тогда печатаем стоимость без процентов.
-        let budget = try? await provider.budget(for: usage)
+        // Бюджет мог быть подобран автоматически по официальному проценту —
+        // он лежит в кеше, а не в конфиге.
+        let budget = try? await local.budget(for: usage, override: Store.loadCache()?.weeklyBudget)
         var percent: Output.Percent?
         var cumulative: [Double?] = usage.costByDay.map { _ in nil }
 
-        if let budget, budget > 0 {
-            var running = 0.0
-            cumulative = usage.costByDay.map { cost in
-                guard let cost else { return nil }
-                running += cost
-                return running / budget * 100
-            }
-            let snapshot = UsageSnapshot.make(
-                usedPercent: usage.totalCost / budget * 100,
-                cumulativeByDay: cumulative,
-                window: window,
-                source: .local,
-                fetchedAt: now,
-                isEstimate: true
-            )
+        if let snapshot {
+            cumulative = snapshot.byDay.map(\.usedPercent)
             let metrics = snapshot.metrics(at: now, thresholds: config.thresholds)
             percent = Output.Percent(
                 used: metrics.usedPercent,
@@ -196,8 +217,8 @@ enum CLI {
         }
 
         let output = Output(
-            source: SourceKind.local.rawValue,
-            isEstimate: true,
+            source: (snapshot?.source ?? .local).rawValue,
+            isEstimate: snapshot?.isEstimate ?? true,
             generatedAt: now,
             window: Output.Window(
                 start: window.start,
@@ -215,9 +236,7 @@ enum CLI {
                 duplicatesSkipped: usage.duplicatesSkipped,
                 elapsedSeconds: elapsed
             ),
-            note: percent == nil
-                ? "проценты недоступны: задайте weeklyBudget или calibration в \(ConfigStore.fileURL.path)"
-                : nil
+            note: note(percent: percent, snapshot: snapshot, failure: failure)
         )
 
         let encoder = JSONEncoder()

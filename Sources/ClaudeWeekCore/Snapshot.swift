@@ -63,7 +63,12 @@ public struct UsageSnapshot: Sendable {
     public let window: WeekWindow
     public let source: SourceKind
     public let fetchedAt: Date
+    /// Приблизителен ли сам итог недели.
     public let isEstimate: Bool
+    /// Приблизительна ли разбивка по суткам. У официального источника итог
+    /// точный, а форма всё равно восстановлена по локальным транскриптам —
+    /// смешивать эти два вида приблизительности в одном флаге нельзя.
+    public let shapeIsEstimate: Bool
 
     public init(
         usedPercent: Double,
@@ -71,7 +76,8 @@ public struct UsageSnapshot: Sendable {
         window: WeekWindow,
         source: SourceKind,
         fetchedAt: Date,
-        isEstimate: Bool
+        isEstimate: Bool,
+        shapeIsEstimate: Bool = false
     ) {
         self.usedPercent = usedPercent
         self.byDay = byDay
@@ -79,6 +85,7 @@ public struct UsageSnapshot: Sendable {
         self.source = source
         self.fetchedAt = fetchedAt
         self.isEstimate = isEstimate
+        self.shapeIsEstimate = shapeIsEstimate
     }
 
     /// Собирает строки дней из накопительных процентов: `cumulative[i]` —
@@ -89,7 +96,8 @@ public struct UsageSnapshot: Sendable {
         window: WeekWindow,
         source: SourceKind,
         fetchedAt: Date,
-        isEstimate: Bool
+        isEstimate: Bool,
+        shapeIsEstimate: Bool = false
     ) -> UsageSnapshot {
         let days = window.days.map { slot in
             DayUsage(
@@ -106,7 +114,8 @@ public struct UsageSnapshot: Sendable {
             window: window,
             source: source,
             fetchedAt: fetchedAt,
-            isEstimate: isEstimate
+            isEstimate: isEstimate,
+            shapeIsEstimate: shapeIsEstimate
         )
     }
 

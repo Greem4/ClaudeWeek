@@ -21,7 +21,7 @@ final class StatusItemController: NSObject {
     init(config: Config = ConfigStore.load(), configURL: URL = ConfigStore.fileURL) {
         self.configURL = configURL
         model = PanelModel(config: config)
-        provider = LocalProvider(config: config)
+        provider = ResolvingProvider(config: config)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -30,8 +30,17 @@ final class StatusItemController: NSObject {
         configurePopover()
         observeSystemEvents()
         startTimers()
+        restoreFromCache()
         render()
         refresh()
+    }
+
+    /// Кеш прошлого запуска показываем мгновенно: сетевой ответ придёт через
+    /// секунду-другую, и всё это время строка меню иначе висела бы пустой.
+    private func restoreFromCache() {
+        guard let cache = Store.loadCache(), cache.isFresh(at: Date()) else { return }
+        model.apply(cache.snapshot(config: model.config))
+        model.status = .stale("данные \(Formatting.age(cache.fetchedAt, now: Date()))")
     }
 
     // deinit не нужен: контроллер живёт ровно столько же, сколько процесс,
@@ -232,7 +241,7 @@ final class StatusItemController: NSObject {
         guard config != model.config else { return }
         Log.info("конфиг изменился, применяю")
         model.config = config
-        provider = LocalProvider(config: config)
+        provider = ResolvingProvider(config: config)
         startTimers()
         refresh()
     }

@@ -170,10 +170,18 @@ public actor LocalProvider: UsageProvider {
     }
 
     public func fetch() async throws -> UsageSnapshot {
+        try await fetch(budgetOverride: nil, windowOverride: nil)
+    }
+
+    /// `budgetOverride` — бюджет, подобранный по официальному проценту, а
+    /// `windowOverride` — окно с настоящим моментом сброса. С ними офлайн-режим
+    /// не требует ни ручной калибровки, ни угадывания часа сброса в конфиге:
+    /// пока сеть была, и то и другое уже получено от сервера.
+    public func fetch(budgetOverride: Double?, windowOverride: WeekWindow?) async throws -> UsageSnapshot {
         let now = clock()
-        let window = WeekWindow(containing: now, config: config)
+        let window = windowOverride ?? WeekWindow(containing: now, config: config)
         let usage = try scan(window: window, now: now)
-        let budget = try budget(for: usage)
+        let budget = try budget(for: usage, override: budgetOverride)
 
         var running = 0.0
         let cumulative: [Double?] = usage.costByDay.map { cost in
@@ -194,8 +202,10 @@ public actor LocalProvider: UsageProvider {
 
     /// Бюджет из конфига, а если его нет — пересчитанный по одному
     /// наблюдению официального процента.
-    public func budget(for usage: LocalUsage) throws -> Double {
+    public func budget(for usage: LocalUsage, override: Double? = nil) throws -> Double {
+        // Явный конфиг важнее: его задал человек, а `override` подобран сам.
         if config.weeklyBudget > 0 { return config.weeklyBudget }
+        if let override, override > 0 { return override }
         guard let observed = config.calibration.observedPercent, observed > 0,
               let at = config.calibration.at
         else { throw UsageError.notCalibrated }
@@ -374,19 +384,6 @@ public actor LocalProvider: UsageProvider {
     }
 
     static func parseTimestamp(_ text: String) -> Date? {
-        if let date = fractionalFormatter.date(from: text) { return date }
-        return plainFormatter.date(from: text)
+        ISO8601.parse(text)
     }
-
-    nonisolated(unsafe) private static let fractionalFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    nonisolated(unsafe) private static let plainFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
 }

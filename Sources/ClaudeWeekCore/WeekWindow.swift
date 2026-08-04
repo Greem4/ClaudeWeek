@@ -55,6 +55,22 @@ public struct WeekWindow: Sendable, Equatable {
         )
     }
 
+    /// Окно по моменту сброса из официального ответа (`resets_at`).
+    ///
+    /// Это источник правды, когда он доступен: `resetWeekday`/`resetHour` в
+    /// конфиге — всего лишь догадка пользователя, а сервер знает точно.
+    /// Начало отсчитывается календарным шагом назад, чтобы неделя с переводом
+    /// часов не съезжала на час.
+    public init(endingAt end: Date, config: Config) {
+        let calendar = config.calendar
+        self.init(
+            start: calendar.date(byAdding: .day, value: -WeekWindow.daysInWeek, to: end) ?? end,
+            end: end,
+            calendar: calendar,
+            anchor: config.planAnchor
+        )
+    }
+
     public init(start: Date, end: Date, calendar: Calendar, anchor: PlanAnchor) {
         self.start = start
         self.end = end

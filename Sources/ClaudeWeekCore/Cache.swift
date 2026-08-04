@@ -55,6 +55,14 @@ public struct CachedUsage: Codable, Sendable, Equatable {
     public var windowEnd: Date
     public var source: SourceKind
     public var fetchedAt: Date
+    /// Бюджет недели, подобранный по официальному проценту: сколько условных
+    /// долларов соответствует 100 %. Держим здесь, а не в `config.json`, —
+    /// приложению не место в пользовательском конфиге без спроса.
+    public var weeklyBudget: Double?
+    /// Последний момент сброса, названный сервером. Живёт отдельно от
+    /// `windowEnd`, потому что кеш перезаписывается и локальными снимками —
+    /// а их окно построено по конфигу и настоящего сброса не знает.
+    public var officialWindowEnd: Date?
 
     public init(
         usedPercent: Double,
@@ -62,7 +70,9 @@ public struct CachedUsage: Codable, Sendable, Equatable {
         windowStart: Date,
         windowEnd: Date,
         source: SourceKind,
-        fetchedAt: Date
+        fetchedAt: Date,
+        weeklyBudget: Double? = nil,
+        officialWindowEnd: Date? = nil
     ) {
         self.usedPercent = usedPercent
         self.byDay = byDay
@@ -70,6 +80,8 @@ public struct CachedUsage: Codable, Sendable, Equatable {
         self.windowEnd = windowEnd
         self.source = source
         self.fetchedAt = fetchedAt
+        self.weeklyBudget = weeklyBudget
+        self.officialWindowEnd = officialWindowEnd
     }
 }
 

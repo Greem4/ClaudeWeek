@@ -53,9 +53,19 @@ final class PanelModel {
         case .loading: "получаю данные…"
         case .failed(let text): text
         case .stale(let text): text
-        case .ready:
-            snapshot?.isEstimate == true ? "оценка по локальным транскриптам, не официальные данные" : nil
+        case .ready: readyNote
         }
+    }
+
+    /// У официального источника точен итог, но не форма недели: разбивка по
+    /// суткам восстановлена из транскриптов. Молчать об этом нельзя — иначе
+    /// приблизительные полосы выглядят как официальные.
+    private var readyNote: String? {
+        guard let snapshot else { return nil }
+        if snapshot.isEstimate {
+            return "оценка по локальным транскриптам, не официальные данные"
+        }
+        return snapshot.shapeIsEstimate ? "официальный итог, разбивка по суткам — оценка" : nil
     }
 
     var isEstimate: Bool { snapshot?.isEstimate ?? false }
