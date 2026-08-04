@@ -16,7 +16,8 @@ enum Screenshot {
             window: window,
             source: .official,
             fetchedAt: now,
-            isEstimate: false
+            isEstimate: false,
+            session: SessionUsage(usedPercent: 41, resetsAt: now.addingTimeInterval(84 * 60))
         )
     }
 

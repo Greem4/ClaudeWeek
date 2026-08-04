@@ -124,6 +124,70 @@ func runOfficialProviderTests(_ t: Harness) async {
         t.close(usage.weekPercent, 50, "недельный процент из seven_day")
         same(t, usage.weekResetsAt, at(2026, 8, 7, 16, 0), "resets_at с микросекундами разобран")
         t.close(usage.sessionPercent ?? -1, 41, "пятичасовой лимит тоже разобран")
+        t.equal(usage.sessionResetsAt, at(2026, 8, 5, 0, 20),
+                "и его момент сброса, округлённый до минуты")
+    }
+
+    await t.suite("пятичасовая сессия") {
+        let (official, _) = provider()
+        let snapshot = try await official.fetch()
+
+        guard let session = snapshot.session else {
+            return t.fail("сессии нет в снимке, хотя в ответе она есть")
+        }
+        t.close(session.usedPercent, 41, "процент сессии доехал до снимка")
+        t.equal(session.resetsAt, at(2026, 8, 5, 0, 20), "вместе с моментом сброса")
+        t.close(session.timeLeft(from: testNow), 12 * 3600 + 20 * 60, "до сброса 12 ч 20 мин")
+        t.check(!session.isExhausted, "41 % — ещё не исчерпана")
+        t.check(SessionUsage(usedPercent: 100, resetsAt: testNow).isExhausted,
+                "а 100 % — исчерпана")
+
+        // После сброса прежний процент не «слегка устарел», а обнулился:
+        // показывать его нельзя ни в каком виде.
+        t.check(session.isFresh(at: testNow), "до сброса окно сессии годно")
+        t.check(!session.isFresh(at: at(2026, 8, 5, 1, 0)), "после — уже нет")
+
+        // Пятичасовой строки в ответе может не быть — нулевую сессию из этого
+        // выдумывать нельзя.
+        let weekOnly = """
+        {"seven_day": {"utilization": 50, "resets_at": "2026-08-07T12:00:00.357993+00:00"}}
+        """
+        let (bare, _) = provider(answers: [(200, weekOnly)])
+        t.check(try await bare.fetch().session == nil, "нет five_hour — нет и сессии")
+    }
+
+    await t.suite("сессия переживает падение на локальный источник") {
+        let sandbox = TranscriptSandbox()
+        defer { sandbox.cleanup() }
+        sandbox.write(cost: 10, at: "2026-08-01T10:00:00.000Z")
+
+        func resolving(offline: Bool, now: Date) -> ResolvingProvider {
+            ResolvingProvider(
+                config: config(),
+                credentials: offline ? FakeCredentials(error: UsageError.unauthorized) : FakeCredentials(),
+                transport: FakeTransport(answers: [(200, realResponse)]),
+                cacheURL: sandbox.cacheURL,
+                localRoot: sandbox.root,
+                indexURL: sandbox.indexURL,
+                clock: { now }
+            )
+        }
+
+        _ = try await resolving(offline: false, now: testNow).fetch()
+        t.close(Store.loadCache(from: sandbox.cacheURL)?.session?.usedPercent ?? -1, 41,
+                "сессия сохранена в кеш")
+
+        // Сеть отвалилась: локальная оценка про сессию не знает ничего, но
+        // лимит-то никуда не делся — берём его из кеша.
+        let fallback = try await resolving(offline: true, now: testNow).fetch()
+        t.equal(fallback.source, .local, "снимок локальный")
+        t.close(fallback.session?.usedPercent ?? -1, 41, "и всё же с сессией из кеша")
+
+        // А сутки спустя её окно давно закрыто — кеш обязан её забыть.
+        let stale = try await resolving(offline: true, now: at(2026, 8, 5, 12, 0)).fetch()
+        t.check(stale.session == nil, "истёкшую сессию в снимок не подставляем")
+        t.check(Store.loadCache(from: sandbox.cacheURL)?.session == nil,
+                "и из кеша её стираем, а не держим до следующего выхода в сеть")
     }
 
     await t.suite("запасной путь: seven_day пропал") {

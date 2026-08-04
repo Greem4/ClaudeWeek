@@ -40,6 +40,14 @@ final class PanelModel {
         snapshot?.window.dayIndex(for: now)
     }
 
+    /// Пятичасовая сессия — только пока её окно не истекло. После сброса от
+    /// прежнего процента не остаётся ничего, и строка просто исчезает: лучше
+    /// не показать лимит, чем показать вчерашние 95 % как сегодняшние.
+    var session: SessionUsage? {
+        guard let session = snapshot?.session, session.isFresh(at: now) else { return nil }
+        return session
+    }
+
     /// Заголовок в строке меню: «64 %» или «≈64 %» для оценки.
     var menuBarTitle: String {
         guard let snapshot else { return "—" }

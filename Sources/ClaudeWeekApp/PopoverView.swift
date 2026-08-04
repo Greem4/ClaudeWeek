@@ -12,6 +12,19 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.rowSpacing) {
             header
+
+            // Пятичасовая сессия стоит над разделителем, в одной сетке с
+            // сутками, но по свою его сторону: лимит независимый, и путать
+            // его с восьмым днём недели нельзя. Нет данных — нет и строки.
+            if let session = model.session {
+                SessionRow(
+                    session: session,
+                    now: model.now,
+                    criticalThreshold: model.config.thresholds.critical,
+                    animated: !reduceMotion
+                )
+            }
+
             Divider().overlay(Theme.separator)
 
             if let snapshot = model.snapshot {

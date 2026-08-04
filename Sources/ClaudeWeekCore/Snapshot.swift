@@ -29,6 +29,32 @@ public struct DayUsage: Sendable, Equatable {
     }
 }
 
+/// Пятичасовая сессия — второй лимит, живущий рядом с недельным и ничем с ним
+/// не связанный: неделя может быть на 20 %, а сессия на 95 %, и упрётесь вы
+/// именно в неё. Плана внутри сессии нет: пятичасовое окно не обязано
+/// расходоваться равномерно, поэтому здесь только факт и момент сброса.
+public struct SessionUsage: Codable, Sendable, Equatable {
+    /// Расход лимита сессии, 0…100.
+    public let usedPercent: Double
+    public let resetsAt: Date
+
+    public init(usedPercent: Double, resetsAt: Date) {
+        self.usedPercent = usedPercent
+        self.resetsAt = resetsAt
+    }
+
+    /// Окно сессии ещё не истекло. Проверять обязательно: сессия короче суток,
+    /// и число из кеша прошлого запуска устаревает не «немного», а полностью —
+    /// после сброса от него остаётся ноль, а показали бы мы 95 %.
+    public func isFresh(at now: Date) -> Bool { now < resetsAt }
+
+    public func timeLeft(from now: Date) -> TimeInterval {
+        max(resetsAt.timeIntervalSince(now), 0)
+    }
+
+    public var isExhausted: Bool { usedPercent >= 100 }
+}
+
 /// Состояние лимита — единственная точка, к которой подключаются уведомления,
 /// если они когда-нибудь понадобятся (сейчас их нет, см. §10 плана).
 public enum LimitState: String, Sendable {
@@ -69,6 +95,11 @@ public struct UsageSnapshot: Sendable {
     /// точный, а форма всё равно восстановлена по локальным транскриптам —
     /// смешивать эти два вида приблизительности в одном флаге нельзя.
     public let shapeIsEstimate: Bool
+    /// Пятичасовой лимит; nil — его не сообщили. Локальный источник его не
+    /// считает: веса моделей приближают недельную формулу, а не сессионную,
+    /// и выдумывать второе число по тем же данным значило бы врать точнее,
+    /// чем мы знаем.
+    public let session: SessionUsage?
 
     public init(
         usedPercent: Double,
@@ -77,7 +108,8 @@ public struct UsageSnapshot: Sendable {
         source: SourceKind,
         fetchedAt: Date,
         isEstimate: Bool,
-        shapeIsEstimate: Bool = false
+        shapeIsEstimate: Bool = false,
+        session: SessionUsage? = nil
     ) {
         self.usedPercent = usedPercent
         self.byDay = byDay
@@ -86,6 +118,7 @@ public struct UsageSnapshot: Sendable {
         self.fetchedAt = fetchedAt
         self.isEstimate = isEstimate
         self.shapeIsEstimate = shapeIsEstimate
+        self.session = session
     }
 
     /// Собирает строки дней из накопительных процентов: `cumulative[i]` —
@@ -97,7 +130,8 @@ public struct UsageSnapshot: Sendable {
         source: SourceKind,
         fetchedAt: Date,
         isEstimate: Bool,
-        shapeIsEstimate: Bool = false
+        shapeIsEstimate: Bool = false,
+        session: SessionUsage? = nil
     ) -> UsageSnapshot {
         let days = window.days.map { slot in
             DayUsage(
@@ -115,7 +149,24 @@ public struct UsageSnapshot: Sendable {
             source: source,
             fetchedAt: fetchedAt,
             isEstimate: isEstimate,
-            shapeIsEstimate: shapeIsEstimate
+            shapeIsEstimate: shapeIsEstimate,
+            session: session
+        )
+    }
+
+    /// Тот же снимок с другой сессией. Нужна потому, что считает неделю один
+    /// источник, а помнит сессию — другой: локальная оценка про пятичасовой
+    /// лимит не знает ничего, и его подставляет тот, у кого есть кеш.
+    public func with(session: SessionUsage?) -> UsageSnapshot {
+        UsageSnapshot(
+            usedPercent: usedPercent,
+            byDay: byDay,
+            window: window,
+            source: source,
+            fetchedAt: fetchedAt,
+            isEstimate: isEstimate,
+            shapeIsEstimate: shapeIsEstimate,
+            session: session
         )
     }
 

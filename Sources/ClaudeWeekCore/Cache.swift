@@ -63,6 +63,9 @@ public struct CachedUsage: Codable, Sendable, Equatable {
     /// `windowEnd`, потому что кеш перезаписывается и локальными снимками —
     /// а их окно построено по конфигу и настоящего сброса не знает.
     public var officialWindowEnd: Date?
+    /// Пятичасовая сессия из последнего официального ответа. Хранится вместе
+    /// со своим `resetsAt`, так что при чтении видно, не истекла ли она.
+    public var session: SessionUsage?
 
     public init(
         usedPercent: Double,
@@ -72,7 +75,8 @@ public struct CachedUsage: Codable, Sendable, Equatable {
         source: SourceKind,
         fetchedAt: Date,
         weeklyBudget: Double? = nil,
-        officialWindowEnd: Date? = nil
+        officialWindowEnd: Date? = nil,
+        session: SessionUsage? = nil
     ) {
         self.usedPercent = usedPercent
         self.byDay = byDay
@@ -82,6 +86,7 @@ public struct CachedUsage: Codable, Sendable, Equatable {
         self.fetchedAt = fetchedAt
         self.weeklyBudget = weeklyBudget
         self.officialWindowEnd = officialWindowEnd
+        self.session = session
     }
 }
 

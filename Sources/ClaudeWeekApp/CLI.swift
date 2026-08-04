@@ -27,6 +27,9 @@ enum CLI {
         let generatedAt: Date
         let window: Window
         let percent: Percent?
+        /// Пятичасовой лимит; ключа нет, когда его не сообщили или окно уже
+        /// истекло — как и в панели, просроченный процент не показываем.
+        let session: Session?
         let cost: Cost
         let days: [Day]
         let scan: Scan
@@ -49,6 +52,13 @@ enum CLI {
             let state: String
             let timeLeft: String
             let exhaustionAt: Date?
+        }
+
+        struct Session: Encodable {
+            let usedPercent: Double
+            let resetsAt: Date
+            let timeLeft: String
+            let exhausted: Bool
         }
 
         struct Cost: Encodable {
@@ -205,6 +215,17 @@ enum CLI {
             )
         }
 
+        let session = snapshot?.session
+            .flatMap { $0.isFresh(at: now) ? $0 : nil }
+            .map {
+                Output.Session(
+                    usedPercent: $0.usedPercent,
+                    resetsAt: $0.resetsAt,
+                    timeLeft: Formatting.duration($0.timeLeft(from: now)),
+                    exhausted: $0.isExhausted
+                )
+            }
+
         let days = window.days.map { slot in
             Output.Day(
                 index: slot.index,
@@ -228,6 +249,7 @@ enum CLI {
                 planAnchor: window.anchor.rawValue
             ),
             percent: percent,
+            session: session,
             cost: Output.Cost(total: usage.totalCost, weeklyBudget: budget, currency: "USD"),
             days: days,
             scan: Output.Scan(

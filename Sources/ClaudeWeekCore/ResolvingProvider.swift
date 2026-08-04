@@ -45,17 +45,17 @@ public actor ResolvingProvider: UsageProvider {
     public func fetch() async throws -> UsageSnapshot {
         if let official {
             do {
-                let snapshot = try await official.fetch()
+                let snapshot = withStoredSession(try await official.fetch())
                 save(snapshot, weeklyBudget: await calibrate(to: snapshot))
                 return snapshot
             } catch {
                 guard preference == .auto else { throw error }
                 Log.info("официальный источник не ответил (\(error)), беру локальную оценку")
                 do {
-                    let snapshot = try await local.fetch(
+                    let snapshot = withStoredSession(try await local.fetch(
                         budgetOverride: storedBudget(),
                         windowOverride: storedWindow()
-                    )
+                    ))
                     save(snapshot, weeklyBudget: storedBudget())
                     return snapshot
                 } catch {
@@ -67,12 +67,25 @@ public actor ResolvingProvider: UsageProvider {
             }
         }
 
-        let snapshot = try await local.fetch(
+        let snapshot = withStoredSession(try await local.fetch(
             budgetOverride: storedBudget(),
             windowOverride: storedWindow()
-        )
+        ))
         save(snapshot, weeklyBudget: storedBudget())
         return snapshot
+    }
+
+    /// Подставляет в снимок последнюю официальную сессию, пока её пятичасовое
+    /// окно не истекло. Без этого строка сессии пропадала бы из панели при
+    /// первом же обрыве сети, хотя сам лимит никуда не делся; истёкшую же
+    /// не подставляем никогда — она не «слегка устарела», а обнулилась.
+    private func withStoredSession(_ snapshot: UsageSnapshot) -> UsageSnapshot {
+        guard snapshot.session == nil,
+              let cacheURL,
+              let stored = Store.loadCache(from: cacheURL)?.session,
+              stored.isFresh(at: snapshot.fetchedAt)
+        else { return snapshot }
+        return snapshot.with(session: stored)
     }
 
     /// Подбирает бюджет недели по официальному проценту: сколько условных
@@ -121,7 +134,10 @@ public actor ResolvingProvider: UsageProvider {
             source: snapshot.source,
             fetchedAt: snapshot.fetchedAt,
             weeklyBudget: weeklyBudget,
-            officialWindowEnd: officialEnd
+            officialWindowEnd: officialEnd,
+            // Уже отфильтрована по сроку в `withStoredSession`: истёкшая
+            // сюда не доходит и тем самым стирается из кеша.
+            session: snapshot.session
         )
         do {
             try Store.saveCache(cache, to: cacheURL)
@@ -148,7 +164,10 @@ public extension CachedUsage {
             source: source,
             fetchedAt: fetchedAt,
             isEstimate: source == .local,
-            shapeIsEstimate: true
+            shapeIsEstimate: true,
+            // Отдаём как есть, не проверяя срок: годна ли сессия — решает тот,
+            // кто знает текущий момент, а у восстановления его нет.
+            session: session
         )
     }
 

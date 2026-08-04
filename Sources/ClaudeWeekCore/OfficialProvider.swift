@@ -8,11 +8,17 @@ public struct OfficialUsage: Sendable, Equatable {
     /// Расход недельного лимита по всем моделям, 0…100.
     public let weekPercent: Double
     public let weekResetsAt: Date
-    /// Текущая пятичасовая сессия. Панель про неё не рассказывает — она о
-    /// неделе, — но разбирается сразу: это второй лимит, в который упираются
-    /// на практике, и данные для него уже в ответе.
+    /// Текущая пятичасовая сессия — второй лимит, в который упираются
+    /// на практике. Приходит одной строкой рядом с недельной.
     public let sessionPercent: Double?
     public let sessionResetsAt: Date?
+
+    /// Сессия для панели: без процента или без момента сброса показывать
+    /// нечего — «41 %» неизвестно до какого часа не значит ничего.
+    public var session: SessionUsage? {
+        guard let sessionPercent, let sessionResetsAt else { return nil }
+        return SessionUsage(usedPercent: sessionPercent, resetsAt: sessionResetsAt)
+    }
 
     public init(
         weekPercent: Double,
@@ -94,7 +100,11 @@ struct UsageResponse: Decodable {
             weekPercent: percent,
             weekResetsAt: OfficialUsage.roundToMinute(resetsAt),
             sessionPercent: fiveHour?.utilization ?? session?.percent,
-            sessionResetsAt: (fiveHour?.resetsAt ?? session?.resetsAt).flatMap(ISO8601.parse)
+            // Тот же секундный дрейф, что и у недели: без округления обратный
+            // отсчёт до конца сессии дёргался бы на минуту туда-сюда.
+            sessionResetsAt: (fiveHour?.resetsAt ?? session?.resetsAt)
+                .flatMap(ISO8601.parse)
+                .map(OfficialUsage.roundToMinute)
         )
     }
 }
@@ -182,7 +192,8 @@ public actor OfficialProvider: UsageProvider {
             source: .official,
             fetchedAt: now,
             isEstimate: false,
-            shapeIsEstimate: true
+            shapeIsEstimate: true,
+            session: usage.session
         )
     }
 
