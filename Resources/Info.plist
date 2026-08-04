@@ -8,6 +8,8 @@
 	<string>ClaudeWeek</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.greem4.claudeweek</string>
+	<key>CFBundleIconFile</key>
+	<string>ClaudeWeek</string>
 	<key>CFBundleExecutable</key>
 	<string>ClaudeWeek</string>
 	<key>CFBundlePackageType</key>

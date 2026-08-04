@@ -13,6 +13,8 @@ enum CLI {
       ClaudeWeek --json          напечатать состояние недели в JSON и выйти
       ClaudeWeek --provider=X    источник данных: local | official | auto
       ClaudeWeek --config=ПУТЬ   свой файл конфигурации
+      ClaudeWeek --calibrate=N   подогнать локальную оценку под официальные N %
+                                 (число берётся из /usage внутри Claude Code)
       ClaudeWeek --screenshot КАТ отрисовать панель в PNG (обе темы)
       ClaudeWeek --verbose       подробный лог в stderr
       ClaudeWeek --help          эта справка
@@ -86,6 +88,51 @@ enum CLI {
             let duplicatesSkipped: Int
             let elapsedSeconds: Double
         }
+    }
+
+    /// `--calibrate=64`: привязывает локальную оценку к одному официальному
+    /// наблюдению. Считает, сколько условных долларов уже потрачено, и делит
+    /// на долю — получается бюджет недели.
+    static func calibrate(percent: Double, config: Config, configURL: URL) async -> Int32 {
+        guard percent > 0, percent <= 100 else {
+            FileHandle.standardError.write(Data("процент должен быть в диапазоне 0…100\n".utf8))
+            return 1
+        }
+
+        let now = Date()
+        let window = WeekWindow(containing: now, config: config)
+        let provider = LocalProvider(config: config)
+
+        let spent: Double
+        do {
+            spent = try await provider.scan(window: window, now: now).totalCost
+        } catch {
+            FileHandle.standardError.write(Data("не смог прочитать транскрипты: \(error)\n".utf8))
+            return 1
+        }
+        guard spent > 0 else {
+            FileHandle.standardError.write(Data("за текущую неделю расхода нет — калибровать не по чему\n".utf8))
+            return 1
+        }
+
+        var updated = config
+        updated.weeklyBudget = spent / (percent / 100)
+        updated.calibration = Calibration(observedPercent: percent, at: now)
+
+        do {
+            try ConfigStore.save(updated, to: configURL)
+        } catch {
+            FileHandle.standardError.write(Data("не сохранил конфиг: \(error)\n".utf8))
+            return 1
+        }
+
+        print("""
+        Откалибровано по официальным \(Formatting.percent(percent)).
+        Потрачено за неделю: $\(String(format: "%.2f", spent)) условных.
+        Бюджет недели: $\(String(format: "%.2f", updated.weeklyBudget)).
+        Записано в \(configURL.path)
+        """)
+        return 0
     }
 
     static func run(config: Config) async -> Int32 {

@@ -23,8 +23,20 @@ if let raw = arguments.first(where: { $0.hasPrefix("--provider=") })?
     config.provider = choice
 }
 
+if let raw = arguments.first(where: { $0.hasPrefix("--calibrate=") })?
+    .dropFirst("--calibrate=".count), let percent = Double(raw) {
+    exit(await CLI.calibrate(percent: percent, config: config, configURL: configURL))
+}
+
 if arguments.contains("--json") {
     exit(await CLI.run(config: config))
+}
+
+if let index = arguments.firstIndex(of: "--icon") {
+    let directory = arguments.count > index + 1
+        ? URL(fileURLWithPath: arguments[index + 1])
+        : URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    exit(AppIcon.render(into: directory))
 }
 
 if let index = arguments.firstIndex(of: "--screenshot") {

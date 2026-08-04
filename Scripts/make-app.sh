@@ -23,6 +23,16 @@ cp "$BIN" "$APP/Contents/MacOS/ClaudeWeek"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+echo "==> иконка"
+ICONSET_DIR="$ROOT/dist/icon"
+if "$BIN" --icon "$ICONSET_DIR" > /dev/null && command -v iconutil > /dev/null; then
+    iconutil -c icns "$ICONSET_DIR/ClaudeWeek.iconset" \
+        -o "$APP/Contents/Resources/ClaudeWeek.icns"
+    rm -rf "$ICONSET_DIR"
+else
+    echo "   iconutil не найден — бандл без иконки" >&2
+fi
+
 echo "==> ad-hoc подпись"
 codesign --force --sign - "$APP"
 
