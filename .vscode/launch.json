@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ClaudeWeek}",
+            "name": "Debug ClaudeWeekTests",
+            "target": "ClaudeWeekTests",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ClaudeWeekTests"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ClaudeWeek}",
+            "name": "Release ClaudeWeekTests",
+            "target": "ClaudeWeekTests",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ClaudeWeekTests"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ClaudeWeek}",
+            "name": "Debug ClaudeWeekApp",
+            "target": "ClaudeWeekApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ClaudeWeekApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ClaudeWeek}",
+            "name": "Release ClaudeWeekApp",
+            "target": "ClaudeWeekApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ClaudeWeekApp"
+        }
+    ]
+}

@@ -1,0 +1,144 @@
+import Foundation
+
+public enum SourceKind: String, Codable, Sendable {
+    case official
+    case local
+}
+
+/// Одна строка панели: план на сутки и накопительный факт на их конец.
+public struct DayUsage: Sendable, Equatable {
+    public let index: Int
+    public let start: Date
+    public let end: Date
+    public let planPercent: Double
+    /// Накопительный расход от начала недели; nil — сутки ещё не наступили.
+    public let usedPercent: Double?
+
+    public init(index: Int, start: Date, end: Date, planPercent: Double, usedPercent: Double?) {
+        self.index = index
+        self.start = start
+        self.end = end
+        self.planPercent = planPercent
+        self.usedPercent = usedPercent
+    }
+
+    /// Часть факта, вышедшая за план этих суток.
+    public var overspendPercent: Double {
+        guard let used = usedPercent else { return 0 }
+        return max(used - planPercent, 0)
+    }
+}
+
+/// Состояние лимита — единственная точка, к которой подключаются уведомления,
+/// если они когда-нибудь понадобятся (сейчас их нет, см. §10 плана).
+public enum LimitState: String, Sendable {
+    /// Идём в графике.
+    case onTrack
+    /// Обгоняем план.
+    case overPlan
+    /// Лимит на исходе.
+    case critical
+    /// Лимит недели исчерпан.
+    case exhausted
+}
+
+public struct UsageMetrics: Sendable, Equatable {
+    public let usedPercent: Double
+    public let remainingPercent: Double
+    public let planNowPercent: Double
+    public let timeLeft: TimeInterval
+    /// Во сколько раз факт обгоняет план: 1.0 — ровно по плану.
+    /// nil сразу после сброса, когда план ещё нулевой.
+    public let burnRate: Double?
+    /// Прогноз расхода к моменту сброса при сохранении темпа.
+    public let projectedPercent: Double?
+    /// Когда лимит кончится при текущем темпе; nil — если не кончится до сброса.
+    public let exhaustionDate: Date?
+    public let state: LimitState
+}
+
+public struct UsageSnapshot: Sendable {
+    public let usedPercent: Double
+    public let byDay: [DayUsage]
+    public let window: WeekWindow
+    public let source: SourceKind
+    public let fetchedAt: Date
+    public let isEstimate: Bool
+
+    public init(
+        usedPercent: Double,
+        byDay: [DayUsage],
+        window: WeekWindow,
+        source: SourceKind,
+        fetchedAt: Date,
+        isEstimate: Bool
+    ) {
+        self.usedPercent = usedPercent
+        self.byDay = byDay
+        self.window = window
+        self.source = source
+        self.fetchedAt = fetchedAt
+        self.isEstimate = isEstimate
+    }
+
+    /// Собирает строки дней из накопительных процентов: `cumulative[i]` —
+    /// расход от начала недели до конца i-х суток, nil для будущего.
+    public static func make(
+        usedPercent: Double,
+        cumulativeByDay: [Double?],
+        window: WeekWindow,
+        source: SourceKind,
+        fetchedAt: Date,
+        isEstimate: Bool
+    ) -> UsageSnapshot {
+        let days = window.days.map { slot in
+            DayUsage(
+                index: slot.index,
+                start: slot.start,
+                end: slot.end,
+                planPercent: slot.planPercent,
+                usedPercent: slot.index < cumulativeByDay.count ? cumulativeByDay[slot.index] : nil
+            )
+        }
+        return UsageSnapshot(
+            usedPercent: usedPercent,
+            byDay: days,
+            window: window,
+            source: source,
+            fetchedAt: fetchedAt,
+            isEstimate: isEstimate
+        )
+    }
+
+    public func metrics(at now: Date, thresholds: Thresholds = Thresholds()) -> UsageMetrics {
+        let progress = window.progress(at: now)
+        let planNow = progress * 100
+        let burnRate: Double? = planNow > 0 ? usedPercent / planNow : nil
+        let projected: Double? = progress > 0 ? usedPercent / progress : nil
+
+        var exhaustion: Date?
+        if let projected, projected > 100, usedPercent > 0 {
+            let elapsed = now.timeIntervalSince(window.start)
+            exhaustion = window.start.addingTimeInterval(elapsed * 100 / usedPercent)
+        }
+
+        return UsageMetrics(
+            usedPercent: usedPercent,
+            remainingPercent: max(100 - usedPercent, 0),
+            planNowPercent: planNow,
+            timeLeft: window.timeLeft(from: now),
+            burnRate: burnRate,
+            projectedPercent: projected,
+            exhaustionDate: exhaustion,
+            state: state(at: now, thresholds: thresholds)
+        )
+    }
+
+    public func state(at now: Date, thresholds: Thresholds = Thresholds()) -> LimitState {
+        if usedPercent >= 100 { return .exhausted }
+        if usedPercent >= thresholds.critical * 100 { return .critical }
+        let planNow = window.planPercent(at: now)
+        if planNow > 0 && usedPercent > planNow * thresholds.warn { return .overPlan }
+        return .onTrack
+    }
+}
