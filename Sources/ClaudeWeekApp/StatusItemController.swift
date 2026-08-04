@@ -11,6 +11,7 @@ final class StatusItemController: NSObject {
 
     private var refreshTimer: Timer?
     private var clockTimer: Timer?
+    private var appearanceObserver: NSKeyValueObservation?
     /// Отпечаток файла конфига — по нему замечаем правки без file watcher:
     /// атомарная запись меняет inode, и наблюдатель по дескриптору её теряет.
     private var configStamp: ConfigStamp?
@@ -40,11 +41,16 @@ final class StatusItemController: NSObject {
 
     private func configureButton() {
         guard let button = statusItem.button else { return }
-        button.imagePosition = .imageLeading
-        button.image = MenuBarBar.placeholder()
+        button.imagePosition = .imageOnly
         button.target = self
         button.action = #selector(handleClick)
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        // Цифры нарисованы в картинке, поэтому сами следить за тёмной и
+        // светлой строкой меню: на смене оформления перерисовываем.
+        appearanceObserver = button.observe(\.effectiveAppearance) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.render() }
+        }
     }
 
     private func configurePopover() {
@@ -62,33 +68,21 @@ final class StatusItemController: NSObject {
     private func render() {
         guard let button = statusItem.button else { return }
 
-        let title = model.config.menuBarStyle == .compact ? "" : " \(model.menuBarTitle)"
-        button.attributedTitle = NSAttributedString(
-            string: title,
-            attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular),
-                .foregroundColor: color(for: model.state),
-            ]
-        )
+        let title = model.config.menuBarStyle == .compact ? nil : model.menuBarTitle
 
         if let snapshot = model.snapshot, let metrics = model.metrics {
             button.image = MenuBarBar.image(
                 usedPercent: snapshot.usedPercent,
                 planPercent: metrics.planNowPercent,
-                state: metrics.state
+                state: metrics.state,
+                title: title
             )
         } else {
-            button.image = MenuBarBar.placeholder()
+            button.image = MenuBarBar.placeholder(title: title)
         }
+        // Без текстового заголовка кнопку нечего озвучивать — даём подпись сами.
+        button.setAccessibilityLabel("ClaudeWeek — потрачено \(model.menuBarTitle)")
         button.toolTip = tooltip
-    }
-
-    private func color(for state: LimitState) -> NSColor {
-        switch state {
-        case .onTrack: .labelColor
-        case .overPlan: NSColor(hex: 0xFAB219)
-        case .critical, .exhausted: NSColor(hex: 0xD03B3B)
-        }
     }
 
     private var tooltip: String {

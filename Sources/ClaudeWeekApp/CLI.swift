@@ -15,7 +15,7 @@ enum CLI {
       ClaudeWeek --config=ПУТЬ   свой файл конфигурации
       ClaudeWeek --calibrate=N   подогнать локальную оценку под официальные N %
                                  (число берётся из /usage внутри Claude Code)
-      ClaudeWeek --screenshot КАТ отрисовать панель в PNG (обе темы)
+      ClaudeWeek --screenshot КАТ отрисовать панель и иконку в PNG (обе темы)
       ClaudeWeek --icon КАТ      сгенерировать .iconset для сборки бандла
       ClaudeWeek --verbose       подробный лог в stderr
       ClaudeWeek --help          эта справка

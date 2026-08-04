@@ -1,42 +1,47 @@
 import AppKit
 import ClaudeWeekCore
 
-/// Мини-полоска слева от процента в строке меню: те же три цвета, что и в
-/// панели, только в 24×3 pt.
+/// Иконка в строке меню: полоса недели, под ней — процент. Те же три цвета,
+/// что и в панели. Два этажа вместо «полоска, а рядом текст» экономят почти
+/// половину ширины пункта: ~28 pt против ~57 pt.
 enum MenuBarBar {
-    static let size = NSSize(width: 24, height: 3)
+    /// Высота картинки. Строка меню — 24 pt, 16 оставляет поля сверху и снизу.
+    static let height: CGFloat = 16
+    /// Ниже полоса становится нечитаемо короткой, даже если подпись узкая.
+    static let minimumWidth: CGFloat = 24
 
-    static func image(usedPercent: Double, planPercent: Double, state: LimitState) -> NSImage {
-        let image = NSImage(size: size, flipped: false) { rect in
-            let radius = rect.height / 2
+    private static let barHeight: CGFloat = 3
+    /// Просвет между полосой и цифрами.
+    private static let gap: CGFloat = 1
+    /// Девятый кегль — предел, на котором цифры в строке меню ещё читаются.
+    private static var font: NSFont {
+        NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+    }
 
-            NSColor(hex: 0x8A8A85).withAlphaComponent(0.35).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+    /// `title` = nil — режим `compact`: одна полоса, без числа.
+    static func image(
+        usedPercent: Double,
+        planPercent: Double,
+        state: LimitState,
+        title: String?
+    ) -> NSImage {
+        let label = title.map { attributed($0, state: state) }
+        let labelSize = label?.size() ?? .zero
+        let width = max(minimumWidth, ceil(labelSize.width) + 2)
 
-            let planWidth = rect.width * clamp(planPercent)
-            NSColor(hex: 0x6DA7EC).withAlphaComponent(0.65).setFill()
-            NSBezierPath(
-                roundedRect: NSRect(x: 0, y: 0, width: planWidth, height: rect.height),
-                xRadius: radius, yRadius: radius
-            ).fill()
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
+            // Содержимое центрируем по высоте целиком, а не полосу и цифры
+            // по отдельности — иначе иконка «висит» выше соседей в строке.
+            let content = barHeight + (label == nil ? 0 : gap + labelSize.height)
+            let top = (rect.height + content) / 2
 
-            let usedWidth = rect.width * clamp(usedPercent)
-            let insidePlan = min(usedWidth, planWidth)
-            NSColor(hex: 0x0CA30C).setFill()
-            NSBezierPath(
-                roundedRect: NSRect(x: 0, y: 0, width: insidePlan, height: rect.height),
-                xRadius: radius, yRadius: radius
-            ).fill()
+            drawBar(
+                in: NSRect(x: 0, y: top - barHeight, width: rect.width, height: barHeight),
+                usedPercent: usedPercent, planPercent: planPercent, state: state
+            )
 
-            if usedWidth > planWidth {
-                // Тот же двухпиксельный зазор, что и в панели.
-                let start = planWidth + 2
-                let width = max(usedWidth - start, 1)
-                NSColor(hex: state == .exhausted ? 0xD03B3B : 0xFAB219).setFill()
-                NSBezierPath(
-                    roundedRect: NSRect(x: start, y: 0, width: width, height: rect.height),
-                    xRadius: radius, yRadius: radius
-                ).fill()
+            if let label {
+                label.draw(at: NSPoint(x: (rect.width - labelSize.width) / 2, y: top - content))
             }
             return true
         }
@@ -44,9 +49,68 @@ enum MenuBarBar {
         return image
     }
 
-    /// Пустая полоска, пока данных нет.
-    static func placeholder() -> NSImage {
-        image(usedPercent: 0, planPercent: 0, state: .onTrack)
+    /// Пустая иконка, пока данных нет.
+    static func placeholder(title: String?) -> NSImage {
+        image(usedPercent: 0, planPercent: 0, state: .onTrack, title: title)
+    }
+
+    private static func drawBar(
+        in rect: NSRect,
+        usedPercent: Double,
+        planPercent: Double,
+        state: LimitState
+    ) {
+        let radius = rect.height / 2
+
+        NSColor(hex: 0x8A8A85).withAlphaComponent(0.35).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+
+        let planWidth = rect.width * clamp(planPercent)
+        NSColor(hex: 0x6DA7EC).withAlphaComponent(0.65).setFill()
+        NSBezierPath(
+            roundedRect: NSRect(x: rect.minX, y: rect.minY, width: planWidth, height: rect.height),
+            xRadius: radius, yRadius: radius
+        ).fill()
+
+        let usedWidth = rect.width * clamp(usedPercent)
+        NSColor(hex: 0x0CA30C).setFill()
+        NSBezierPath(
+            roundedRect: NSRect(
+                x: rect.minX, y: rect.minY,
+                width: min(usedWidth, planWidth), height: rect.height
+            ),
+            xRadius: radius, yRadius: radius
+        ).fill()
+
+        if usedWidth > planWidth {
+            // Тот же двухпиксельный зазор, что и в панели.
+            let start = planWidth + 2
+            NSColor(hex: state == .exhausted ? 0xD03B3B : 0xFAB219).setFill()
+            NSBezierPath(
+                roundedRect: NSRect(
+                    x: rect.minX + start, y: rect.minY,
+                    width: max(usedWidth - start, 1), height: rect.height
+                ),
+                xRadius: radius, yRadius: radius
+            ).fill()
+        }
+    }
+
+    private static func attributed(_ title: String, state: LimitState) -> NSAttributedString {
+        NSAttributedString(
+            string: title,
+            attributes: [.font: font, .foregroundColor: textColor(for: state)]
+        )
+    }
+
+    /// Цвет цифр. `labelColor` динамический — он разрешается в момент
+    /// отрисовки, поэтому подходит и к тёмной, и к светлой строке меню.
+    private static func textColor(for state: LimitState) -> NSColor {
+        switch state {
+        case .onTrack: .labelColor
+        case .overPlan: NSColor(hex: 0xFAB219)
+        case .critical, .exhausted: NSColor(hex: 0xD03B3B)
+        }
     }
 
     private static func clamp(_ percent: Double) -> CGFloat {
