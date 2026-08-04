@@ -20,7 +20,18 @@ enum Theme {
     /// красный и зелёный неразличимы при дейтеранопии.
     static let critical = Color(hex: 0xD03B3B)
 
+    /// Фон панели живьём не используется — там материал строки меню
+    /// (`NSVisualEffectView`). Нужен только оффскрин-рендеру `--screenshot`,
+    /// которому размывать нечего.
     static let panelBackground = dynamic(light: 0xFCFCFB, dark: 0x1A1A19)
+    /// Тон поверх материала: чистый `.menu` выходит светлее системных меню
+    /// строки, и полосы на нём теряют плотность. Кладём тонкую вуаль —
+    /// в тёмной теме чёрную, в светлой белую. Прозрачность остаётся: сквозь
+    /// вуаль по-прежнему видно размытый фон.
+    static let panelTint = dynamic(
+        light: 0xFFFFFF, lightAlpha: 0.30,
+        dark: 0x000000, darkAlpha: 0.28
+    )
     static let primaryText = dynamic(light: 0x0B0B0B, dark: 0xFFFFFF)
     static let secondaryText = dynamic(light: 0x52514E, dark: 0xC3C2B7)
     static let separator = dynamic(light: 0xE1E0D9, dark: 0x2C2C2A)
@@ -29,6 +40,10 @@ enum Theme {
 
     static let panelWidth: CGFloat = 320
     static let panelPadding: CGFloat = 16
+    /// Скругление как у системных меню строки.
+    static let panelCornerRadius: CGFloat = 12
+    /// Отступ от края экрана, когда пункт стоит у самого угла.
+    static let panelScreenMargin: CGFloat = 8
     static let rowSpacing: CGFloat = 10
     static let barHeight: CGFloat = 8
     /// Вторичный канал кодирования: держит границу читаемой там, где цвета
@@ -62,9 +77,16 @@ enum Theme {
     /// Тема следует системной и переключается на лету: цвет разрешается
     /// в момент отрисовки, а не один раз при запуске.
     static func dynamic(light: UInt32, dark: UInt32) -> Color {
+        dynamic(light: light, lightAlpha: 1, dark: dark, darkAlpha: 1)
+    }
+
+    static func dynamic(
+        light: UInt32, lightAlpha: CGFloat,
+        dark: UInt32, darkAlpha: CGFloat
+    ) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(hex: isDark ? dark : light)
+            return NSColor(hex: isDark ? dark : light, alpha: isDark ? darkAlpha : lightAlpha)
         })
     }
 }
@@ -76,12 +98,12 @@ extension Color {
 }
 
 extension NSColor {
-    convenience init(hex: UInt32) {
+    convenience init(hex: UInt32, alpha: CGFloat = 1) {
         self.init(
             srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
             green: CGFloat((hex >> 8) & 0xFF) / 255,
             blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
+            alpha: alpha
         )
     }
 }

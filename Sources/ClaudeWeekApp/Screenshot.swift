@@ -115,6 +115,7 @@ enum Screenshot {
         appearance.performAsCurrentDrawingAppearance {
             let renderer = ImageRenderer(
                 content: PopoverView(model: model)
+                    .background(Theme.panelBackground)
                     .environment(\.colorScheme, name == .darkAqua ? .dark : .light)
             )
             renderer.scale = 2

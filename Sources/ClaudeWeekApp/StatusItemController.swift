@@ -5,7 +5,7 @@ import ClaudeWeekCore
 @MainActor
 final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
-    private let popover = NSPopover()
+    private let dropdown = DropdownPanel()
     private let model: PanelModel
     private var provider: any UsageProvider
 
@@ -27,7 +27,7 @@ final class StatusItemController: NSObject {
 
         configStamp = ConfigStamp.current(url: configURL)
         configureButton()
-        configurePopover()
+        configurePanel()
         observeSystemEvents()
         startTimers()
         restoreFromCache()
@@ -62,11 +62,9 @@ final class StatusItemController: NSObject {
         }
     }
 
-    private func configurePopover() {
-        popover.behavior = .transient
-        popover.animates = true
-        popover.contentViewController = NSHostingController(
-            rootView: PopoverView(
+    private func configurePanel() {
+        dropdown.setContent(
+            PopoverView(
                 model: model,
                 onRefresh: { [weak self] in self?.refresh() },
                 onQuit: { NSApp.terminate(nil) }
@@ -106,27 +104,29 @@ final class StatusItemController: NSObject {
     // MARK: Действия
 
     @objc private func handleClick() {
-        guard let event = NSApp.currentEvent else { return togglePopover() }
+        guard let event = NSApp.currentEvent else { return togglePanel() }
         if event.type == .rightMouseUp {
             showMenu()
         } else {
-            togglePopover()
+            togglePanel()
         }
     }
 
-    private func togglePopover() {
+    private func togglePanel() {
         guard let button = statusItem.button else { return }
-        if popover.isShown {
-            popover.performClose(nil)
+        if dropdown.isShown {
+            dropdown.close()
         } else {
             model.now = Date()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            dropdown.show(from: button)
             refresh()
         }
     }
 
     private func showMenu() {
+        // Меню встаёт на то же место, что и панель, — сначала убираем её.
+        dropdown.close()
+
         let menu = NSMenu()
         menu.addItem(withTitle: "Обновить", action: #selector(refreshFromMenu), keyEquivalent: "r")
             .target = self

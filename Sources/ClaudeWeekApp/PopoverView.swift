@@ -38,7 +38,9 @@ struct PopoverView: View {
         }
         .padding(Theme.panelPadding)
         .frame(width: Theme.panelWidth)
-        .background(Theme.panelBackground)
+        // Своего фона нет намеренно: под панелью материал строки меню,
+        // и любая заливка поверх убила бы прозрачность (`--screenshot`
+        // подкладывает фон сам — размывать в PNG нечего).
     }
 
     // MARK: Заголовок
