@@ -17,6 +17,16 @@ final class Harness {
         group = ""
     }
 
+    func suite(_ name: String, _ body: () async throws -> Void) async {
+        group = name
+        do {
+            try await body()
+        } catch {
+            failures.append("\(name): бросило исключение — \(error)")
+        }
+        group = ""
+    }
+
     func check(_ condition: Bool, _ what: String) {
         if condition {
             passed += 1
