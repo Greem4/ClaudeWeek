@@ -10,7 +10,7 @@ import SwiftUI
 @MainActor
 final class DropdownPanel {
     private let panel = MenuPanel()
-    private let effect = NSVisualEffectView()
+    private let effect = MenuBackgroundView()
     private let hosting = SizingHostingView(rootView: AnyView(EmptyView()))
     private var monitors: [Any] = []
     /// Окно пункта строки меню — от него считаем место панели и по нему же
@@ -31,6 +31,8 @@ final class DropdownPanel {
         effect.layer?.cornerRadius = Theme.panelCornerRadius
         effect.layer?.cornerCurve = .continuous
         effect.layer?.masksToBounds = true
+        effect.layer?.borderWidth = 1
+        effect.applyBorderColor()
 
         hosting.translatesAutoresizingMaskIntoConstraints = false
         effect.addSubview(hosting)
@@ -145,6 +147,21 @@ final class DropdownPanel {
     private func stopMonitoring() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
+    }
+}
+
+/// Материал под панелью. Обводку красим сами: цвет слоя, в отличие от
+/// NSColor, при смене темы не пересчитывается — ловим смену и красим заново.
+private final class MenuBackgroundView: NSVisualEffectView {
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyBorderColor()
+    }
+
+    func applyBorderColor() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.borderColor = Theme.panelBorder.cgColor
+        }
     }
 }
 

@@ -24,13 +24,19 @@ enum Theme {
     /// (`NSVisualEffectView`). Нужен только оффскрин-рендеру `--screenshot`,
     /// которому размывать нечего.
     static let panelBackground = dynamic(light: 0xFCFCFB, dark: 0x1A1A19)
-    /// Тон поверх материала: чистый `.menu` выходит светлее системных меню
-    /// строки, и полосы на нём теряют плотность. Кладём тонкую вуаль —
-    /// в тёмной теме чёрную, в светлой белую. Прозрачность остаётся: сквозь
-    /// вуаль по-прежнему видно размытый фон.
+    /// Тон поверх материала: чистый `.menu` выходит заметно светлее и серее
+    /// системных меню строки. Кладём вуаль — в тёмной теме почти чёрную,
+    /// в светлой белую. Прозрачность остаётся: сквозь вуаль по-прежнему видно
+    /// размытый фон, но фон читается как чёрный, а не как серый.
     static let panelTint = dynamic(
-        light: 0xFFFFFF, lightAlpha: 0.30,
-        dark: 0x000000, darkAlpha: 0.28
+        light: 0xFFFFFF, lightAlpha: 0.45,
+        dark: 0x0A0A0A, darkAlpha: 0.62
+    )
+    /// Волосяная обводка по контуру — у системных меню она есть, и без неё
+    /// тёмная панель сливается с тёмным окном под ней.
+    static let panelBorder = nsDynamic(
+        light: 0x000000, lightAlpha: 0.12,
+        dark: 0xFFFFFF, darkAlpha: 0.13
     )
     static let primaryText = dynamic(light: 0x0B0B0B, dark: 0xFFFFFF)
     static let secondaryText = dynamic(light: 0x52514E, dark: 0xC3C2B7)
@@ -84,10 +90,21 @@ enum Theme {
         light: UInt32, lightAlpha: CGFloat,
         dark: UInt32, darkAlpha: CGFloat
     ) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
+        Color(nsColor: nsDynamic(
+            light: light, lightAlpha: lightAlpha,
+            dark: dark, darkAlpha: darkAlpha
+        ))
+    }
+
+    /// То же для AppKit: слою обводки нужен NSColor, а не SwiftUI-цвет.
+    static func nsDynamic(
+        light: UInt32, lightAlpha: CGFloat,
+        dark: UInt32, darkAlpha: CGFloat
+    ) -> NSColor {
+        NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return NSColor(hex: isDark ? dark : light, alpha: isDark ? darkAlpha : lightAlpha)
-        })
+        }
     }
 }
 
