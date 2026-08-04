@@ -9,17 +9,32 @@ final class StatusItemController: NSObject {
     private let model: PanelModel
     private var provider: any UsageProvider
 
-    init(config: Config = ConfigStore.load()) {
+    private var refreshTimer: Timer?
+    private var clockTimer: Timer?
+    /// Отпечаток файла конфига — по нему замечаем правки без file watcher:
+    /// атомарная запись меняет inode, и наблюдатель по дескриптору её теряет.
+    private var configStamp: ConfigStamp?
+
+    private let configURL: URL
+
+    init(config: Config = ConfigStore.load(), configURL: URL = ConfigStore.fileURL) {
+        self.configURL = configURL
         model = PanelModel(config: config)
         provider = LocalProvider(config: config)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
+        configStamp = ConfigStamp.current(url: configURL)
         configureButton()
         configurePopover()
+        observeSystemEvents()
+        startTimers()
         render()
         refresh()
     }
+
+    // deinit не нужен: контроллер живёт ровно столько же, сколько процесс,
+    // а nonisolated deinit всё равно не может трогать таймеры главного актора.
 
     // MARK: Строка меню
 
@@ -128,7 +143,7 @@ final class StatusItemController: NSObject {
     @objc private func refreshFromMenu() { refresh() }
 
     @objc private func openConfig() {
-        let url = ConfigStore.fileURL
+        let url = configURL
         if !FileManager.default.fileExists(atPath: url.path) {
             try? ConfigStore.save(model.config, to: url)
         }
@@ -140,12 +155,93 @@ final class StatusItemController: NSObject {
         alert.messageText = "ClaudeWeek \(ClaudeWeek.version)"
         alert.informativeText = """
         Недельный лимит Claude Code одним взглядом.
-        Конфигурация: \(ConfigStore.fileURL.path)
+        Конфигурация: \(configURL.path)
         """
         alert.runModal()
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
+
+    // MARK: Жизненный цикл
+
+    private func startTimers() {
+        refreshTimer?.invalidate()
+        let interval = max(model.config.refreshInterval, Config.minimumRefreshInterval)
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        // Разрешаем системе сдвигать срабатывание — это экономит пробуждения
+        // процессора и никак не вредит: данные обновляются раз в минуты.
+        timer.tolerance = interval * 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
+
+        guard clockTimer == nil else { return }
+        let clock = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        clock.tolerance = 10
+        RunLoop.main.add(clock, forMode: .common)
+        clockTimer = clock
+    }
+
+    /// Раз в минуту: двигаем «до сброса» и проверяем, не правил ли кто конфиг.
+    private func tick() {
+        model.now = Date()
+        reloadConfigIfChanged()
+        render()
+    }
+
+    private func observeSystemEvents() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(
+            self, selector: #selector(willSleep),
+            name: NSWorkspace.willSleepNotification, object: nil
+        )
+        workspace.addObserver(
+            self, selector: #selector(didWake),
+            name: NSWorkspace.didWakeNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(timeZoneChanged),
+            name: .NSSystemTimeZoneDidChange, object: nil
+        )
+    }
+
+    /// Пока Mac спит, тикать некуда: гасим таймер, чтобы не копить
+    /// просроченные срабатывания и не будить сеть сразу пачкой.
+    @objc private func willSleep() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    @objc private func didWake() {
+        startTimers()
+        tick()
+        refresh()
+    }
+
+    /// Окно недели считается в локальной таймзоне, поэтому её смена меняет
+    /// и границы суток — пересчитываем целиком.
+    @objc private func timeZoneChanged() {
+        Log.info("сменилась системная таймзона, пересчитываю окно")
+        tick()
+        refresh()
+    }
+
+    private func reloadConfigIfChanged() {
+        let stamp = ConfigStamp.current(url: configURL)
+        guard stamp != configStamp else { return }
+        configStamp = stamp
+
+        let config = ConfigStore.load(from: configURL)
+        guard config != model.config else { return }
+        Log.info("конфиг изменился, применяю")
+        model.config = config
+        provider = LocalProvider(config: config)
+        startTimers()
+        refresh()
+    }
 
     // MARK: Обновление
 

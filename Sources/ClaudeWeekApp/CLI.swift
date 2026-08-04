@@ -12,6 +12,8 @@ enum CLI {
       ClaudeWeek                 запустить приложение в строке меню
       ClaudeWeek --json          напечатать состояние недели в JSON и выйти
       ClaudeWeek --provider=X    источник данных: local | official | auto
+      ClaudeWeek --config=ПУТЬ   свой файл конфигурации
+      ClaudeWeek --screenshot КАТ отрисовать панель в PNG (обе темы)
       ClaudeWeek --verbose       подробный лог в stderr
       ClaudeWeek --help          эта справка
     """
@@ -59,6 +61,23 @@ enum CLI {
             let planPercent: Double
             let usedPercent: Double?
             let cost: Double?
+
+            enum CodingKeys: String, CodingKey {
+                case index, label, start, planPercent, usedPercent, cost
+            }
+
+            // Синтезированный encode выбрасывает пустые поля, и у будущих
+            // суток ключи просто исчезают. Скриптам удобнее стабильная схема
+            // с явным null, поэтому пишем их руками.
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(index, forKey: .index)
+                try c.encode(label, forKey: .label)
+                try c.encode(start, forKey: .start)
+                try c.encode(planPercent, forKey: .planPercent)
+                try c.encode(usedPercent, forKey: .usedPercent)
+                try c.encode(cost, forKey: .cost)
+            }
         }
 
         struct Scan: Encodable {

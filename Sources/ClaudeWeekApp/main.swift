@@ -12,7 +12,11 @@ if arguments.contains("--verbose") {
     Log.minimumLevel = .debug
 }
 
-var config = ConfigStore.load()
+let configURL = arguments.first(where: { $0.hasPrefix("--config=") })
+    .map { URL(fileURLWithPath: String($0.dropFirst("--config=".count))) }
+    ?? ConfigStore.fileURL
+
+var config = ConfigStore.load(from: configURL)
 if let raw = arguments.first(where: { $0.hasPrefix("--provider=") })?
     .split(separator: "=", maxSplits: 1).last,
    let choice = ProviderPreference(rawValue: String(raw)) {
@@ -35,5 +39,5 @@ if let index = arguments.firstIndex(of: "--screenshot") {
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
-let controller = StatusItemController()
+let controller = StatusItemController(config: config, configURL: configURL)
 app.run()
