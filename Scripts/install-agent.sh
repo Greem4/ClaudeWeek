@@ -1,6 +1,8 @@
 #!/bin/bash
 # Ставит ClaudeWeek в ~/Applications и поднимает LaunchAgent автозапуска.
-# Скрипт идемпотентен: повторный запуск переустанавливает агент, не плодя копии.
+# Повторный запуск — полная переустановка: сначала собирается свежий бандл,
+# потом старая версия снимается целиком (агент, живой процесс, приложение),
+# и только затем ставится новая. Копии не плодятся.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,14 +12,15 @@ APP_DEST="$HOME/Applications/ClaudeWeek.app"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/ClaudeWeek.log"
 
-if [ ! -d "$APP_SOURCE" ]; then
-    echo "==> бандла нет, собираю"
-    "$ROOT/Scripts/make-app.sh"
-fi
+# Сборка идёт до сноса: упадёт компиляция — старая версия останется работать.
+echo "==> собираю свежий бандл"
+"$ROOT/Scripts/make-app.sh"
+
+echo "==> снимаю старую версию"
+"$ROOT/Scripts/uninstall-agent.sh" --quiet
 
 echo "==> ставлю в $APP_DEST"
 mkdir -p "$HOME/Applications"
-rm -rf "$APP_DEST"
 cp -R "$APP_SOURCE" "$APP_DEST"
 
 echo "==> пишу $PLIST"
@@ -47,7 +50,8 @@ cat > "$PLIST" <<PLIST_EOF
 </plist>
 PLIST_EOF
 
-# bootout на незагруженном агенте возвращает ошибку — она здесь ожидаема.
+# Страховка: агент уже снят выше, но если launchd почему-то ещё держит сервис,
+# bootstrap упал бы с ошибкой. Лишний bootout на незагруженном агенте безвреден.
 launchctl bootout "gui/$UID/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$UID" "$PLIST"
 launchctl kickstart -k "gui/$UID/$LABEL"

@@ -357,9 +357,10 @@ codesign --force --sign - ClaudeWeek.app     # ad-hoc подпись
 
 `Scripts/install-agent.sh` кладёт
 `~/Library/LaunchAgents/com.greem4.claudeweek.plist` c `RunAtLoad = true` и
-`KeepAlive = false`, затем `launchctl bootstrap gui/$UID …`. Скрипт идемпотентен:
-повторный запуск перезагружает агент, не плодя копии. Удаление — парный
-`uninstall-agent.sh`.
+`KeepAlive = false`, затем `launchctl bootstrap gui/$UID …`. Повторный запуск —
+полная переустановка: сборка свежего бандла, затем `uninstall-agent.sh --quiet`
+(агент, работающий процесс, прежнее приложение) и только потом установка новой
+версии. Копии не плодятся. Удаление — тот же парный `uninstall-agent.sh`.
 
 ---
 

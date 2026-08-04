@@ -24,11 +24,15 @@
 ## Установка
 
 ```bash
-./Scripts/make-app.sh        # собирает dist/ClaudeWeek.app
-./Scripts/install-agent.sh   # ставит в ~/Applications и включает автозапуск
+./Scripts/install-agent.sh   # собирает, ставит в ~/Applications, включает автозапуск
 ```
 
 Приложение появится в строке меню. Снять — `./Scripts/uninstall-agent.sh`.
+
+Обновиться — тот же `./Scripts/install-agent.sh`: он пересобирает бандл, гасит
+работающую копию и удаляет прежнюю установку, и только потом ставит новую.
+Вторая иконка в строке меню не появится. Собрать бандл, ничего не ставя, —
+`./Scripts/make-app.sh` (кладёт `dist/ClaudeWeek.app`).
 
 ### Авторизация
 
