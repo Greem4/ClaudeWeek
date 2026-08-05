@@ -8,9 +8,9 @@ enum PanelStatus: Equatable {
     case loading
     case ready
     /// Данные есть, но они из кеша и устарели.
-    case stale(String)
-    /// Данных нет вовсе; текст — что случилось.
-    case failed(String)
+    case stale
+    /// Данных нет вовсе.
+    case failed
 }
 
 /// Откуда пришли цифры — то, что раньше говорила строка под заголовком, а
@@ -24,7 +24,9 @@ enum SourceState {
     case stale
     /// Локальная оценка по транскриптам ~/.claude/projects.
     case local
-    /// Данных нет вовсе — первый запуск или отказ без кеша.
+    /// Данных ещё нет — первый запуск, ответ в пути.
+    case pending
+    /// Данных нет и взять негде — отказ без кеша.
     case missing
 }
 
@@ -87,28 +89,24 @@ final class PanelModel {
     /// ещё цифры сервера, поэтому кружок остаётся залитым и лишь желтеет:
     /// контур означает «посчитано здесь», а не «давно».
     var sourceState: SourceState {
-        guard let snapshot else { return .missing }
+        guard let snapshot else { return status == .loading ? .pending : .missing }
         if snapshot.isEstimate { return .local }
         if case .ready = status { return .synced }
         return .stale
     }
 
-    /// То же словами — подсказка при наведении на кружок. Строки под
-    /// заголовком больше нет, и «нет сети», возраст кеша и оговорка про
-    /// разбивку по суткам живут только здесь.
+    /// То же словами — подпись у кружка и подсказка при наведении. Четыре
+    /// состояния одной формой «данные …», по одному на цвет кружка.
+    ///
+    /// Причины здесь нет намеренно: «официальный источник недоступен
+    /// (unauthorized)» — строчка лога, а не панели. Читающему хватает того,
+    /// свежие перед ним цифры сервера или посчитанные на месте.
     var sourceHint: String {
-        switch status {
-        case .loading: return "получаю данные…"
-        case .failed(let text): return text
-        case .stale(let text): return text
-        case .ready:
-            guard let snapshot else { return "нет данных" }
-            if snapshot.isEstimate {
-                return "оценка по локальным транскриптам, не официальные данные"
-            }
-            return snapshot.shapeIsEstimate
-                ? "официальный итог, разбивка по суткам — оценка"
-                : "официальные данные, как в /usage"
+        switch sourceState {
+        case .synced: "данные online"
+        case .stale, .local: "данные offline"
+        case .pending: "данные загружаются"
+        case .missing: "данные недоступны"
         }
     }
 
@@ -127,18 +125,12 @@ final class PanelModel {
         self.snapshot = snapshot
         now = moment
         let age = moment.timeIntervalSince(snapshot.fetchedAt)
-        status = age > PanelModel.freshFor
-            ? .stale("данные \(Formatting.age(snapshot.fetchedAt, now: moment))")
-            : .ready
+        status = age > PanelModel.freshFor ? .stale : .ready
     }
 
+    /// Что именно случилось, панель не показывает — это уже написано в лог
+    /// там, где отказ поймали. Здесь остаётся одно: есть ли что показывать.
     func apply(error: Error) {
-        let text = (error as? UsageError)?.errorDescription ?? error.localizedDescription
-        if let snapshot {
-            let age = Formatting.age(snapshot.fetchedAt, now: Date())
-            status = .stale("\(text) · данные \(age)")
-        } else {
-            status = .failed(text)
-        }
+        status = snapshot == nil ? .failed : .stale
     }
 }

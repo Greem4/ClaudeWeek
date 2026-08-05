@@ -88,7 +88,9 @@ struct SessionRow: View {
                 .overlay(alignment: .leading) {
                     Text(sourceHint)
                         .font(Theme.captionFont)
-                        .foregroundStyle(palette.secondaryText.color)
+                        // Цвет тот же, что у кружка рядом: подпись — это он
+                        // словами, и разойтись они не должны.
+                        .foregroundStyle(source.color(in: palette))
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .opacity(showsSourceText ? 1 : 0)

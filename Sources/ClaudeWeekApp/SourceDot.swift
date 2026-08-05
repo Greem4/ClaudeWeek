@@ -54,21 +54,28 @@ struct SourceDot: View {
     private var isFilled: Bool {
         switch state {
         case .synced, .stale: true
-        case .local, .missing: false
+        case .local, .pending, .missing: false
         }
     }
 
-    private var color: Color {
-        switch state {
-        case .synced: palette.good.color
-        case .stale: palette.warning.color
-        case .local: palette.critical.color
-        case .missing: palette.secondaryText.color
-        }
-    }
+    private var color: Color { state.color(in: palette) }
 }
 
 extension SourceState {
+    /// Цвет источника — один на кружок и на его подпись: текст «данные
+    /// online» рядом с зелёной точкой и «данные недоступны» рядом с красной
+    /// читаются как одно сообщение, а не как точка и комментарий к ней.
+    func color(in palette: Palette) -> Color {
+        switch self {
+        case .synced: palette.good.color
+        case .stale: palette.warning.color
+        case .local, .missing: palette.critical.color
+        // Ожидание — не отказ: пока ответ в пути, красная точка врала бы о
+        // том, что уже что-то сломалось.
+        case .pending: palette.secondaryText.color
+        }
+    }
+
     /// Для VoiceOver: кружок сам по себе скрыт от него — цвет и заливку
     /// озвучить нечем, поэтому строка называет источник словом.
     var spokenName: String {
@@ -76,6 +83,7 @@ extension SourceState {
         case .synced: "данные с сервера"
         case .stale: "данные с сервера, устаревшие"
         case .local: "локальная оценка"
+        case .pending: "данные загружаются"
         case .missing: "данных нет"
         }
     }

@@ -149,6 +149,9 @@ struct PopoverView: View {
                         Text(model.sourceHint)
                             .lineLimit(1)
                             .truncationMode(.tail)
+                            // Тот же цвет, что у кружка слева, — он и сказал
+                            // это первым, текст лишь повторяет словами.
+                            .foregroundStyle(model.sourceState.color(in: palette))
                             .opacity(showsHeaderSourceText ? 1 : 0)
                     }
                 }
