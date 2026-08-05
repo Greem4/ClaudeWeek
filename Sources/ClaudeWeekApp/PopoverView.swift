@@ -53,7 +53,10 @@ struct PopoverView: View {
     @ViewBuilder
     private var backdrop: some View {
         if appearance.transparentPanel {
-            palette.panelTint.color.opacity(appearance.panelTintOpacity)
+            // Вуаль идёт по шкале с потолком: на полной плотности она гасила
+            // материал целиком, и «прозрачный фон с размытием» отличался от
+            // сплошного только оттенком.
+            palette.panelTint.color.opacity(appearance.panelTintOpacity * Theme.maxPanelTint)
         } else {
             palette.panelBackground.color
         }
@@ -148,7 +151,7 @@ struct PopoverView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(summary)
-                    .font(Theme.captionFont)
+                    .font(Theme.footerFont)
                     .foregroundStyle(
                         model.resetIsClose ? palette.warning.color : palette.secondaryText.color
                     )
@@ -156,7 +159,7 @@ struct PopoverView: View {
 
                 if appearance.showForecast, let forecast {
                     Text(forecast)
-                        .font(Theme.captionFont)
+                        .font(Theme.footerFont)
                         .foregroundStyle(palette.critical.color)
                 }
             }
@@ -166,7 +169,7 @@ struct PopoverView: View {
             HStack(spacing: 10) {
                 Button(action: onSettings) {
                     Text("⚙")
-                        .font(Theme.footerFont)
+                        .font(Theme.actionFont)
                         .foregroundStyle(palette.secondaryText.color)
                 }
                 .buttonStyle(.plain)
@@ -174,7 +177,7 @@ struct PopoverView: View {
 
                 Button(action: onRefresh) {
                     Text(model.isRefreshing ? "…" : "⟳")
-                        .font(Theme.footerFont)
+                        .font(Theme.actionFont)
                         .foregroundStyle(palette.secondaryText.color)
                 }
                 .buttonStyle(.plain)

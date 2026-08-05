@@ -91,8 +91,14 @@ struct Palette: Sendable, Equatable {
         critical: Ink(0xD03B3B),
         panelBackground: Ink(light: 0xFCFCFB, dark: 0x1A1A19),
         panelTint: Ink(light: 0xFFFFFF, dark: 0x000000),
-        primaryText: Ink(light: 0x0B0B0B, dark: 0xFFFFFF),
-        secondaryText: Ink(light: 0x52514E, dark: 0xC3C2B7),
+        // Плотности системных `labelColor` и `secondaryLabelColor`: на
+        // материале меню текст мешается с фоном ровно так же, как в пунктах
+        // соседей по строке меню, — чистый белый рядом с ними выглядит ярче
+        // системного. Вторичный на светлом фоне взят чуть плотнее системных
+        // 0.55: те дают 4.55:1, впритык к порогу, а так контраст сравнивается
+        // с тёмной темой — 6.0:1 против 5.9:1.
+        primaryText: Ink(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.85, darkAlpha: 0.85),
+        secondaryText: Ink(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.62, darkAlpha: 0.55),
         separator: Ink(light: 0xE1E0D9, dark: 0x2C2C2A),
         border: Ink(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.12, darkAlpha: 0.13),
         material: .menu
@@ -193,27 +199,47 @@ extension EnvironmentValues {
 enum Theme {
     // MARK: Метрики
 
-    static let panelWidth: CGFloat = 320
-    static let panelPadding: CGFloat = 16
+    /// Под кегль меню: строка «⚠ 70 / 64 %» рядом с подписью дня и полосой
+    /// требует места, а заголовок держит две подписи справа от себя. Сводка
+    /// футера в одну строку — тот же предел.
+    static let panelWidth: CGFloat = 380
+    /// Поля как у пунктов системного меню.
+    static let panelPadding: CGFloat = 14
     /// Отступ от края экрана, когда пункт стоит у самого угла.
     static let panelScreenMargin: CGFloat = 8
     static let rowSpacing: CGFloat = 10
-    static let barHeight: CGFloat = 8
+    static let barHeight: CGFloat = 9
     /// Вторичный канал кодирования: держит границу читаемой там, где цвета
     /// сливаются (тританопия в тёмной теме даёт ΔE 5.1 на паре факт ↔ вылет).
     static let overspendGap: CGFloat = 2
-    static let dayLabelWidth: CGFloat = 26
-    static let valueWidth: CGFloat = 74
+    static let dayLabelWidth: CGFloat = 30
+    static let valueWidth: CGFloat = 96
     static let fillAnimation: TimeInterval = 0.35
+
+    /// Потолок вуали поверх материала. Единица шкалы — не «непрозрачный фон»:
+    /// плотная вуаль съедает размытие, и прозрачный режим переставал
+    /// отличаться от сплошного ничем, кроме оттенка. 0.55 — предел, за
+    /// которым материала уже не видно.
+    static let maxPanelTint: Double = 0.55
 
     // MARK: Шрифты
 
-    static let titleFont = Font.system(size: 12, weight: .semibold).monospacedDigit()
-    static let dayFont = Font.system(size: 11, weight: .medium).monospacedDigit()
-    static let footerFont = Font.system(size: 11).monospacedDigit()
-    /// Заголовочные подписи справа: в 288 pt рядом с «ЛИМИТ НЕДЕЛИ»
-    /// одиннадцатый кегль уже не помещается.
-    static let captionFont = Font.system(size: 10).monospacedDigit()
+    /// Кегль пунктов системного меню (14 pt на обычных настройках). Берём у
+    /// системы, а не числом: панель висит под строкой меню и должна читаться
+    /// как её продолжение, а с крупным текстом в универсальном доступе кегль
+    /// меняется.
+    static let menuFontSize = NSFont.menuFont(ofSize: 0).pointSize
+    /// Сноски — на два кегля мельче основного текста, как в меню.
+    static let captionFontSize = menuFontSize - 2
+
+    static let titleFont = Font.system(size: menuFontSize, weight: .semibold).monospacedDigit()
+    static let dayFont = Font.system(size: menuFontSize).monospacedDigit()
+    /// Кнопки футера: глифы ⚙ и ⟳ в кегле сноски становятся неприцельными.
+    static let actionFont = Font.system(size: menuFontSize)
+    /// Сводка футера — самая мелкая строка панели: в кегле сноски «осталось
+    /// 42 % · сброс через 3 дн 18 ч · темп 1.2×» рвётся на два ряда.
+    static let footerFont = Font.system(size: menuFontSize - 3).monospacedDigit()
+    static let captionFont = Font.system(size: captionFontSize).monospacedDigit()
 }
 
 extension Color {

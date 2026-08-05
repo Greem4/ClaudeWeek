@@ -71,8 +71,10 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     /// Фон панели — материал строки меню (полупрозрачный с размытием).
     /// Выключено — сплошная заливка палитры.
     public var transparentPanel: Bool
-    /// Плотность вуали поверх материала, 0…1: 0 — чистый материал (самый
-    /// светлый), 1 — фон почти непрозрачный.
+    /// Плотность вуали поверх материала, 0…1: 0 — чистый материал строки
+    /// меню, 1 — самая плотная вуаль, сквозь которую размытие ещё видно.
+    /// Дальше идёт не «почти непрозрачный фон», а выключенная прозрачность:
+    /// глухая заливка — это отдельный режим, а не край ползунка.
     public var panelTintOpacity: Double
     /// Скругление углов панели, pt.
     public var cornerRadius: Double
@@ -86,7 +88,7 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     public init(
         theme: ThemeKind = .system,
         transparentPanel: Bool = true,
-        panelTintOpacity: Double = 0.45,
+        panelTintOpacity: Double = 0.18,
         cornerRadius: Double = 12,
         showSession: Bool = true,
         showForecast: Bool = true,
