@@ -31,8 +31,13 @@ final class DropdownPanel {
     /// на возврате её надо показать снова.
     private var hiddenByDeactivation = false
     private var activationObservers: [NSObjectProtocol] = []
+    private var spaceObserver: NSObjectProtocol?
 
-    var isShown: Bool { panel.isVisible }
+    /// Открыта — значит, открыта здесь. Окно, оставшееся на другом рабочем
+    /// столе (например, в полноэкранном пространстве плеера), для нас
+    /// закрыто: иначе клик по пункту меню «закрывал» бы невидимую панель,
+    /// и со стороны это выглядит как «перестала открываться».
+    var isShown: Bool { panel.isVisible && panel.isOnActiveSpace }
     var frame: NSRect { panel.frame }
 
     init() {
@@ -63,6 +68,7 @@ final class DropdownPanel {
         hosting.onFittingSizeChange = { [weak self] size in
             self?.resize(to: size)
         }
+        observeSpaceChange()
     }
 
     func setContent(_ view: some View) {
@@ -93,8 +99,23 @@ final class DropdownPanel {
         hiddenByDeactivation = false
 
         hosting.layoutSubtreeIfNeeded()
+
+        // Рабочий стол, на котором окно показали, WindowServer запоминает за
+        // ним, и полноэкранное пространство держит его особенно крепко:
+        // показанное поверх фильма, дальше оно так и остаётся там — на других
+        // столах панели нет, а попытка вывести её туда лишь перекидывает
+        // экран обратно к плееру. Снятие с экрана эту привязку отпускает,
+        // и следующий показ достаётся текущему столу.
+        if panel.isVisible && !panel.isOnActiveSpace { panel.orderOut(nil) }
+
         panel.setFrame(frame(for: hosting.fittingSize, anchor: anchor), display: false)
-        panel.makeKeyAndOrderFront(nil)
+        // orderFrontRegardless, а не makeKeyAndOrderFront: приложение живёт
+        // без Dock и почти всегда неактивно, а неактивному makeKey сначала
+        // ищет окну «своё» пространство — ровно то, от чего мы уходим.
+        panel.orderFrontRegardless()
+        // Ключевой панель делаем уже показанной на этом столе — ради Esc,
+        // который ловится только окном с клавиатурным фокусом.
+        panel.makeKey()
         // Тень строится по непрозрачным пикселям контента, а он только что
         // сменил размер — иначе от прошлого показа останется старый контур.
         panel.invalidateShadow()
@@ -163,6 +184,33 @@ final class DropdownPanel {
         // возвращаем только то, что убрали сами.
         guard isPinned, hiddenByDeactivation, let button = anchorButton else { return }
         show(from: button)
+    }
+
+    // MARK: Смена рабочего стола
+
+    /// Ушли на другой стол — панель остаётся на прежнем. Системное меню в
+    /// такой ситуации просто закрывается, и мы делаем то же: брошенное окно
+    /// не только висит невидимкой, но и тянет привязку к чужому пространству
+    /// на следующий показ.
+    private func observeSpaceChange() {
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleSpaceChange() }
+        }
+    }
+
+    private func handleSpaceChange() {
+        guard panel.isVisible, !panel.isOnActiveSpace else { return }
+        // Закреплённую панель держим открытой — она предпросмотр к настройкам,
+        // и закрыть её значило бы отобрать то, ради чего её закрепляли.
+        // Переносим на текущий стол; если приложение при этом ушло в фон,
+        // её всё равно уберёт hideWhilePinned.
+        if isPinned, let button = anchorButton {
+            show(from: button)
+        } else {
+            close()
+        }
     }
 
     /// Верх панели — на нижней кромке строки меню, центр — под пунктом.
@@ -273,6 +321,10 @@ private final class MenuPanel: NSPanel {
         isReleasedWhenClosed = false
         // Появление и скрытие без анимации: панель нужна по клику сразу.
         animationBehavior = .none
+        // canJoinAllSpaces — чтобы панель приходила на текущий рабочий стол,
+        // fullScreenAuxiliary — чтобы её пускали поверх полноэкранного окна.
+        // Одних флагов мало: показанное окно всё равно остаётся привязанным
+        // к своему столу, и это разбирается в `show(from:)`.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
     }
 
