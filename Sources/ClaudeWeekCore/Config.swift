@@ -19,6 +19,81 @@ public enum MenuBarStyle: String, Codable, Sendable, CaseIterable {
     case compact
 }
 
+/// Откуда брать OAuth-токен для официального источника.
+public enum AuthSource: String, Codable, Sendable, CaseIterable {
+    /// Из Keychain Claude Code — виджет видит ровно тот аккаунт, что `/usage`.
+    case claudeCode
+    /// Токен, вставленный в настройках. Лежит в своей записи Keychain, а не
+    /// в конфиге: файлу на диске токен не место.
+    case manual
+}
+
+/// Палитра панели. `system` — исходная, прогнанная через валидатор на
+/// дальтонизм и контраст; остальные добавлены, чтобы было чем играть,
+/// и держат те же роли цветов.
+public enum ThemeKind: String, Codable, Sendable, CaseIterable {
+    /// Родная палитра: нейтральный фон, синий план, зелёный факт.
+    case system
+    /// Глубокий сине-чёрный, как у ночных меню.
+    case midnight
+    /// Тёплый графит без синевы.
+    case graphite
+    /// Бумажная: светлая в обеих темах, для светлых рабочих столов.
+    case paper
+    /// Максимальный контраст: плотные цвета, никакой полупрозрачности.
+    case contrast
+
+    public var title: String {
+        switch self {
+        case .system: "Системная"
+        case .midnight: "Полночь"
+        case .graphite: "Графит"
+        case .paper: "Бумага"
+        case .contrast: "Контраст"
+        }
+    }
+}
+
+/// Всё, что влияет только на вид и ни на одну цифру.
+public struct AppearanceConfig: Codable, Sendable, Equatable {
+    public var theme: ThemeKind
+    /// Фон панели — материал строки меню (полупрозрачный с размытием).
+    /// Выключено — сплошная заливка палитры.
+    public var transparentPanel: Bool
+    /// Плотность вуали поверх материала, 0…1: 0 — чистый материал (самый
+    /// светлый), 1 — фон почти непрозрачный.
+    public var panelTintOpacity: Double
+    /// Скругление углов панели, pt.
+    public var cornerRadius: Double
+    /// Строка пятичасовой сессии над сутками.
+    public var showSession: Bool
+    /// Вторая строка футера с прогнозом «кончится в …».
+    public var showForecast: Bool
+
+    public init(
+        theme: ThemeKind = .system,
+        transparentPanel: Bool = true,
+        panelTintOpacity: Double = 0.45,
+        cornerRadius: Double = 12,
+        showSession: Bool = true,
+        showForecast: Bool = true
+    ) {
+        self.theme = theme
+        self.transparentPanel = transparentPanel
+        self.panelTintOpacity = panelTintOpacity
+        self.cornerRadius = cornerRadius
+        self.showSession = showSession
+        self.showForecast = showForecast
+    }
+
+    public func validated() -> AppearanceConfig {
+        var a = self
+        a.panelTintOpacity = min(max(a.panelTintOpacity, 0), 1)
+        a.cornerRadius = min(max(a.cornerRadius, 0), 24)
+        return a
+    }
+}
+
 /// Однократное наблюдение официального процента: по нему подбирается
 /// `weeklyBudget` для локальной оценки.
 public struct Calibration: Codable, Sendable, Equatable {
@@ -60,6 +135,10 @@ public struct Config: Codable, Sendable, Equatable {
     public var weeklyBudget: Double
     public var calibration: Calibration
     public var thresholds: Thresholds
+    /// Откуда брать токен для официального источника.
+    public var authSource: AuthSource
+    /// Вид панели; на цифры не влияет.
+    public var appearance: AppearanceConfig
 
     public static let minimumRefreshInterval: TimeInterval = 30
 
@@ -74,7 +153,9 @@ public struct Config: Codable, Sendable, Equatable {
         menuBarStyle: .percent,
         weeklyBudget: 0,
         calibration: Calibration(),
-        thresholds: Thresholds()
+        thresholds: Thresholds(),
+        authSource: .claudeCode,
+        appearance: AppearanceConfig()
     )
 
     public init(
@@ -88,7 +169,9 @@ public struct Config: Codable, Sendable, Equatable {
         menuBarStyle: MenuBarStyle,
         weeklyBudget: Double,
         calibration: Calibration,
-        thresholds: Thresholds
+        thresholds: Thresholds,
+        authSource: AuthSource = .claudeCode,
+        appearance: AppearanceConfig = AppearanceConfig()
     ) {
         self.resetWeekday = resetWeekday
         self.resetHour = resetHour
@@ -101,6 +184,8 @@ public struct Config: Codable, Sendable, Equatable {
         self.weeklyBudget = weeklyBudget
         self.calibration = calibration
         self.thresholds = thresholds
+        self.authSource = authSource
+        self.appearance = appearance
     }
 
     // Каждое поле необязательно: незнакомый или неполный конфиг не должен
@@ -119,7 +204,9 @@ public struct Config: Codable, Sendable, Equatable {
             menuBarStyle: try c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle) ?? d.menuBarStyle,
             weeklyBudget: try c.decodeIfPresent(Double.self, forKey: .weeklyBudget) ?? d.weeklyBudget,
             calibration: try c.decodeIfPresent(Calibration.self, forKey: .calibration) ?? d.calibration,
-            thresholds: try c.decodeIfPresent(Thresholds.self, forKey: .thresholds) ?? d.thresholds
+            thresholds: try c.decodeIfPresent(Thresholds.self, forKey: .thresholds) ?? d.thresholds,
+            authSource: try c.decodeIfPresent(AuthSource.self, forKey: .authSource) ?? d.authSource,
+            appearance: try c.decodeIfPresent(AppearanceConfig.self, forKey: .appearance) ?? d.appearance
         )
     }
 
@@ -149,6 +236,7 @@ public struct Config: Codable, Sendable, Equatable {
         if c.weeklyBudget < 0 { c.weeklyBudget = 0 }
         if c.thresholds.warn <= 0 { c.thresholds.warn = Thresholds().warn }
         if !(0...1).contains(c.thresholds.critical) { c.thresholds.critical = Thresholds().critical }
+        c.appearance = c.appearance.validated()
         return c
     }
 

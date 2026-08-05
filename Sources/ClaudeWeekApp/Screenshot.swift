@@ -113,9 +113,15 @@ enum Screenshot {
         // Оффскрин-рендеру мало установить NSAppearance: динамические цвета
         // SwiftUI разрешает по colorScheme из окружения, поэтому задаём оба.
         appearance.performAsCurrentDrawingAppearance {
+            // Живьём панель лежит на материале строки меню, размыть который
+            // оффскрин нельзя. Подкладываем плоский фон, но форму сохраняем:
+            // те же скруглённые углы и тень, что видит пользователь.
+            let shape = RoundedRectangle(cornerRadius: Theme.panelCornerRadius, style: .continuous)
             let renderer = ImageRenderer(
                 content: PopoverView(model: model)
-                    .background(Theme.panelBackground)
+                    .background(Theme.panelBackground, in: shape)
+                    .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
+                    .padding(16)
                     .environment(\.colorScheme, name == .darkAqua ? .dark : .light)
             )
             renderer.scale = 2

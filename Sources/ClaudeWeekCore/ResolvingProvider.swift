@@ -15,9 +15,11 @@ public actor ResolvingProvider: UsageProvider {
     private let cacheURL: URL?
     private let clock: @Sendable () -> Date
 
+    /// `credentials` по умолчанию выбирается по `config.authSource`; явное
+    /// значение нужно тестам и остаётся сильнее настройки.
     public init(
         config: Config,
-        credentials: CredentialsSource = KeychainCredentials(),
+        credentials: CredentialsSource? = nil,
         transport: UsageTransport = URLSessionTransport(),
         cacheURL: URL? = Store.cacheURL,
         localRoot: URL = LocalProvider.defaultRoot,
@@ -34,7 +36,7 @@ public actor ResolvingProvider: UsageProvider {
             ? nil
             : OfficialProvider(
                 config: config,
-                credentials: credentials,
+                credentials: credentials ?? config.authSource.credentials,
                 transport: transport,
                 shape: local,
                 clock: clock
