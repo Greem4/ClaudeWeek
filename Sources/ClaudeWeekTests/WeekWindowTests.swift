@@ -29,18 +29,33 @@ func runWeekWindowTests(_ t: Harness) {
     t.suite("окно недели: воскресный полдень") {
         let window = WeekWindow(containing: at(2026, 8, 9, 12, 0), config: config())
         t.equal(window.start, at(2026, 8, 7, 15, 0), "старт — пятница до него")
-        // Сутки окна идут от 15:00 до 15:00, поэтому воскресный полдень —
-        // это ещё «субботние» сутки окна, индекс 1.
-        t.equal(window.dayIndex(for: at(2026, 8, 9, 12, 0)), 1, "номер суток")
-        t.equal(window.dayIndex(for: at(2026, 8, 9, 15, 0)), 2, "переход на следующие сутки в 15:00")
-        t.equal(window.dayIndex(for: at(2026, 8, 7, 15, 0)), 0, "первые сутки")
-        t.equal(window.dayIndex(for: at(2026, 8, 14, 14, 59)), 6, "последние сутки")
+
+        // Строка меняется в местную полночь, а не в час сброса: воскресный
+        // полдень — это воскресенье, а не «субботние сутки окна».
+        t.equal(window.slotCount, 8, "восемь строк: сброс в 15:00 режет пятницу надвое")
+        t.equal(window.dayIndex(for: at(2026, 8, 9, 12, 0)), 2, "воскресный полдень — воскресная строка")
+        t.equal(window.dayIndex(for: at(2026, 8, 9, 15, 0)), 2, "в 15:00 строка не меняется")
+        t.equal(window.dayIndex(for: at(2026, 8, 10, 0, 0)), 3, "меняется в полночь")
+        t.equal(window.dayIndex(for: at(2026, 8, 7, 15, 0)), 0, "первые сутки — вечер пятницы")
+        t.equal(window.dayIndex(for: at(2026, 8, 14, 0, 0)), 7, "последние сутки — утро пятницы")
+        t.equal(window.dayIndex(for: at(2026, 8, 14, 14, 59)), 7, "и весь час до сброса — они же")
         t.equal(window.dayIndex(for: at(2026, 8, 14, 15, 0)), nil, "момент сброса уже вне окна")
         t.equal(window.dayIndex(for: at(2026, 8, 1, 12, 0)), nil, "прошлая неделя вне окна")
 
         let labels = window.days.map { Formatting.weekdayShort($0.start, calendar: window.calendar) }
-        t.equal(labels, ["ПТ", "СБ", "ВС", "ПН", "ВТ", "СР", "ЧТ"], "подписи дней")
-        t.equal(Formatting.resetLabel(window), "сброс ПТ 15:00", "подпись сброса")
+        t.equal(labels, ["ПТ", "СБ", "ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ"], "подписи дней")
+        t.check(window.days[0].isPartial && window.days[7].isPartial, "крайние сутки обрезаны")
+        t.check(window.days[1...6].allSatisfy { !$0.isPartial }, "середина недели — полные сутки")
+        t.equal(Formatting.resetLabel(window), "сброс ПТ 15:00 · 14:00 МСК", "подпись сброса с московским временем")
+    }
+
+    t.suite("окно недели: сброс в полночь") {
+        // Ровно в полночь календарные сутки и сутки окна совпадают —
+        // восьмой строке взяться неоткуда.
+        let window = WeekWindow(containing: at(2026, 8, 9, 12, 0), config: config(hour: 0))
+        t.equal(window.slotCount, 7, "семь строк")
+        t.equal(window.days[0].start, window.start, "первая строка начинается со сбросом")
+        t.check(window.days.allSatisfy { !$0.isPartial }, "обрезанных суток нет")
     }
 
     t.suite("окно недели: смена таймзоны") {
@@ -70,10 +85,14 @@ func runWeekWindowTests(_ t: Harness) {
         t.equal(autumn.start, at(2026, 10, 23, 15, 0, tz: "Europe/Berlin"), "старт осенней недели")
         t.close(autumn.duration, 169 * 3600, "осенняя неделя длиннее на час")
         t.equal(autumn.end.parts(tz: "Europe/Berlin").hour, 15, "конец остаётся в 15:00")
-        t.equal(autumn.days.count, 7, "всё те же семеро суток")
-        // Сутки с переводом длятся 25 часов, но остаются одними сутками окна.
-        let shifted = autumn.days[1]
+        t.equal(autumn.days.count, 8, "всё те же восемь строк")
+        // Сутки с переводом длятся 25 часов и остаются одной календарной датой.
+        let shifted = autumn.days[2]
+        t.equal(shifted.start, at(2026, 10, 25, 0, 0, tz: "Europe/Berlin"), "воскресенье перевода")
         t.close(shifted.end.timeIntervalSince(shifted.start), 25 * 3600, "сутки перевода — 25 часов")
+        // Ряд плана всё равно приходит ровно к 100 %: он считается временем.
+        t.close(autumn.planPercent(forDay: autumn.slotCount - 1, anchor: .endOfDay), 100,
+                "последняя строка — 100 % даже в неделю с переводом часов")
     }
 
     t.suite("окно недели: другой день сброса") {

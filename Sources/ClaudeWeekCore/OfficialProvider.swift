@@ -292,10 +292,10 @@ public actor OfficialProvider: UsageProvider {
     /// Форма недели: доля каждых суток в локальной стоимости, умноженная на
     /// официальный процент. Итог точный, форма правдоподобная.
     private func shapeByDay(total: Double, window: WeekWindow, now: Date) async -> [Double?] {
-        guard let shape else { return Array(repeating: nil, count: WeekWindow.daysInWeek) }
+        guard let shape else { return Array(repeating: nil, count: window.slotCount) }
         guard let local = try? await shape.scan(window: window, now: now), local.totalCost > 0 else {
             Log.debug("локальной формы нет — панель покажет только итог")
-            return Array(repeating: nil, count: WeekWindow.daysInWeek)
+            return Array(repeating: nil, count: window.slotCount)
         }
 
         var running = 0.0

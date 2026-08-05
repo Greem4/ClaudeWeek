@@ -84,17 +84,17 @@ struct PopoverView: View {
 
                 Spacer(minLength: 4)
 
+                // Момент сброса — по своей зоне, с московским временем рядом:
+                // сбрасывается лимит в 12:00 UTC, а в обсуждениях его зовут
+                // «пятница, 15:00», и без пересчёта эти два числа спорят.
+                // Прежняя подпись «≈14 % в сутки» отсюда ушла: сутки на краях
+                // недели неполные, и общей скорости у строк больше нет.
                 if let window = model.snapshot?.window {
                     Text(Formatting.resetLabel(window))
                         .font(Theme.captionFont)
                         .fixedSize()
                         .foregroundStyle(palette.secondaryText.color)
                 }
-
-                Text("≈14 % в сутки")
-                    .font(Theme.captionFont)
-                    .fixedSize()
-                    .foregroundStyle(palette.secondaryText.color)
             }
 
             if let note = model.sourceNote {
@@ -112,12 +112,16 @@ struct PopoverView: View {
     // MARK: Дни
 
     private func days(_ snapshot: UsageSnapshot) -> some View {
-        VStack(spacing: Theme.rowSpacing) {
+        let calendar = snapshot.window.calendar
+        return VStack(spacing: Theme.rowSpacing) {
             ForEach(snapshot.byDay, id: \.index) { day in
                 DayRow(
                     day: day,
-                    label: Formatting.weekdayShort(day.start, calendar: snapshot.window.calendar),
-                    fullLabel: Formatting.weekdayFull(day.start, calendar: snapshot.window.calendar),
+                    label: Formatting.weekdayShort(day.start, calendar: calendar),
+                    fullLabel: Formatting.weekdayFull(day.start, calendar: calendar),
+                    // Крайние строки — обрезанные пятницы: одинаковая подпись,
+                    // разные часы. Интервал уточняет, какая из них какая.
+                    interval: day.isPartial ? Formatting.interval(day.start, day.end, calendar: calendar) : nil,
                     isToday: day.index == model.todayIndex,
                     animated: !reduceMotion
                 )
@@ -129,7 +133,7 @@ struct PopoverView: View {
     /// когда придут данные.
     private var placeholders: some View {
         VStack(spacing: Theme.rowSpacing) {
-            ForEach(0..<WeekWindow.daysInWeek, id: \.self) { _ in
+            ForEach(0..<model.placeholderRows, id: \.self) { _ in
                 HStack(spacing: 8) {
                     Capsule()
                         .fill(palette.track.color)

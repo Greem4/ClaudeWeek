@@ -148,11 +148,11 @@ func runLocalProviderTests(_ t: Harness) async {
         let sandbox = Sandbox()
         defer { sandbox.cleanup() }
         sandbox.write("проект/сессия.jsonl", lines: [
-            // ПТ 15:30 по Саратову — первые сутки окна.
+            // ПТ 15:30 по Саратову — вечер пятницы, первая строка окна.
             line(uuid: "d0", at: "2026-07-31T11:30:00.000Z", input: 1_000_000),
-            // СБ 14:00 — всё ещё первые сутки, они кончаются в 15:00.
+            // СБ 14:00 — суббота; час сброса на строку больше не влияет.
             line(uuid: "d0b", at: "2026-08-01T10:00:00.000Z", input: 1_000_000),
-            // СБ 16:00 — вторые сутки.
+            // СБ 16:00 — та же суббота, а не следующие сутки.
             line(uuid: "d1", at: "2026-08-01T12:00:00.000Z", input: 1_000_000),
             // Прошлая неделя — вне окна.
             line(uuid: "old", at: "2026-07-28T10:00:00.000Z", input: 1_000_000),
@@ -160,13 +160,12 @@ func runLocalProviderTests(_ t: Harness) async {
 
         let window = WeekWindow(containing: testNow, config: config())
         let usage = try await provider(sandbox).scan(window: window, now: testNow)
-        t.close(usage.costByDay[0] ?? -1, 10, "первые сутки", tolerance: 1e-12)
-        t.close(usage.costByDay[1] ?? -1, 5, "вторые сутки", tolerance: 1e-12)
-        // testNow — вторник 12:00, то есть внутри четвёртых суток окна
-        // (ПН 15:00 — ВТ 15:00): они текущие, следующие ещё не начались.
-        t.close(usage.costByDay[3] ?? -1, 0, "текущие сутки без расхода — ноль, не пропуск")
-        t.check(usage.costByDay[4] == nil, "следующие сутки ещё не наступили")
-        t.check(usage.costByDay[6] == nil, "и последние тоже")
+        t.close(usage.costByDay[0] ?? -1, 5, "вечер пятницы", tolerance: 1e-12)
+        t.close(usage.costByDay[1] ?? -1, 10, "обе субботние записи — в субботе", tolerance: 1e-12)
+        // testNow — вторник 12:00: вторник текущий, среда ещё не началась.
+        t.close(usage.costByDay[4] ?? -1, 0, "текущие сутки без расхода — ноль, не пропуск")
+        t.check(usage.costByDay[5] == nil, "следующие сутки ещё не наступили")
+        t.check(usage.costByDay[7] == nil, "и последние тоже")
         t.close(usage.totalCost, 15, "записи прошлой недели в итог не идут", tolerance: 1e-12)
     }
 
@@ -270,8 +269,11 @@ func runLocalProviderTests(_ t: Harness) async {
         t.close(snapshot.usedPercent, 25, "процент от заданного бюджета", tolerance: 1e-9)
         t.check(snapshot.isEstimate, "локальный источник помечен как оценка")
         t.equal(snapshot.source, .local, "источник — локальный")
-        t.close(snapshot.byDay[0].usedPercent ?? -1, 12.5, "накопительный факт первых суток", tolerance: 1e-9)
-        t.close(snapshot.byDay[1].usedPercent ?? -1, 25, "накопительный факт вторых суток", tolerance: 1e-9)
+        // Обе записи легли на 14:00 по Саратову: суббота и воскресенье.
+        // Вечер пятницы — отдельная первая строка, и в нём пусто.
+        t.close(snapshot.byDay[0].usedPercent ?? -1, 0, "вечер пятницы без расхода", tolerance: 1e-9)
+        t.close(snapshot.byDay[1].usedPercent ?? -1, 12.5, "накопительный факт субботы", tolerance: 1e-9)
+        t.close(snapshot.byDay[2].usedPercent ?? -1, 25, "накопительный факт воскресенья", tolerance: 1e-9)
 
         // Калибровка: на момент наблюдения потрачено $5 и это было 20 % —
         // значит бюджет недели $25, а весь расход $10 даёт 40 %.

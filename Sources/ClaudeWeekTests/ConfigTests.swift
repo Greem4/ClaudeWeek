@@ -12,7 +12,7 @@ func runConfigTests(_ t: Harness) {
     t.suite("конфиг: дефолты") {
         let d = Config.default
         t.equal(d.resetWeekday, 6, "сброс в пятницу")
-        t.equal(d.resetHour, 15, "сброс в 15:00")
+        t.equal(d.resetHour, 16, "сброс в 16:00 — это 15:00 по Москве")
         t.equal(d.planAnchor, .midDay, "план на середину суток")
         t.equal(ConfigStore.load(from: URL(fileURLWithPath: "/nope/нет-такого.json")),
                 Config.default.validated(), "отсутствующий файл — дефолты")
@@ -24,7 +24,7 @@ func runConfigTests(_ t: Harness) {
         defer { try? FileManager.default.removeItem(at: url) }
         let c = ConfigStore.load(from: url)
         t.equal(c.planAnchor, .endOfDay, "своё значение прочиталось")
-        t.equal(c.resetHour, 15, "остальное осталось дефолтным")
+        t.equal(c.resetHour, 16, "остальное осталось дефолтным")
     }
 
     t.suite("конфиг: комментарии в JSON") {
@@ -58,7 +58,7 @@ func runConfigTests(_ t: Harness) {
         c.thresholds = Thresholds(warn: 0, critical: 5)
         let v = c.validated()
         t.equal(v.resetWeekday, 6, "день недели вне 1…7 чинится")
-        t.equal(v.resetHour, 15, "час вне 0…23 чинится")
+        t.equal(v.resetHour, 16, "час вне 0…23 чинится")
         t.equal(v.resetMinute, 0, "минуты вне 0…59 чинятся")
         t.equal(v.refreshInterval, Config.minimumRefreshInterval, "интервал не ниже минимума")
         t.equal(v.timeZone, "", "неизвестная таймзона — системная")

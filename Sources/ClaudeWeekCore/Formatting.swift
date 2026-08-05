@@ -22,6 +22,13 @@ public enum Formatting {
         return String(format: "%d:%02d", c.hour ?? 0, c.minute ?? 0)
     }
 
+    /// «16:00 → 0:00» — часы, которые сутки занимают в недельном окне.
+    /// Нужны обрезанным суткам на его краях: подпись дня у них та же, что
+    /// у полных, а часов меньше.
+    public static func interval(_ start: Date, _ end: Date, calendar: Calendar) -> String {
+        "\(clock(start, calendar: calendar)) → \(clock(end, calendar: calendar))"
+    }
+
     /// «3 дн 6 ч», «1 ч 12 мин», «12 мин».
     public static func duration(_ interval: TimeInterval) -> String {
         let total = Int(max(interval, 0).rounded())
@@ -53,9 +60,38 @@ public enum Formatting {
         return "\(duration(seconds)) назад"
     }
 
-    /// «сброс ПТ 15:00».
+    /// Зона, в которой момент сброса называют в обсуждениях: недельный лимит
+    /// сбрасывается в 12:00 UTC, то есть в 15:00 по Москве. В своём регионе
+    /// это уже другой час — в UTC+4 шестнадцатый, — и пересчитывать его в уме
+    /// каждый раз незачем.
+    static let referenceTimeZone = TimeZone(identifier: "Europe/Moscow")
+
+    /// «сброс ПТ 16:00 · 15:00 МСК». Московский хвост появляется, только если
+    /// местное время от него отличается: панель считает по своей зоне, а МСК
+    /// держит для сверки.
     public static func resetLabel(_ window: WeekWindow) -> String {
-        "сброс \(weekdayShort(window.end, calendar: window.calendar)) \(clock(window.end, calendar: window.calendar))"
+        let end = window.end
+        let local = "сброс \(weekdayShort(end, calendar: window.calendar)) \(clock(end, calendar: window.calendar))"
+
+        guard let zone = referenceTimeZone,
+              zone.secondsFromGMT(for: end) != window.calendar.timeZone.secondsFromGMT(for: end)
+        else { return local }
+
+        var moscow = window.calendar
+        moscow.timeZone = zone
+        // Смещение на час-другой перебрасывает сброс через полночь, и день
+        // недели по Москве бывает не тем же — тогда называем и его.
+        let sameDay = calendar(window.calendar, andMoscow: moscow, agreeOnDayOf: end)
+        let day = sameDay ? "" : "\(weekdayShort(end, calendar: moscow)) "
+        return "\(local) · \(day)\(clock(end, calendar: moscow)) МСК"
+    }
+
+    private static func calendar(
+        _ local: Calendar,
+        andMoscow moscow: Calendar,
+        agreeOnDayOf date: Date
+    ) -> Bool {
+        local.component(.day, from: date) == moscow.component(.day, from: date)
     }
 
     /// Хвост подписи сессии: «через 1 ч 12 мин», «в 14:35» или «через 1 ч 12

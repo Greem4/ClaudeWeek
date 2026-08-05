@@ -90,9 +90,12 @@ enum CLI {
             let planPercent: Double
             let usedPercent: Double?
             let cost: Double?
+            /// Сутки обрезаны краем недельного окна: у них меньше часов, чем
+            /// у соседних, и сравнивать их проценты в лоб нельзя.
+            let partial: Bool
 
             enum CodingKeys: String, CodingKey {
-                case index, label, start, planPercent, usedPercent, cost
+                case index, label, start, planPercent, usedPercent, cost, partial
             }
 
             // Синтезированный encode выбрасывает пустые поля, и у будущих
@@ -106,6 +109,7 @@ enum CLI {
                 try c.encode(planPercent, forKey: .planPercent)
                 try c.encode(usedPercent, forKey: .usedPercent)
                 try c.encode(cost, forKey: .cost)
+                try c.encode(partial, forKey: .partial)
             }
         }
 
@@ -249,7 +253,8 @@ enum CLI {
                 start: slot.start,
                 planPercent: slot.planPercent,
                 usedPercent: slot.index < cumulative.count ? cumulative[slot.index] : nil,
-                cost: usage.costByDay[slot.index]
+                cost: slot.index < usage.costByDay.count ? usage.costByDay[slot.index] : nil,
+                partial: slot.isPartial
             )
         }
 

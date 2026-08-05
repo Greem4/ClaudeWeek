@@ -177,9 +177,13 @@ public struct Config: Codable, Sendable, Equatable {
 
     public static let minimumRefreshInterval: TimeInterval = 30
 
+    /// Сброс недельного лимита приходит в 12:00 UTC — в 15:00 по Москве и в
+    /// 16:00 здесь, в UTC+4. Это догадка на случай, когда сервер молчит: в
+    /// обычной жизни момент берётся из `resets_at` официального ответа. Час
+    /// привязан к `timeZone` ниже — сменив её, поправьте и его.
     public static let `default` = Config(
         resetWeekday: 6,
-        resetHour: 15,
+        resetHour: 16,
         resetMinute: 0,
         timeZone: "Europe/Saratov",
         refreshInterval: 300,

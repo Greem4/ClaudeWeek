@@ -54,6 +54,8 @@ struct DayRow: View {
     let day: DayUsage
     let label: String
     let fullLabel: String
+    /// Часы обрезанных суток («16:00 → 0:00»); nil — сутки полные.
+    var interval: String?
     let isToday: Bool
     let animated: Bool
 
@@ -91,6 +93,14 @@ struct DayRow: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(voiceOverLabel)
+        .help(tooltip)
+    }
+
+    /// Наведение поясняет, какие именно часы стоят за строкой: у крайних
+    /// суток недели подпись дня повторяется, и различает их только время.
+    private var tooltip: String {
+        guard let interval else { return fullLabel }
+        return "\(fullLabel), \(interval)"
     }
 
     private var values: String {
@@ -100,11 +110,12 @@ struct DayRow: View {
 
     private var voiceOverLabel: String {
         let plan = Formatting.percent(day.planPercent, withSign: false)
+        let name = interval.map { "\(fullLabel), \($0)" } ?? fullLabel
         guard let used = day.usedPercent else {
-            return "\(fullLabel), план \(plan) процентов, расхода ещё нет"
+            return "\(name), план \(plan) процентов, расхода ещё нет"
         }
         let fact = Formatting.percent(used, withSign: false)
         let verdict = isOverspent ? ", перерасход" : ""
-        return "\(fullLabel), потрачено \(fact) процентов из \(plan) плановых\(verdict)"
+        return "\(name), потрачено \(fact) процентов из \(plan) плановых\(verdict)"
     }
 }

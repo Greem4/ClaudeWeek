@@ -357,11 +357,10 @@ func runOfficialProviderTests(_ t: Harness) async {
         let window = WeekWindow(endingAt: at(2026, 8, 7, 16, 0), config: config())
         t.equal(window.start, at(2026, 7, 31, 16, 0), "начало на семь суток раньше конца")
         t.close(window.duration, 7 * 86_400, "окно длиной в неделю")
-        t.equal(window.days.count, 7, "семь суточных слотов")
-        t.equal(window.dayIndex(for: at(2026, 8, 4, 12, 0)), 3,
-                "вторник до 16:00 — четвёртые сутки окна")
+        t.equal(window.days.count, 8, "восемь строк: сброс в 16:00 делит пятницу")
+        t.equal(window.dayIndex(for: at(2026, 8, 4, 12, 0)), 4, "вторник до 16:00 — вторник")
         t.equal(window.dayIndex(for: at(2026, 8, 4, 17, 0)), 4,
-                "после 16:00 начинаются пятые")
+                "и после 16:00 он же: строка меняется в полночь")
 
         // Конфиг говорит одно, сервер — другое; выигрывает сервер.
         t.check(WeekWindow(containing: at(2026, 8, 4, 12, 0), config: config()).end != window.end,

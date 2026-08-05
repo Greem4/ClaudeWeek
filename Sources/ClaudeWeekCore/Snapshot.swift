@@ -13,13 +13,24 @@ public struct DayUsage: Sendable, Equatable {
     public let planPercent: Double
     /// Накопительный расход от начала недели; nil — сутки ещё не наступили.
     public let usedPercent: Double?
+    /// Сутки обрезаны краем недельного окна: у них та же подпись дня, что у
+    /// полных, но меньше часов и меньше плана.
+    public let isPartial: Bool
 
-    public init(index: Int, start: Date, end: Date, planPercent: Double, usedPercent: Double?) {
+    public init(
+        index: Int,
+        start: Date,
+        end: Date,
+        planPercent: Double,
+        usedPercent: Double?,
+        isPartial: Bool = false
+    ) {
         self.index = index
         self.start = start
         self.end = end
         self.planPercent = planPercent
         self.usedPercent = usedPercent
+        self.isPartial = isPartial
     }
 
     /// Часть факта, вышедшая за план этих суток.
@@ -139,7 +150,8 @@ public struct UsageSnapshot: Sendable {
                 start: slot.start,
                 end: slot.end,
                 planPercent: slot.planPercent,
-                usedPercent: slot.index < cumulativeByDay.count ? cumulativeByDay[slot.index] : nil
+                usedPercent: slot.index < cumulativeByDay.count ? cumulativeByDay[slot.index] : nil,
+                isPartial: slot.isPartial
             )
         }
         return UsageSnapshot(

@@ -7,12 +7,15 @@ import ClaudeWeekCore
 /// картинки к PR.
 @MainActor
 enum Screenshot {
-    /// Числа из макета плана (§1): факт 7/15/28/58 против плана 7/21/36/50.
+    /// Числа макета плана (§1), разложенные по календарным строкам: неделя
+    /// начинается вечером пятницы, поэтому первая строка короткая и почти
+    /// пустая, а основной расход приходится на полные сутки.
     static func demoSnapshot(config: Config, now: Date) -> UsageSnapshot {
         let window = WeekWindow(containing: now, config: config)
+        let shape: [Double?] = [2, 7, 15, 28, 58, nil, nil, nil]
         return UsageSnapshot.make(
             usedPercent: 58,
-            cumulativeByDay: [7, 15, 28, 58, nil, nil, nil],
+            cumulativeByDay: Array(shape.prefix(window.slotCount)),
             window: window,
             source: .official,
             fetchedAt: now,
@@ -22,9 +25,10 @@ enum Screenshot {
     }
 
     static func render(into directory: URL, config: Config) -> Int32 {
-        // Момент внутри четвёртых суток окна — как на макете, где ВТ ещё пуст.
+        // Момент внутри пятой строки окна — как на макете, где следующие
+        // сутки ещё пусты.
         let now = WeekWindow(containing: Date(), config: config)
-            .dayStart(3)
+            .dayStart(4)
             .addingTimeInterval(6 * 3600)
 
         var config = config

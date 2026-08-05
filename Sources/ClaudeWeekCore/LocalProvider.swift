@@ -287,7 +287,7 @@ public actor LocalProvider: UsageProvider {
     ) -> LocalUsage {
         var seen: Set<String> = []
         var duplicates = 0
-        var perDay = [Double](repeating: 0, count: WeekWindow.daysInWeek)
+        var perDay = [Double](repeating: 0, count: window.slotCount)
         var total = 0.0
         var counted = 0
 
@@ -308,7 +308,7 @@ public actor LocalProvider: UsageProvider {
             }
         }
 
-        let costByDay: [Double?] = (0..<WeekWindow.daysInWeek).map { day in
+        let costByDay: [Double?] = (0..<window.slotCount).map { day in
             window.dayStart(day) > now ? nil : perDay[day]
         }
 

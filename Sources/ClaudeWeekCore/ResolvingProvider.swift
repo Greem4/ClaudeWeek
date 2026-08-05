@@ -167,9 +167,17 @@ public extension CachedUsage {
             calendar: config.calendar,
             anchor: config.planAnchor
         )
+        // Разбивку берём только если она нарезана так же, как нынешнее окно.
+        // Кеш прошлой версии считал сутки от сброса до сброса — наложенный на
+        // календарные строки, он разъехался бы на день, и панель врала бы
+        // формой недели до первого удачного ответа.
+        let shape = byDay.count == window.slotCount
+            ? byDay
+            : [Double?](repeating: nil, count: window.slotCount)
+
         return UsageSnapshot.make(
             usedPercent: usedPercent,
-            cumulativeByDay: byDay,
+            cumulativeByDay: shape,
             window: window,
             source: source,
             fetchedAt: fetchedAt,
