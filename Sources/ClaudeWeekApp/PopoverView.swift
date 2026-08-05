@@ -7,6 +7,12 @@ struct PopoverView: View {
     @Bindable var model: PanelModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Кружок источника нажали: там, где он стоит, панель на несколько секунд
+    /// подменяет соседа текстом — в строке сессии полосу, в заголовке час
+    /// сброса. Само состояние живёт здесь, а не в модели: это не то, что
+    /// панель показывает, а то, что человек в ней сейчас делает.
+    @State private var showsSourceText = false
+
     var onRefresh: () -> Void = {}
     var onSettings: () -> Void = {}
     var onQuit: () -> Void = {}
@@ -29,6 +35,8 @@ struct PopoverView: View {
                     resetDisplay: appearance.sessionReset,
                     source: model.sourceState,
                     sourceHint: model.sourceHint,
+                    showsSourceText: showsSourceText,
+                    onSourceTap: { showsSourceText.toggle() },
                     calendar: model.config.calendar,
                     animated: !reduceMotion
                 )
@@ -51,6 +59,15 @@ struct PopoverView: View {
         // вуаль поверх него. Непрозрачный — сплошная заливка палитры.
         .background(backdrop)
         .environment(\.palette, palette)
+        // Текст уходит сам: панель открывают ради полос, и оставлять её без
+        // них до следующего клика нельзя. Повторный клик снимает текст раньше
+        // — смена `showsSourceText` отменяет и эту задачу.
+        .task(id: showsSourceText) {
+            guard showsSourceText else { return }
+            try? await Task.sleep(for: .seconds(Theme.sourceTextDuration))
+            guard !Task.isCancelled else { return }
+            showsSourceText = false
+        }
     }
 
     @ViewBuilder
@@ -98,15 +115,29 @@ struct PopoverView: View {
                     // Кружок не текст, и по базовой линии его равнять нечем:
                     // без поправки он сел бы на неё донышком и выглядел бы
                     // просевшим относительно цифр рядом.
-                    SourceDot(state: model.sourceState, hint: model.sourceHint)
-                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                    SourceDot(
+                        state: model.sourceState,
+                        hint: model.sourceHint,
+                        onTap: { showsSourceText.toggle() }
+                    )
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 }
 
                 // Момент сброса — в зоне окна, той же, по которой считаются
                 // сутки. Ни московского времени для сверки, ни прежних
                 // «≈14 % в сутки» здесь нет: строке заголовка хватает одного
                 // числа, а два подряд читались как спорящие.
-                if let window = model.snapshot?.window {
+                //
+                // На эти же несколько секунд его место занимает текст
+                // источника: кружок стоит слева от них обоих и от подмены не
+                // трогается — щёлкать обратно приходится туда же, куда щёлкнул.
+                if showsSourceText, !showsSessionRow {
+                    Text(model.sourceHint)
+                        .font(Theme.captionFont)
+                        .foregroundStyle(palette.secondaryText.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.trailing)
+                } else if let window = model.snapshot?.window {
                     Text(Formatting.resetLabel(window))
                         .font(Theme.captionFont)
                         .fixedSize()

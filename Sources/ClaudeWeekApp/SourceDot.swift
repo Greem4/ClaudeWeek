@@ -14,20 +14,36 @@ struct SourceDot: View {
     /// Подсказка при наведении: цвет говорит «свои или чужие цифры», а
     /// почему именно — «нет сети», «данные 20 мин назад» — только она.
     let hint: String
+    /// Клик по кружку: та же подсказка, но прямо в панели, на месте полосы.
+    /// Всплывающей подсказки мало — её надо ждать с мышью на девяти точках,
+    /// а отказ хочется прочитать сразу, как только заметил цвет.
+    var onTap: () -> Void = {}
 
     @Environment(\.palette) private var palette
 
     var body: some View {
-        Group {
-            if isFilled {
-                Circle().fill(color)
-            } else {
-                Circle().strokeBorder(color, lineWidth: Theme.sourceDotStroke)
-            }
+        Button(action: onTap) {
+            dot
+                .frame(width: Theme.sourceDotSize, height: Theme.sourceDotSize)
+                // Зона клика шире кружка, но разметка от этого не едет: поля
+                // тут же снимаются отрицательными, и полоса рядом остаётся на
+                // своём месте.
+                .padding(Theme.sourceDotHitPadding)
+                .contentShape(Rectangle())
+                .padding(-Theme.sourceDotHitPadding)
         }
-        .frame(width: Theme.sourceDotSize, height: Theme.sourceDotSize)
+        .buttonStyle(.plain)
         .help(hint)
         .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var dot: some View {
+        if isFilled {
+            Circle().fill(color)
+        } else {
+            Circle().strokeBorder(color, lineWidth: Theme.sourceDotStroke)
+        }
     }
 
     private var isFilled: Bool {

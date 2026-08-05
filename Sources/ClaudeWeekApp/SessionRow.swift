@@ -49,6 +49,12 @@ struct SessionRow: View {
     let source: SourceState
     /// Что кружок говорит словами при наведении.
     let sourceHint: String
+    /// Кружок нажали — на месте полосы стоит тот же текст словами. Полоса
+    /// уходит, а кружок и процент остаются: строка не должна ни съезжать
+    /// вбок, ни терять число, ради которого её читают.
+    let showsSourceText: Bool
+    /// Нажатие на кружок — показать текст или убрать его досрочно.
+    let onSourceTap: () -> Void
     /// Календарь конфига — час сброса показываем в той же зоне, что и всё
     /// остальное в панели, а не в системной.
     let calendar: Calendar
@@ -68,13 +74,24 @@ struct SessionRow: View {
                     .foregroundStyle(palette.secondaryText.color)
                     .frame(width: Theme.dayLabelWidth, alignment: .leading)
 
-                SessionBar(
-                    usedPercent: session.usedPercent,
-                    isWarning: isWarning,
-                    animated: animated
-                )
+                if showsSourceText {
+                    Text(sourceHint)
+                        .font(Theme.captionFont)
+                        .foregroundStyle(palette.secondaryText.color)
+                        // Отказ бывает длинным («сеть недоступна: … · данные
+                        // 20 мин назад») — переносим по словам целиком. Резать
+                        // многоточием тут нечего: обрезанная причина не причина.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    SessionBar(
+                        usedPercent: session.usedPercent,
+                        isWarning: isWarning,
+                        animated: animated
+                    )
+                }
 
-                SourceDot(state: source, hint: sourceHint)
+                SourceDot(state: source, hint: sourceHint, onTap: onSourceTap)
 
                 HStack(spacing: 3) {
                     if session.isExhausted {
