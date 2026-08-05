@@ -167,6 +167,9 @@ public struct Config: Codable, Sendable, Equatable {
     public var refreshInterval: TimeInterval
     public var provider: ProviderPreference
     public var planAnchor: PlanAnchor
+    /// Часы, между которыми растёт план. Вне их он стоит: недельный лимит
+    /// раскладывается по рабочему времени, а не по астрономическому.
+    public var workHours: WorkHours
     public var menuBarStyle: MenuBarStyle
     /// Условная стоимость недели для локального режима; 0 = не откалиброван.
     public var weeklyBudget: Double
@@ -189,6 +192,7 @@ public struct Config: Codable, Sendable, Equatable {
         refreshInterval: 300,
         provider: .auto,
         planAnchor: .midDay,
+        workHours: WorkHours.default,
         menuBarStyle: .percent,
         weeklyBudget: 0,
         calibration: Calibration(),
@@ -204,6 +208,7 @@ public struct Config: Codable, Sendable, Equatable {
         refreshInterval: TimeInterval,
         provider: ProviderPreference,
         planAnchor: PlanAnchor,
+        workHours: WorkHours = WorkHours.default,
         menuBarStyle: MenuBarStyle,
         weeklyBudget: Double,
         calibration: Calibration,
@@ -217,6 +222,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.refreshInterval = refreshInterval
         self.provider = provider
         self.planAnchor = planAnchor
+        self.workHours = workHours
         self.menuBarStyle = menuBarStyle
         self.weeklyBudget = weeklyBudget
         self.calibration = calibration
@@ -237,6 +243,7 @@ public struct Config: Codable, Sendable, Equatable {
             refreshInterval: try c.decodeIfPresent(TimeInterval.self, forKey: .refreshInterval) ?? d.refreshInterval,
             provider: try c.decodeIfPresent(ProviderPreference.self, forKey: .provider) ?? d.provider,
             planAnchor: try c.decodeIfPresent(PlanAnchor.self, forKey: .planAnchor) ?? d.planAnchor,
+            workHours: try c.decodeIfPresent(WorkHours.self, forKey: .workHours) ?? d.workHours,
             menuBarStyle: try c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle) ?? d.menuBarStyle,
             weeklyBudget: try c.decodeIfPresent(Double.self, forKey: .weeklyBudget) ?? d.weeklyBudget,
             calibration: try c.decodeIfPresent(Calibration.self, forKey: .calibration) ?? d.calibration,
@@ -268,6 +275,7 @@ public struct Config: Codable, Sendable, Equatable {
             Log.warn("refreshInterval=\(c.refreshInterval) меньше минимума, беру \(Config.minimumRefreshInterval)")
             c.refreshInterval = Config.minimumRefreshInterval
         }
+        c.workHours = c.workHours.validated()
         if c.weeklyBudget < 0 { c.weeklyBudget = 0 }
         if c.thresholds.warn <= 0 { c.thresholds.warn = Thresholds().warn }
         if !(0...1).contains(c.thresholds.critical) { c.thresholds.critical = Thresholds().critical }

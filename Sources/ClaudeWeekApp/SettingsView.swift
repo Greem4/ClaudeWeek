@@ -82,9 +82,41 @@ private struct GeneralSettings: View {
                 .foregroundStyle(.secondary)
 
                 Picker("План считать на", selection: config.planAnchor) {
-                    Text("середину суток (7/21/36/50…)").tag(PlanAnchor.midDay)
-                    Text("конец суток (14/29/43/57…)").tag(PlanAnchor.endOfDay)
+                    Text("середину суток").tag(PlanAnchor.midDay)
+                    Text("конец суток").tag(PlanAnchor.endOfDay)
                 }
+            }
+
+            Section("Рабочий день") {
+                Picker("Распорядок", selection: config.workHours) {
+                    ForEach(WorkHours.presets, id: \.self) { hours in
+                        Text(hours.title).tag(hours)
+                    }
+                    // Часы, накрученные степперами, тоже должны где-то стоять,
+                    // иначе список показывал бы чужое значение как выбранное.
+                    if !WorkHours.presets.contains(model.config.workHours) {
+                        Text(model.config.workHours.title).tag(model.config.workHours)
+                    }
+                }
+
+                // Границы держат день непустым: вывернутый интервал конфиг
+                // чинит на круглосуточный, и в степпере это выглядело бы как
+                // самовольный сброс настройки.
+                HStack {
+                    Stepper(
+                        "С \(model.config.workHours.start):00",
+                        value: config.workHours.start,
+                        in: 0...(model.config.workHours.end - 1)
+                    )
+                    Stepper(
+                        "до \(hourLabel(model.config.workHours.end))",
+                        value: config.workHours.end,
+                        in: (model.config.workHours.start + 1)...24
+                    )
+                }
+                Text(workHoursHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Пороги") {
@@ -114,6 +146,27 @@ private struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Полночь показываем как «0:00 следующих суток», а не как «24:00»:
+    /// в степпере это край шкалы, и человеку нужно понимать, что дальше некуда.
+    private func hourLabel(_ hour: Int) -> String {
+        hour >= 24 ? "полуночи" : "\(hour):00"
+    }
+
+    private var workHoursHint: String {
+        let hours = model.config.workHours.hours
+        guard !model.config.workHours.isAllDay else {
+            return """
+            Круглосуточно: план растёт и ночью, поэтому за сон набегает \
+            около 40 % недельного лимита.
+            """
+        }
+        return """
+        Недельный лимит раскладывается по этим часам — \(hours) ч в сутки. \
+        Ночью план стоит: утром вы начинаете с той же отметки, на которой \
+        закончили, а работа в три ночи целиком ложится в перерасход.
+        """
     }
 
     private var providerHint: String {

@@ -188,10 +188,13 @@ public struct UsageSnapshot: Sendable {
         let burnRate: Double? = planNow > 0 ? usedPercent / planNow : nil
         let projected: Double? = progress > 0 ? usedPercent / progress : nil
 
+        // Момент, к которому при нынешнем темпе натечёт 100 %. Ищется по
+        // рабочему времени: ночью план стоит, и делить календарные часы
+        // пропорционально расходу больше нельзя — прогноз обещал бы
+        // исчерпание в четыре утра, когда никто не работает.
         var exhaustion: Date?
         if let projected, projected > 100, usedPercent > 0 {
-            let elapsed = now.timeIntervalSince(window.start)
-            exhaustion = window.start.addingTimeInterval(elapsed * 100 / usedPercent)
+            exhaustion = window.date(atProgress: progress * 100 / usedPercent)
         }
 
         return UsageMetrics(

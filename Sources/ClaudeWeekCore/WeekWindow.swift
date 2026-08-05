@@ -32,9 +32,13 @@ public struct WeekWindow: Sendable, Equatable {
     public let end: Date
     public let calendar: Calendar
     public let anchor: PlanAnchor
+    /// Часы, в которые план растёт. Всё остальное время он стоит.
+    public let workHours: WorkHours
     /// Границы строк панели: старт окна, каждая местная полночь внутри него,
     /// конец окна. Отсюда и число строк, и их план.
     public let dayBounds: [Date]
+    /// Рабочих секунд во всём окне — знаменатель плана.
+    private let workTotal: TimeInterval
 
     /// Длина окна в сутках. Строк на панели может быть больше: сброс редко
     /// попадает в полночь, и тогда неделя накрывает восемь местных дат.
@@ -69,7 +73,8 @@ public struct WeekWindow: Sendable, Equatable {
             start: start,
             end: calendar.date(byAdding: .day, value: WeekWindow.daysInWeek, to: start) ?? start,
             calendar: calendar,
-            anchor: config.planAnchor
+            anchor: config.planAnchor,
+            workHours: config.workHours
         )
     }
 
@@ -85,16 +90,25 @@ public struct WeekWindow: Sendable, Equatable {
             start: calendar.date(byAdding: .day, value: -WeekWindow.daysInWeek, to: end) ?? end,
             end: end,
             calendar: calendar,
-            anchor: config.planAnchor
+            anchor: config.planAnchor,
+            workHours: config.workHours
         )
     }
 
-    public init(start: Date, end: Date, calendar: Calendar, anchor: PlanAnchor) {
+    public init(
+        start: Date,
+        end: Date,
+        calendar: Calendar,
+        anchor: PlanAnchor,
+        workHours: WorkHours = WorkHours.default
+    ) {
         self.start = start
         self.end = end
         self.calendar = calendar
         self.anchor = anchor
+        self.workHours = workHours
         self.dayBounds = WeekWindow.bounds(from: start, to: end, calendar: calendar)
+        self.workTotal = workHours.seconds(from: start, to: end, calendar: calendar)
     }
 
     /// Границы суток панели. Сутки календарные, а не «от сброса до сброса»:
@@ -126,16 +140,73 @@ public struct WeekWindow: Sendable, Equatable {
 
     public var duration: TimeInterval { end.timeIntervalSince(start) }
 
-    /// Доля прожитого окна: 0 в момент сброса, 1 в момент следующего.
+    /// Доля отработанного окна: 0 в момент сброса, 1 в момент следующего.
+    ///
+    /// Считается по рабочим часам, а не по календарным: ночью план стоит.
+    /// Иначе треть недельного бюджета доставалась бы сну, а на краях окна
+    /// это выходило боком — вечеру пятницы после сброса (8 часов, все
+    /// рабочие) плана начислялось вдвое меньше, чем её утру (16 часов,
+    /// из которых 11 человек спит).
     public func progress(at date: Date) -> Double {
-        guard duration > 0 else { return 0 }
-        return min(max(date.timeIntervalSince(start) / duration, 0), 1)
+        guard workTotal > 0 else {
+            guard duration > 0 else { return 0 }
+            return min(max(date.timeIntervalSince(start) / duration, 0), 1)
+        }
+        let worked = workHours.seconds(from: start, to: min(max(date, start), end), calendar: calendar)
+        return min(max(worked / workTotal, 0), 1)
     }
 
     /// Непрерывный план на момент `date`, в процентах: сколько допустимо
-    /// потратить к этой секунде при равномерном темпе.
+    /// потратить к этой секунде при ровном темпе в рабочие часы.
     public func planPercent(at date: Date) -> Double {
         progress(at: date) * 100
+    }
+
+    /// Момент, к которому план дорастёт до доли `progress` (0…1). Обратная
+    /// к `progress(at:)`: нужна прогнозу «при таком темпе кончится в …»,
+    /// потому что с рабочими часами время течёт неравномерно и делением
+    /// такой момент больше не находится.
+    public func date(atProgress progress: Double) -> Date {
+        let target = min(max(progress, 0), 1) * workTotal
+        guard workTotal > 0 else {
+            return start.addingTimeInterval(duration * min(max(progress, 0), 1))
+        }
+
+        var worked: TimeInterval = 0
+        var cursor = start
+
+        // Идём по строкам: внутри одних суток рабочий отрезок непрерывен,
+        // и остаток добирается пропорционально.
+        for index in 0..<slotCount {
+            let next = dayBounds[index + 1]
+            let step = workHours.seconds(from: cursor, to: next, calendar: calendar)
+            if worked + step >= target {
+                return moment(after: target - worked, from: cursor, notLaterThan: next)
+            }
+            worked += step
+            cursor = next
+        }
+
+        return end
+    }
+
+    /// Момент внутри одних суток, к которому накопится `seconds` рабочего
+    /// времени. Шаг — минута: панель всё равно показывает часы и минуты,
+    /// а секундная точность стоила бы вдвое больше проходов.
+    private func moment(after seconds: TimeInterval, from: Date, notLaterThan limit: Date) -> Date {
+        guard seconds > 0 else { return from }
+        var low = from
+        var high = limit
+
+        while high.timeIntervalSince(low) > 60 {
+            let middle = low.addingTimeInterval(high.timeIntervalSince(low) / 2)
+            if workHours.seconds(from: from, to: middle, calendar: calendar) < seconds {
+                low = middle
+            } else {
+                high = middle
+            }
+        }
+        return high
     }
 
     public func contains(_ date: Date) -> Bool {
@@ -152,18 +223,19 @@ public struct WeekWindow: Sendable, Equatable {
         return dayBounds[index]
     }
 
-    /// План строки: непрерывный план в опорной точке её суток — в середине
-    /// (`midDay`) или в конце (`endOfDay`). Берётся по времени, а не по номеру
-    /// строки: сутки бывают неполными (края окна) и удлинёнными (перевод
-    /// часов), и только время сводит ряд ровно к 100 % в момент сброса.
+    /// План строки: сколько всего допустимо потратить к концу её суток
+    /// (`endOfDay`) или к их середине (`midDay`). Середина — половина
+    /// рабочего времени строки, а не полдень: у суток с двумя рабочими
+    /// часами и у суток с тринадцатью середина плана разная.
+    ///
+    /// Считается по рабочим часам, а не по номеру строки: сутки бывают
+    /// неполными (края окна) и удлинёнными (перевод часов), и только так ряд
+    /// приходит ровно к 100 % в момент сброса.
     public func planPercent(forDay index: Int, anchor: PlanAnchor? = nil) -> Double {
         guard index >= 0, index < slotCount else { return 0 }
-        let from = dayBounds[index]
-        let to = dayBounds[index + 1]
-        let moment = (anchor ?? self.anchor) == .midDay
-            ? from.addingTimeInterval(to.timeIntervalSince(from) / 2)
-            : to
-        return planPercent(at: moment)
+        let to = planPercent(at: dayBounds[index + 1])
+        guard (anchor ?? self.anchor) == .midDay else { return to }
+        return (planPercent(at: dayBounds[index]) + to) / 2
     }
 
     public var days: [WeekDaySlot] {
