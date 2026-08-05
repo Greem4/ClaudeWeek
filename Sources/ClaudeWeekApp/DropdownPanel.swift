@@ -20,8 +20,20 @@ final class DropdownPanel {
     /// Окно пункта строки меню — от него считаем место панели и по нему же
     /// узнаём «свой» клик.
     private weak var anchor: NSWindow?
+    /// Сам пункт строки меню: по нему панель показывается заново, когда
+    /// возвращаемся в приложение с открытыми настройками.
+    private weak var anchorButton: NSStatusBarButton?
+
+    /// Закреплённая панель не закрывается по клику мимо — так себя ведёт
+    /// живой предпросмотр при открытых настройках.
+    private var isPinned = false
+    /// Панель убрана не человеком, а уходом в другое приложение, — значит,
+    /// на возврате её надо показать снова.
+    private var hiddenByDeactivation = false
+    private var activationObservers: [NSObjectProtocol] = []
 
     var isShown: Bool { panel.isVisible }
+    var frame: NSRect { panel.frame }
 
     init() {
         // Материал строки меню: полупрозрачная подложка с размытием того,
@@ -81,6 +93,8 @@ final class DropdownPanel {
     func show(from button: NSStatusBarButton) {
         guard let anchor = button.window else { return }
         self.anchor = anchor
+        anchorButton = button
+        hiddenByDeactivation = false
 
         hosting.layoutSubtreeIfNeeded()
         panel.setFrame(frame(for: hosting.fittingSize, anchor: anchor), display: false)
@@ -92,9 +106,67 @@ final class DropdownPanel {
     }
 
     func close() {
+        hiddenByDeactivation = false
         guard panel.isVisible else { return }
         stopMonitoring()
         panel.orderOut(nil)
+    }
+
+    // MARK: Закрепление на время настроек
+
+    /// Держать панель открытой, пока правят настройки: иначе первый же клик
+    /// по ползунку убирал бы ровно то, ради чего его крутят.
+    func pin(from button: NSStatusBarButton) {
+        isPinned = true
+        // Мониторы кликов панели больше не нужны: закрывать её теперь
+        // некому, кроме самого окна настроек.
+        stopMonitoring()
+        observeActivation()
+        if !isShown { show(from: button) } else { anchorButton = button }
+    }
+
+    func unpin() {
+        isPinned = false
+        stopObservingActivation()
+        close()
+    }
+
+    /// Панель живёт на уровне меню и висела бы поверх чужих окон, стоит уйти
+    /// из настроек в другую программу. Уходим вместе с приложением
+    /// и возвращаемся вместе с ним же.
+    private func observeActivation() {
+        stopObservingActivation()
+        let center = NotificationCenter.default
+        activationObservers = [
+            center.addObserver(
+                forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.hideWhilePinned() }
+            },
+            center.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.restoreWhilePinned() }
+            },
+        ]
+    }
+
+    private func stopObservingActivation() {
+        activationObservers.forEach(NotificationCenter.default.removeObserver)
+        activationObservers = []
+    }
+
+    private func hideWhilePinned() {
+        guard isPinned, panel.isVisible else { return }
+        panel.orderOut(nil)
+        hiddenByDeactivation = true
+    }
+
+    private func restoreWhilePinned() {
+        // Панель, закрытую человеком (клик по пункту меню), обратно не тянем:
+        // возвращаем только то, что убрали сами.
+        guard isPinned, hiddenByDeactivation, let button = anchorButton else { return }
+        show(from: button)
     }
 
     /// Верх панели — на нижней кромке строки меню, центр — под пунктом.
@@ -128,6 +200,7 @@ final class DropdownPanel {
 
     private func startMonitoring() {
         stopMonitoring()
+        guard !isPinned else { return }
 
         // Клик в чужом приложении. Слежка за мышью, в отличие от клавиатуры,
         // разрешения «Универсального доступа» не требует.

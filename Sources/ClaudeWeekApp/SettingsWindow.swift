@@ -81,18 +81,26 @@ final class SettingsModel {
 /// Панель для этого не годится — в ней невозможно ни выделить текст поля,
 /// ни оставить настройки открытыми, пока смотришь на строку меню.
 @MainActor
-final class SettingsWindowController {
+final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let model: SettingsModel
+
+    /// Окно на экране — настоящую панель пора показать рядом.
+    var onPresent: () -> Void = {}
+    /// Окно закрыли или свернули — панель больше держать незачем.
+    var onDismiss: () -> Void = {}
 
     init(model: SettingsModel) {
         self.model = model
     }
 
-    func show() {
+    /// `obstacle` — рамка живой панели: новое окно ставим так, чтобы её
+    /// не накрыть, иначе предпросмотр придётся откапывать мышью.
+    func show(avoiding obstacle: NSRect? = nil) {
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            onPresent()
             return
         }
 
@@ -101,13 +109,46 @@ final class SettingsWindowController {
         window.title = "Настройки ClaudeWeek"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.center()
         window.setFrameAutosaveName("ClaudeWeekSettings")
+        if let obstacle { moveAside(window, from: obstacle) }
         self.window = window
 
         window.makeKeyAndOrderFront(nil)
         // Приложение живёт без Dock (`LSUIElement`), и без явной активации
         // окно откроется за спиной у текущей программы.
         NSApp.activate(ignoringOtherApps: true)
+        onPresent()
     }
+
+    /// Двигаем окно один раз, при создании: дальше место выбирает человек.
+    /// Уходим в ту сторону, где на экране больше свободного места, а если
+    /// вбок не влезаем — опускаемся под панель.
+    private func moveAside(_ window: NSWindow, from obstacle: NSRect) {
+        let gap: CGFloat = 12
+        var frame = window.frame
+        guard frame.intersects(obstacle.insetBy(dx: -gap, dy: -gap)),
+              let screen = (window.screen ?? NSScreen.main)?.visibleFrame
+        else { return }
+
+        let toLeft = obstacle.minX - screen.minX > screen.maxX - obstacle.maxX
+        let x = toLeft ? obstacle.minX - gap - frame.width : obstacle.maxX + gap
+        if x >= screen.minX, x + frame.width <= screen.maxX {
+            frame.origin.x = x
+        } else {
+            frame.origin.y = max(obstacle.minY - gap - frame.height, screen.minY)
+        }
+        window.setFrame(frame, display: false)
+    }
+
+    // MARK: Жизнь окна
+
+    func windowWillClose(_ notification: Notification) { onDismiss() }
+
+    // Свёрнутое окно для нас всё равно что закрытое: ползунков не видно,
+    // и панель поверх чужих окон только мешала бы.
+    func windowWillMiniaturize(_ notification: Notification) { onDismiss() }
+
+    func windowDidDeminiaturize(_ notification: Notification) { onPresent() }
 }

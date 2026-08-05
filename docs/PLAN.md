@@ -284,7 +284,7 @@ ClaudeWeek/
 │   │   ├── MenuBarBar.swift       # иконка строки меню: полоса и процент
 │   │   ├── Theme.swift            # палитры тем, шрифты, отступы
 │   │   ├── SettingsWindow.swift   # окно настроек: модель и применение
-│   │   ├── SettingsView.swift     # четыре вкладки настроек и предпросмотр
+│   │   ├── SettingsView.swift     # четыре вкладки настроек
 │   │   ├── ConfigStamp.swift      # отпечаток конфига для перечитывания
 │   │   ├── Screenshot.swift       # --screenshot: панель в PNG, обе темы
 │   │   └── AppIcon.swift          # --icon: .iconset для сборки бандла

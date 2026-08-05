@@ -162,17 +162,30 @@ final class StatusItemController: NSObject {
 
     /// Окно настроек. Правки применяются сразу и тут же ложатся в файл —
     /// он остаётся источником правды, а окно лишь удобный способ его править.
+    ///
+    /// Панель при этом не закрываем, а закрепляем рядом: тему, плотность фона
+    /// и скругление видно на ней самой — с настоящим размытием и своими
+    /// цифрами, чего никакой предпросмотр внутри окна не покажет.
     private func openSettings() {
-        dropdown.close()
         if settings == nil {
             let model = SettingsModel(
                 config: model.config,
                 apply: { [weak self] config in self?.applyFromSettings(config) },
                 check: { config in await Self.check(config: config) }
             )
-            settings = SettingsWindowController(model: model)
+            let controller = SettingsWindowController(model: model)
+            controller.onPresent = { [weak self] in self?.pinPanel() }
+            controller.onDismiss = { [weak self] in self?.dropdown.unpin() }
+            settings = controller
         }
-        settings?.show()
+        pinPanel()
+        settings?.show(avoiding: dropdown.isShown ? dropdown.frame : nil)
+    }
+
+    private func pinPanel() {
+        guard let button = statusItem.button else { return }
+        model.now = Date()
+        dropdown.pin(from: button)
     }
 
     private func applyFromSettings(_ config: Config) {

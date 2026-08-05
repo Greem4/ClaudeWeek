@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 import ClaudeWeekCore
 
-/// Окно настроек: четыре вкладки и живой предпросмотр панели.
+/// Окно настроек: четыре вкладки. Предпросмотром служит сама панель — она
+/// закреплена на экране, пока окно открыто, и перерисовывается на каждую правку.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
@@ -135,7 +136,6 @@ private struct GeneralSettings: View {
 
 private struct AppearanceSettings: View {
     @Bindable var model: SettingsModel
-    @State private var preview = PanelModel(config: .default)
 
     private var appearance: Binding<AppearanceConfig> { $model.config.appearance }
 
@@ -175,8 +175,8 @@ private struct AppearanceSettings: View {
                 }
                 Text("""
                 Ноль плотности — чистый материал системы, единица — фон почти \
-                непрозрачный. Размытие видно только на настоящей панели: \
-                в предпросмотре ниже фон рисуется сплошным.
+                непрозрачный. Как это выглядит, видно на самой панели: она \
+                висит у строки меню, пока открыто это окно.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -190,40 +190,8 @@ private struct AppearanceSettings: View {
                     Text("Только полоса").tag(MenuBarStyle.compact)
                 }
             }
-
-            Section("Предпросмотр") {
-                HStack {
-                    Spacer()
-                    PopoverView(model: preview)
-                        .clipShape(
-                            RoundedRectangle(
-                                cornerRadius: model.config.appearance.cornerRadius,
-                                style: .continuous
-                            )
-                        )
-                        .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-            }
         }
         .formStyle(.grouped)
-        .onAppear(perform: syncPreview)
-        .onChange(of: model.config) { _, _ in syncPreview() }
-    }
-
-    /// Предпросмотр живёт на демо-данных плана (§1): факт 7/15/28/58 против
-    /// плана 7/21/36/50 — на них видно и перерасход, и будущие сутки.
-    private func syncPreview() {
-        var config = model.config
-        config.appearance.transparentPanel = false
-        preview.config = config
-
-        let now = WeekWindow(containing: Date(), config: config)
-            .dayStart(3)
-            .addingTimeInterval(6 * 3600)
-        preview.apply(Screenshot.demoSnapshot(config: config, now: now))
-        preview.now = now
     }
 
     private var themeHint: String {
