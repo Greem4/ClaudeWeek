@@ -23,6 +23,12 @@ final class PanelModel {
     /// Тикает раз в минуту, чтобы «до сброса» не врало.
     var now: Date = Date()
 
+    /// Насколько снимок может отстать от «сейчас», прежде чем панель назовёт
+    /// его возраст. Официальный источник во время паузы после отказа отдаёт
+    /// последнее удачное число — молчать об этом нельзя, иначе позавчерашние
+    /// 50 % выглядят как сегодняшние.
+    static let freshFor: TimeInterval = 120
+
     init(config: Config) {
         self.config = config
     }
@@ -84,10 +90,16 @@ final class PanelModel {
         return metrics.timeLeft < 2 * 3600
     }
 
-    func apply(_ snapshot: UsageSnapshot) {
+    /// `at` — момент, относительно которого снимок считается свежим. По
+    /// умолчанию системные часы; отрисовка макетов (`--screenshot`) задаёт
+    /// свой, иначе демо-снимок «протухал» бы прямо на картинке для README.
+    func apply(_ snapshot: UsageSnapshot, at moment: Date = Date()) {
         self.snapshot = snapshot
-        status = .ready
-        now = Date()
+        now = moment
+        let age = moment.timeIntervalSince(snapshot.fetchedAt)
+        status = age > PanelModel.freshFor
+            ? .stale("данные \(Formatting.age(snapshot.fetchedAt, now: moment))")
+            : .ready
     }
 
     func apply(error: Error) {

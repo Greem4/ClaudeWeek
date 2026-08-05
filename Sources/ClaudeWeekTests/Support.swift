@@ -32,6 +32,21 @@ func config(
     return c
 }
 
+/// Часы, которые можно двигать: нужны там, где проверяется поведение во
+/// времени — троттлинг, паузы после отказа, возраст данных.
+final class MutableClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Date
+
+    init(_ value: Date) { self.value = value }
+
+    var now: Date { lock.withLock { value } }
+
+    func advance(_ seconds: TimeInterval) {
+        lock.withLock { value = value.addingTimeInterval(seconds) }
+    }
+}
+
 extension Date {
     func parts(tz: String) -> DateComponents {
         var calendar = Calendar(identifier: .gregorian)

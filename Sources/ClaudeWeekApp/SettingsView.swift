@@ -88,7 +88,7 @@ private struct GeneralSettings: View {
             }
 
             Section("Пороги") {
-                LabeledContent("Полоса желтеет при превышении плана в") {
+                LabeledContent("Строка меню желтеет при превышении плана в") {
                     HStack {
                         Slider(value: config.thresholds.warn, in: 1...2, step: 0.05)
                         Text(String(format: "%.2f×", model.config.thresholds.warn))
@@ -96,7 +96,7 @@ private struct GeneralSettings: View {
                             .frame(width: 50, alignment: .trailing)
                     }
                 }
-                LabeledContent("Заголовок краснеет после") {
+                LabeledContent("Заголовок и сессия тревожатся после") {
                     HStack {
                         Slider(value: config.thresholds.critical, in: 0.5...1, step: 0.01)
                         Text(Formatting.percent(model.config.thresholds.critical * 100))
@@ -104,6 +104,13 @@ private struct GeneralSettings: View {
                             .frame(width: 50, alignment: .trailing)
                     }
                 }
+                Text("""
+                Суточные полосы желтеют на любом перерасходе — это сам график, \
+                а не тревога. Пороги красят цифру в строке меню, заголовок \
+                панели и полосу пятичасовой сессии.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -295,20 +302,21 @@ private struct AccessSettings: View {
 
 private struct AboutSettings: View {
     @Bindable var model: SettingsModel
+    /// Сброс необратим и применяется мгновенно — спрашиваем до, а не «отменить»
+    /// после: отменять нечем, прежние значения нигде не сохранены.
+    @State private var confirmingReset = false
 
     var body: some View {
         Form {
             Section {
                 LabeledContent("Версия", value: ClaudeWeek.version)
                 LabeledContent("Бюджет недели") {
-                    Text(model.config.weeklyBudget > 0
-                         ? String(format: "%.2f $ ≈ 100 %%", model.config.weeklyBudget)
-                         : "не подобран")
+                    Text(model.budgetNote)
                 }
-                LabeledContent("Калибровка") {
+                LabeledContent("Ручная калибровка") {
                     Text(model.config.calibration.observedPercent.map {
                         "\(Formatting.percent($0)) официальных"
-                    } ?? "не было")
+                    } ?? "не было — бюджет подбирается сам")
                 }
             }
 
@@ -320,7 +328,7 @@ private struct AboutSettings: View {
             }
 
             Section {
-                Button("Сбросить настройки", role: .destructive, action: model.resetToDefaults)
+                Button("Сбросить настройки", role: .destructive) { confirmingReset = true }
                 Text("""
                 Вернёт всё к заводским значениям, кроме подобранного бюджета недели \
                 и калибровки — их программа набрала по живым данным.
@@ -330,6 +338,15 @@ private struct AboutSettings: View {
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(
+            "Сбросить настройки к заводским?",
+            isPresented: $confirmingReset
+        ) {
+            Button("Сбросить", role: .destructive, action: model.resetToDefaults)
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Тема, прозрачность, пороги и недельное окно вернутся к значениям по умолчанию. Бюджет недели и калибровка останутся.")
+        }
     }
 
     private func fileRow(_ title: String, url: URL) -> some View {

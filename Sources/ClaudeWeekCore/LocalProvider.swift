@@ -218,6 +218,12 @@ public actor LocalProvider: UsageProvider {
 
     // MARK: Обход транскриптов
 
+    /// Обход всегда идёт по диску заново: за один цикл обновления сюда
+    /// приходят дважды — за формой недели и за калибровкой, — и соблазн
+    /// закешировать итог велик. Нельзя: `scan` обязан отражать то, что на
+    /// диске сейчас, иначе дописанная строка транскрипта потеряется до
+    /// следующего запроса. Цена честности — один инкрементальный проход
+    /// (0.04 с на прогретом индексе).
     public func scan(window: WeekWindow, now: Date) throws -> LocalUsage {
         var index = Store.loadIndex(from: indexURL)
         let cutoff = now.addingTimeInterval(-LocalProvider.retention)

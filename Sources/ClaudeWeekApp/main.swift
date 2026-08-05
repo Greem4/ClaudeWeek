@@ -8,6 +8,12 @@ if arguments.contains("--help") || arguments.contains("-h") {
     exit(0)
 }
 
+// Опечатку в флаге ловим до всего остального: иначе `--jsonn` поднял бы
+// строку меню, а человек ждал бы вывода в терминал.
+if let unknown = arguments.first(where: { $0.hasPrefix("-") && !CLI.isKnown($0) }) {
+    exit(CLI.complain("незнакомый аргумент «\(unknown)»"))
+}
+
 if arguments.contains("--verbose") {
     Log.minimumLevel = .debug
 }
@@ -18,13 +24,18 @@ let configURL = arguments.first(where: { $0.hasPrefix("--config=") })
 
 var config = ConfigStore.load(from: configURL)
 if let raw = arguments.first(where: { $0.hasPrefix("--provider=") })?
-    .split(separator: "=", maxSplits: 1).last,
-   let choice = ProviderPreference(rawValue: String(raw)) {
+    .dropFirst("--provider=".count) {
+    guard let choice = ProviderPreference(rawValue: String(raw)) else {
+        exit(CLI.complain("неизвестный источник «\(raw)»: бывают official, local и auto"))
+    }
     config.provider = choice
 }
 
 if let raw = arguments.first(where: { $0.hasPrefix("--calibrate=") })?
-    .dropFirst("--calibrate=".count), let percent = Double(raw) {
+    .dropFirst("--calibrate=".count) {
+    guard let percent = Double(raw) else {
+        exit(CLI.complain("«\(raw)» — не число: --calibrate ждёт процент из /usage"))
+    }
     exit(await CLI.calibrate(percent: percent, config: config, configURL: configURL))
 }
 
@@ -43,7 +54,9 @@ if let index = arguments.firstIndex(of: "--screenshot") {
     let directory = arguments.count > index + 1
         ? URL(fileURLWithPath: arguments[index + 1])
         : URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    exit(await Screenshot.render(into: directory, config: config))
+    // Без await: `Screenshot` изолирован главным актором, а код верхнего
+    // уровня и так на нём.
+    exit(Screenshot.render(into: directory, config: config))
 }
 
 // LSUIElement в Info.plist убирает иконку из Dock у собранного бандла;

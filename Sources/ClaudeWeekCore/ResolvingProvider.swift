@@ -8,6 +8,12 @@ import Foundation
 public actor ResolvingProvider: UsageProvider {
     nonisolated public let kind: SourceKind
 
+    /// Ниже этого процента калибровать не по чему: официальное число целое,
+    /// и на 2 % ошибка округления — четверть значения, а бюджет из неё выйдет
+    /// перекошенным вдвое. В начале недели держим прежний бюджет и ждём,
+    /// пока расход накопится.
+    public static let minimumCalibrationPercent: Double = 5
+
     private let config: Config
     private let preference: ProviderPreference
     private let official: OfficialProvider?
@@ -97,7 +103,9 @@ public actor ResolvingProvider: UsageProvider {
     /// и на каждом успешном ответе. Смысл — чтобы падение на локальный источник
     /// давало осмысленную цифру, а не прочерк «не откалибровано».
     private func calibrate(to snapshot: UsageSnapshot) async -> Double? {
-        guard snapshot.usedPercent > 0 else { return storedBudget() }
+        guard snapshot.usedPercent >= ResolvingProvider.minimumCalibrationPercent else {
+            return storedBudget()
+        }
         guard let usage = try? await local.scan(window: snapshot.window, now: snapshot.fetchedAt),
               usage.totalCost > 0
         else { return storedBudget() }

@@ -30,8 +30,7 @@ enum Screenshot {
         var config = config
         config.appearance.transparentPanel = false
         let model = PanelModel(config: config)
-        model.apply(demoSnapshot(config: config, now: now))
-        model.now = now
+        model.apply(demoSnapshot(config: config, now: now), at: now)
 
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

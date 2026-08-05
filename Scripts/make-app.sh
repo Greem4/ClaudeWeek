@@ -23,6 +23,18 @@ cp "$BIN" "$APP/Contents/MacOS/ClaudeWeek"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+# Версия у программы одна — та, что в Version.swift; в plist она попадает
+# отсюда, а не переписывается руками во втором месте.
+VERSION="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' \
+    "$ROOT/Sources/ClaudeWeekCore/Version.swift")"
+if [ -n "$VERSION" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
+        "$APP/Contents/Info.plist" > /dev/null
+    echo "==> версия бандла: $VERSION"
+else
+    echo "   не разобрал версию из Version.swift — в plist осталась прежняя" >&2
+fi
+
 echo "==> иконка"
 ICONSET_DIR="$ROOT/dist/icon"
 if "$BIN" --icon "$ICONSET_DIR" > /dev/null && command -v iconutil > /dev/null; then

@@ -195,8 +195,6 @@ enum Theme {
 
     static let panelWidth: CGFloat = 320
     static let panelPadding: CGFloat = 16
-    /// Значение по умолчанию; фактическое берётся из настроек.
-    static let panelCornerRadius: CGFloat = 12
     /// Отступ от края экрана, когда пункт стоит у самого угла.
     static let panelScreenMargin: CGFloat = 8
     static let rowSpacing: CGFloat = 10
@@ -212,20 +210,10 @@ enum Theme {
 
     static let titleFont = Font.system(size: 12, weight: .semibold).monospacedDigit()
     static let dayFont = Font.system(size: 11, weight: .medium).monospacedDigit()
-    static let valueFont = Font.system(size: 13, weight: .semibold).monospacedDigit()
     static let footerFont = Font.system(size: 11).monospacedDigit()
     /// Заголовочные подписи справа: в 288 pt рядом с «ЛИМИТ НЕДЕЛИ»
     /// одиннадцатый кегль уже не помещается.
     static let captionFont = Font.system(size: 10).monospacedDigit()
-
-    /// Цвет числа и полоски в строке меню зависит от состояния лимита.
-    static func accent(for state: LimitState, palette: Palette) -> Color {
-        switch state {
-        case .onTrack: palette.primaryText.color
-        case .overPlan: palette.warning.color
-        case .critical, .exhausted: palette.critical.color
-        }
-    }
 }
 
 extension Color {

@@ -152,6 +152,12 @@ public actor OfficialProvider: UsageProvider {
     /// Не чаще раза в минуту, каким бы коротким ни был `refreshInterval`.
     public static let minimumInterval: TimeInterval = 60
     static let backoffSteps: [TimeInterval] = [60, 120, 240, 480, 900]
+    /// Сколько последнее удачное число годится, пока держится пауза после
+    /// отказа. Дольше самой длинной паузы держаться за него незачем: расход
+    /// за это время меняется, а локальная оценка считается по свежим
+    /// транскриптам — пусть `auto` уходит на неё, чем показывать старое число
+    /// как сегодняшнее.
+    public static let staleLimit: TimeInterval = 15 * 60
 
     private let config: Config
     private let credentials: CredentialsSource
@@ -184,13 +190,17 @@ public actor OfficialProvider: UsageProvider {
         let now = clock()
         let usage = try await usage(at: now)
         let window = WeekWindow(endingAt: usage.weekResetsAt, config: config)
+        // Момент наблюдения, а не текущий: во время троттлинга и паузы после
+        // отказа отдаётся последнее удачное число, и метить его свежим нельзя —
+        // по `fetchedAt` панель называет возраст данных.
+        let observedAt = lastFetch ?? now
 
         return UsageSnapshot.make(
             usedPercent: usage.weekPercent,
             cumulativeByDay: await shapeByDay(total: usage.weekPercent, window: window, now: now),
             window: window,
             source: .official,
-            fetchedAt: now,
+            fetchedAt: observedAt,
             isEstimate: false,
             shapeIsEstimate: true,
             session: usage.session
@@ -204,9 +214,13 @@ public actor OfficialProvider: UsageProvider {
             return lastUsage
         }
         if let retryAfter, now < retryAfter {
-            // Пауза ещё держится: отдаём последнее удачное значение, а если его
-            // нет — честную ошибку, чтобы вызывающий ушёл на локальную оценку.
-            if let lastUsage { return lastUsage }
+            // Пауза ещё держится: отдаём последнее удачное значение, пока оно
+            // не слишком старое. Просроченное — честная ошибка, чтобы
+            // вызывающий ушёл на локальную оценку: она хотя бы сегодняшняя.
+            if let lastUsage, let lastFetch,
+               now.timeIntervalSince(lastFetch) <= OfficialProvider.staleLimit {
+                return lastUsage
+            }
             throw UsageError.unavailable(
                 "жду \(Formatting.duration(retryAfter.timeIntervalSince(now))) после неудачи"
             )

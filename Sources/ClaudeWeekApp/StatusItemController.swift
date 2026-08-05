@@ -39,10 +39,10 @@ final class StatusItemController: NSObject {
 
     /// Кеш прошлого запуска показываем мгновенно: сетевой ответ придёт через
     /// секунду-другую, и всё это время строка меню иначе висела бы пустой.
+    /// Возраст подписывает сама модель — правило свежести одно на всех.
     private func restoreFromCache() {
         guard let cache = Store.loadCache(), cache.isFresh(at: Date()) else { return }
         model.apply(cache.snapshot(config: model.config))
-        model.status = .stale("данные \(Formatting.age(cache.fetchedAt, now: Date()))")
     }
 
     // deinit не нужен: контроллер живёт ровно столько же, сколько процесс,
@@ -197,6 +197,9 @@ final class StatusItemController: NSObject {
             || config.resetMinute != model.config.resetMinute
             || config.planAnchor != model.config.planAnchor
             || config.weeklyBudget != model.config.weeklyBudget
+        // Интервал живёт в таймере, а не в провайдере: не перезапустив таймер,
+        // новый интервал ждал бы перезапуска приложения.
+        let intervalChanged = config.refreshInterval != model.config.refreshInterval
 
         model.config = config
         applyAppearance()
@@ -218,7 +221,10 @@ final class StatusItemController: NSObject {
             }
         }
 
-        guard providerChanged else { return }
+        guard providerChanged else {
+            if intervalChanged { startTimers() }
+            return
+        }
         provider = ResolvingProvider(config: config)
         startTimers()
         refresh()

@@ -86,10 +86,6 @@ final class DropdownPanel {
 
     // MARK: Показ и скрытие
 
-    func toggle(from button: NSStatusBarButton) {
-        if isShown { close() } else { show(from: button) }
-    }
-
     func show(from button: NSStatusBarButton) {
         guard let anchor = button.window else { return }
         self.anchor = anchor

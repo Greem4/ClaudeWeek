@@ -28,7 +28,7 @@ private struct Sandbox {
         let text = lines.joined(separator: "\n") + "\n"
         if append, let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
-            try? handle.seekToEnd()
+            _ = try? handle.seekToEnd()
             try? handle.write(contentsOf: Data(text.utf8))
         } else {
             try? text.write(to: url, atomically: true, encoding: .utf8)
@@ -71,7 +71,7 @@ private func provider(_ sandbox: Sandbox, config c: Config = config()) -> LocalP
 }
 
 func runLocalProviderTests(_ t: Harness) async {
-    await t.suite("веса моделей") {
+    t.suite("веса моделей") {
         // Opus: вход $5, выход $25, запись 5м ×1.25, запись 1ч ×2, чтение ×0.1.
         let opus = ModelPricing.weights(for: "claude-opus-5")
         t.close(opus?.input ?? 0, 5, "вход Opus")
@@ -174,7 +174,7 @@ func runLocalProviderTests(_ t: Harness) async {
         let sandbox = Sandbox()
         defer { sandbox.cleanup() }
         let path = "проект/сессия.jsonl"
-        let url = sandbox.write(path, lines: [
+        sandbox.write(path, lines: [
             line(uuid: "a1", at: "2026-08-01T10:00:00.000Z", input: 1_000_000),
         ])
         let window = WeekWindow(containing: testNow, config: config())

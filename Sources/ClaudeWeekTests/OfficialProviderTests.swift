@@ -270,6 +270,77 @@ func runOfficialProviderTests(_ t: Harness) async {
         t.equal(await transport.callCount(), 2, "после паузы пробуем снова")
     }
 
+    await t.suite("устаревшее число не выдаётся вечно") {
+        // Одна удача, дальше сеть молчит. Пока пауза после отказа держится,
+        // последнее удачное число ещё годится — но не сутки же.
+        let (official, _) = provider(answers: [(200, realResponse), (500, "")])
+        _ = try await official.usage(at: testNow)
+
+        let soon = testNow.addingTimeInterval(61)
+        do { _ = try await official.usage(at: soon) } catch {}
+        let duringPause = try await official.usage(at: soon.addingTimeInterval(10))
+        t.close(duringPause.weekPercent, 50, "во время паузы отдаётся последнее удачное число")
+
+        // Прошло больше staleLimit с момента последнего удачного ответа:
+        // держаться за него больше нельзя, наружу должна уйти ошибка.
+        do {
+            _ = try await official.usage(at: testNow.addingTimeInterval(OfficialProvider.staleLimit + 120))
+            t.fail("ждали отказ вместо просроченного числа")
+        } catch UsageError.unavailable {
+            t.check(true, "просроченное число не выдаётся — вызывающий уйдёт на локальную оценку")
+        }
+    }
+
+    await t.suite("снимок помнит момент наблюдения") {
+        // Число, взятое из памяти, нельзя метить текущим моментом: по этой
+        // метке панель говорит «данные 6 мин назад».
+        let clock = MutableClock(testNow)
+        let transport = FakeTransport(answers: [(200, realResponse)])
+        let official = OfficialProvider(
+            config: config(), credentials: FakeCredentials(),
+            transport: transport, shape: nil, clock: { clock.now }
+        )
+
+        let fresh = try await official.fetch()
+        t.equal(fresh.fetchedAt, testNow, "свежий ответ помечен моментом ответа")
+
+        clock.advance(30)
+        let cached = try await official.fetch()
+        t.equal(await transport.callCount(), 1, "внутри минуты в сеть не ходим")
+        t.equal(cached.fetchedAt, testNow, "и снимок помечен прежним моментом, а не текущим")
+    }
+
+    await t.suite("калибровка не идёт по крохотному проценту") {
+        // Официальный процент целый: на 2 % ошибка округления — четверть
+        // значения, и бюджет из неё вышел бы перекошенным вдвое.
+        let sandbox = TranscriptSandbox()
+        defer { sandbox.cleanup() }
+        sandbox.write(cost: 10, at: "2026-08-01T10:00:00.000Z")
+
+        func resolving(_ response: String) -> ResolvingProvider {
+            ResolvingProvider(
+                config: config(),
+                credentials: FakeCredentials(),
+                transport: FakeTransport(answers: [(200, response)]),
+                cacheURL: sandbox.cacheURL,
+                localRoot: sandbox.root,
+                indexURL: sandbox.indexURL,
+                clock: { testNow }
+            )
+        }
+
+        _ = try await resolving(realResponse).fetch()
+        t.close(Store.loadCache(from: sandbox.cacheURL)?.weeklyBudget ?? 0, 20,
+                "по 50 % бюджет подобран: $10 — половина недели", tolerance: 1e-9)
+
+        let tiny = """
+        {"seven_day": {"utilization": 2, "resets_at": "2026-08-07T12:00:00.357993+00:00"}}
+        """
+        _ = try await resolving(tiny).fetch()
+        t.close(Store.loadCache(from: sandbox.cacheURL)?.weeklyBudget ?? 0, 20,
+                "по 2 % бюджет не перетирается — держим прежний", tolerance: 1e-9)
+    }
+
     await t.suite("снимок официального источника") {
         let (official, _) = provider()
         let snapshot = try await official.fetch()
@@ -282,7 +353,7 @@ func runOfficialProviderTests(_ t: Harness) async {
         same(t, snapshot.window.start, at(2026, 7, 31, 16, 0), "начало — неделей раньше")
     }
 
-    await t.suite("окно от resets_at") {
+    t.suite("окно от resets_at") {
         let window = WeekWindow(endingAt: at(2026, 8, 7, 16, 0), config: config())
         t.equal(window.start, at(2026, 7, 31, 16, 0), "начало на семь суток раньше конца")
         t.close(window.duration, 7 * 86_400, "окно длиной в неделю")
@@ -332,7 +403,7 @@ func runOfficialProviderTests(_ t: Harness) async {
         t.equal(await transport.callCount(), 0, "provider=local отключает сеть целиком")
     }
 
-    await t.suite("округление момента сброса") {
+    t.suite("округление момента сброса") {
         // Сервер отдаёт то 12:00:00.357, то 11:59:59.9 — один и тот же сброс.
         let late = ISO8601.parse("2026-08-07T12:00:00.357993+00:00")!
         let early = ISO8601.parse("2026-08-07T11:59:59.900000+00:00")!
@@ -388,7 +459,7 @@ func runOfficialProviderTests(_ t: Harness) async {
                 "официальный момент сброса пережил локальную запись кеша")
     }
 
-    await t.suite("окно из кеша сдвигается целыми неделями") {
+    t.suite("окно из кеша сдвигается целыми неделями") {
         let cache = CachedUsage(
             usedPercent: 50, byDay: [], windowStart: at(2026, 7, 31, 16, 0),
             windowEnd: at(2026, 8, 7, 16, 0), source: .official, fetchedAt: testNow,
@@ -408,7 +479,7 @@ func runOfficialProviderTests(_ t: Harness) async {
                 "без официального момента сброса окно не выдумываем")
     }
 
-    await t.suite("кеш: свежесть по окну") {
+    t.suite("кеш: свежесть по окну") {
         let cache = CachedUsage(
             usedPercent: 50,
             byDay: [10, 20, nil, nil, nil, nil, nil],
@@ -427,7 +498,7 @@ func runOfficialProviderTests(_ t: Harness) async {
         t.check(!snapshot.isEstimate, "официальный кеш остаётся официальным")
     }
 
-    await t.suite("креды: разбор записи Keychain") {
+    t.suite("креды: разбор записи Keychain") {
         let nested: [String: Any] = ["claudeAiOauth": ["accessToken": "sk-ant-oat01-x"]]
         t.equal(KeychainCredentials.findToken(nested), "sk-ant-oat01-x", "токен найден во вложенном объекте")
         t.equal(KeychainCredentials.findToken(["access_token": "sk-x"]), "sk-x", "и в змеиной записи тоже")
@@ -447,7 +518,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             .isExpired(at: testNow), "без срока считаем годным")
     }
 
-    await t.suite("разбор меток времени") {
+    t.suite("разбор меток времени") {
         same(t, ISO8601.parse("2026-08-07T12:00:00.357993+00:00"), at(2026, 8, 7, 16, 0),
              "микросекунды и смещение вместо Z")
         t.equal(ISO8601.parse("2026-08-07T12:00:00Z"), at(2026, 8, 7, 16, 0),

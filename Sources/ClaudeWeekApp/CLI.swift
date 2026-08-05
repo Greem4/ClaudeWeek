@@ -21,6 +21,22 @@ enum CLI {
       ClaudeWeek --help          эта справка
     """
 
+    /// Флаги без значения и префиксы флагов со значением. По ним же отличаем
+    /// опечатку от каталога у `--icon` и `--screenshot`: те не начинаются с «-».
+    static let flags = ["--help", "-h", "--verbose", "--json", "--icon", "--screenshot"]
+    static let flagPrefixes = ["--config=", "--provider=", "--calibrate="]
+
+    static func isKnown(_ argument: String) -> Bool {
+        flags.contains(argument) || flagPrefixes.contains { argument.hasPrefix($0) }
+    }
+
+    /// Незнакомый флаг — не повод молча поднять строку меню: человек просил
+    /// не то, что получит, и узнает об этом в лучшем случае через час.
+    static func complain(_ message: String) -> Int32 {
+        FileHandle.standardError.write(Data("\(message)\n\n\(usage)\n".utf8))
+        return 2
+    }
+
     struct Output: Encodable {
         let source: String
         let isEstimate: Bool

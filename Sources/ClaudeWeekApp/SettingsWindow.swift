@@ -22,6 +22,10 @@ final class SettingsModel {
     /// Итог последней проверки токена: текст и удача/неудача.
     var checkResult: (text: String, ok: Bool)?
     var isChecking = false
+    /// Бюджет недели, подобранный программой по официальному проценту. Живёт
+    /// в кеше, а не в конфиге, поэтому вкладка «О программе» читает его
+    /// отдельно — иначе она показывала бы «не подобран» даже после калибровки.
+    private(set) var pickedBudget: Double?
 
     private let apply: (Config) -> Void
     private let check: (Config) async -> (String, Bool)
@@ -34,6 +38,27 @@ final class SettingsModel {
         self.config = config
         self.apply = apply
         self.check = check
+        refreshDiagnostics()
+    }
+
+    /// Перечитывает то, что живёт вне конфига: подобранный бюджет из кеша и
+    /// наличие своего токена в Keychain. Зовётся при каждом показе окна —
+    /// читать файл на каждую перерисовку вкладки незачем.
+    func refreshDiagnostics() {
+        pickedBudget = Store.loadCache()?.weeklyBudget
+        tokenSaved = ManualToken.exists
+    }
+
+    /// Подпись бюджета: заданный человеком важнее подобранного программой,
+    /// поэтому и показываем, откуда взялось число.
+    var budgetNote: String {
+        if config.weeklyBudget > 0 {
+            return String(format: "%.2f $ ≈ 100 %% · задан вами", config.weeklyBudget)
+        }
+        if let pickedBudget, pickedBudget > 0 {
+            return String(format: "%.2f $ ≈ 100 %% · подобран сам", pickedBudget)
+        }
+        return "не подобран"
     }
 
     func saveToken() {
@@ -97,6 +122,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// `obstacle` — рамка живой панели: новое окно ставим так, чтобы её
     /// не накрыть, иначе предпросмотр придётся откапывать мышью.
     func show(avoiding obstacle: NSRect? = nil) {
+        model.refreshDiagnostics()
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
