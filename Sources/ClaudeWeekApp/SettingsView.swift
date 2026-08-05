@@ -215,94 +215,37 @@ private struct AppearanceSettings: View {
 
 private struct AccessSettings: View {
     @Bindable var model: SettingsModel
-    /// Буфер обмена молчит, а нажатая кнопка должна отвечать.
-    @State private var commandCopied = false
-    @State private var launchError: String?
 
     var body: some View {
         Form {
             Section("Токен для официального источника") {
-                Picker("Брать токен", selection: $model.config.authSource) {
-                    ForEach(AuthSource.allCases, id: \.self) { source in
-                        Text(source.title).tag(source)
-                    }
-                }
-                .pickerStyle(.radioGroup)
+                Text("""
+                Берётся из Keychain Claude Code, запись «Claude Code-credentials». \
+                Виджет видит ровно тот аккаунт, что показывает /usage: сервер узнаёт \
+                его по этому токену. Запись только читается — обновляет её сам \
+                Claude Code, и лезть туда вдвоём значит потерять токен.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                Text(sourceHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("""
+                Вставить свой токен нельзя, и это не упущение: /api/oauth/usage \
+                принимает только токен сеанса Claude Code. Ключ API (sk-ant-api…) и \
+                годовой токен от claude setup-token он отвергает с 401 — проверено.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
-            if model.config.authSource == .manual {
-                Section("Где взять токен") {
-                    Text("""
-                    Токен выпускает сам Claude Code: команда \(SetupToken.command) \
-                    откроет браузер, спросит подтверждение и напечатает строку \
-                    sk-ant-oat01-…. Своего окна авторизации у ClaudeWeek нет — \
-                    чужой client_id означал бы, что в браузере вы разрешаете \
-                    доступ не тому, кто просит.
-                    """)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                    HStack {
-                        Button("Выпустить токен…") {
-                            launchError = SetupToken.run()
-                        }
-                        Button(commandCopied ? "Скопировано" : "Скопировать команду") {
-                            SetupToken.copyCommand()
-                            commandCopied = true
-                            Task {
-                                try? await Task.sleep(for: .seconds(2))
-                                commandCopied = false
-                            }
-                        }
-                        Spacer()
-                        Link("Документация", destination: SetupToken.docsURL)
-                            .font(.caption)
-                    }
-
-                    if let launchError {
-                        Text(launchError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    Text("""
-                    Такой токен живёт год, но документация обещает ему только \
-                    запросы к модели. Подойдёт ли он этому эндпоинту — скажет \
-                    «Проверить сейчас» ниже.
-                    """)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
-                Section("Свой токен") {
-                    SecureField("sk-ant-oat01-…", text: $model.tokenField)
-                        .textFieldStyle(.roundedBorder)
-
-                    HStack {
-                        Button("Сохранить в Keychain", action: model.saveToken)
-                            .disabled(model.tokenField.trimmingCharacters(in: .whitespaces).isEmpty)
-                        Button("Удалить", action: model.deleteToken)
-                            .disabled(!model.tokenSaved)
-                        Spacer()
-                        Text(model.tokenSaved ? "токен сохранён" : "токена нет")
-                            .font(.caption)
-                            .foregroundStyle(model.tokenSaved ? .green : .secondary)
-                    }
-
-                    if !model.tokenField.isEmpty,
-                       !ManualToken.looksLikeOAuthToken(model.tokenField) {
-                        Text("""
-                        Не похоже на OAuth-токен Claude Code — он начинается с \
-                        sk-ant-oat. Ключ API (sk-ant-api…) этому эндпоинту не подойдёт.
-                        """)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                    }
-                }
+            Section("Можно и без токена") {
+                Text("""
+                Доступ к записи Keychain можно не давать вовсе: на вкладке «Общие» \
+                выберите «Только локальная оценка» — расход посчитается по вашим же \
+                транскриптам в ~/.claude/projects, без сети и без единого секрета. \
+                Цена отказа — знак ≈ перед процентом.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section("Проверка") {
@@ -326,21 +269,6 @@ private struct AccessSettings: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private var sourceHint: String {
-        switch model.config.authSource {
-        case .claudeCode:
-            """
-            Из Keychain Claude Code (запись «Claude Code-credentials»). Виджет видит \
-            ровно тот аккаунт, что показывает /usage, и обновлением токена не занимается.
-            """
-        case .manual:
-            """
-            Свой OAuth-токен, выпущенный владельцем аккаунта. Запись Claude Code в \
-            этом режиме не читается вовсе — токен берётся из отдельной записи Keychain.
-            """
-        }
     }
 }
 

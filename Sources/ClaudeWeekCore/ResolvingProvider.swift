@@ -21,8 +21,8 @@ public actor ResolvingProvider: UsageProvider {
     private let cacheURL: URL?
     private let clock: @Sendable () -> Date
 
-    /// `credentials` по умолчанию выбирается по `config.authSource`; явное
-    /// значение нужно тестам и остаётся сильнее настройки.
+    /// Креды по умолчанию — из Keychain Claude Code: другого источника у
+    /// официального эндпоинта нет. Явное значение нужно тестам.
     public init(
         config: Config,
         credentials: CredentialsSource? = nil,
@@ -42,7 +42,7 @@ public actor ResolvingProvider: UsageProvider {
             ? nil
             : OfficialProvider(
                 config: config,
-                credentials: credentials ?? config.authSource.credentials,
+                credentials: credentials ?? KeychainCredentials(),
                 transport: transport,
                 shape: local,
                 clock: clock

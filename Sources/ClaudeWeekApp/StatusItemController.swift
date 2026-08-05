@@ -190,7 +190,6 @@ final class StatusItemController: NSObject {
 
     private func applyFromSettings(_ config: Config) {
         let providerChanged = config.provider != model.config.provider
-            || config.authSource != model.config.authSource
             || config.timeZone != model.config.timeZone
             || config.resetWeekday != model.config.resetWeekday
             || config.resetHour != model.config.resetHour

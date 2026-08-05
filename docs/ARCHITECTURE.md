@@ -13,7 +13,7 @@
 ## 1. Общая схема
 
 ```
-Keychain (Claude Code / свой токен)
+Keychain «Claude Code-credentials» (только чтение)
         │
         ▼
 OfficialProvider ──┐
@@ -45,7 +45,7 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 
 | Файл | Отвечает за | Ключевые типы |
 |---|---|---|
-| `Config.swift` | все настройки, чтение и запись `config.json`, починка недопустимых значений | `Config`, `AppearanceConfig`, `ThemeKind`, `AuthSource`, `Thresholds`, `ConfigStore` |
+| `Config.swift` | все настройки, чтение и запись `config.json`, починка недопустимых значений | `Config`, `AppearanceConfig`, `ThemeKind`, `Thresholds`, `ConfigStore` |
 | `WeekWindow.swift` | границы недельного окна, план на момент и на сутки | `WeekWindow`, `WeekDaySlot` |
 | `Snapshot.swift` | что показываем: итог, дни, сессия, производные метрики | `UsageSnapshot`, `DayUsage`, `SessionUsage`, `UsageMetrics`, `LimitState` |
 | `UsageProvider.swift` | протокол источника и типы ошибок | `UsageProvider`, `UsageError` |
@@ -54,7 +54,6 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 | `ResolvingProvider.swift` | выбор источника, падение на запасной, калибровка, запись кеша | `ResolvingProvider` |
 | `Cache.swift` | `cache.json` и индекс прочитанных транскриптов | `CachedUsage`, `UsageIndex`, `Store` |
 | `Keychain.swift` | чтение OAuth-кредов Claude Code | `KeychainCredentials`, `OAuthCredentials`, `CredentialsSource` |
-| `ManualToken.swift` | свой токен: хранение в отдельной записи Keychain | `ManualToken`, `ManualCredentials` |
 | `Formatting.swift` | «3 дн 6 ч», проценты, дни недели, часы | `Formatting` |
 | `ISO8601.swift` | разбор меток времени обоих видов (с долями секунды и без) | `ISO8601` |
 | `Log.swift` | уровни лога в stderr | `Log` |
@@ -287,4 +286,3 @@ swift run ClaudeWeekApp         # запустить из исходников (
 | `~/Library/LaunchAgents/com.greem4.claudeweek.plist` | автозапуск |
 | `~/Applications/ClaudeWeek.app` | установленная копия |
 | Keychain `Claude Code-credentials` | токен Claude Code (только читаем) |
-| Keychain `ClaudeWeek-token` | свой токен из настроек (пишем и удаляем) |

@@ -91,7 +91,6 @@ func runConfigTests(_ t: Harness) {
         let d = Config.default
         t.equal(d.appearance.theme, .system, "тема по умолчанию — системная")
         t.equal(d.appearance.transparentPanel, true, "панель по умолчанию прозрачная")
-        t.equal(d.authSource, .claudeCode, "токен по умолчанию — из Claude Code")
 
         var c = Config.default
         c.appearance.panelTintOpacity = 3
@@ -118,7 +117,6 @@ func runConfigTests(_ t: Harness) {
             showSession: false,
             showForecast: false
         )
-        c.authSource = .manual
         do {
             try ConfigStore.save(c, to: url)
         } catch {
@@ -130,18 +128,19 @@ func runConfigTests(_ t: Harness) {
         t.equal(back.appearance.transparentPanel, false, "выключенная прозрачность пережила запись")
         t.equal(back.appearance.panelTintOpacity, 0.7, "плотность пережила запись")
         t.equal(back.appearance.showSession, false, "скрытая сессия пережила запись")
-        t.equal(back.authSource, .manual, "источник токена пережил запись")
     }
 
     t.suite("конфиг: старый файл без внешнего вида") {
         // Конфиг, написанный прошлой версией: новых ключей в нём нет,
         // и появиться они должны дефолтными, а не уронить разбор.
-        let url = tempFile(#"{ "resetHour": 9, "provider": "local" }"#)
+        // Заодно authSource: ключ убран вместе с ручным токеном, и оставшийся
+        // в чужом конфиге он должен молча игнорироваться, а не ронять разбор.
+        let url = tempFile(#"{ "resetHour": 9, "provider": "local", "authSource": "manual" }"#)
         defer { try? FileManager.default.removeItem(at: url) }
         let c = ConfigStore.load(from: url)
         t.equal(c.resetHour, 9, "старое поле прочиталось")
         t.equal(c.appearance, AppearanceConfig(), "внешний вид взялся из дефолтов")
-        t.equal(c.authSource, .claudeCode, "источник токена взялся из дефолтов")
+        t.equal(c.provider, .local, "исчезнувший authSource не помешал разбору")
     }
 
     t.suite("конфиг: календарь") {

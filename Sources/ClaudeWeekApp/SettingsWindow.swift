@@ -16,9 +16,6 @@ final class SettingsModel {
         }
     }
 
-    /// Токен из поля ввода. В конфиг не попадает никогда — только в Keychain.
-    var tokenField: String = ""
-    var tokenSaved: Bool = ManualToken.exists
     /// Итог последней проверки токена: текст и удача/неудача.
     var checkResult: (text: String, ok: Bool)?
     var isChecking = false
@@ -41,12 +38,11 @@ final class SettingsModel {
         refreshDiagnostics()
     }
 
-    /// Перечитывает то, что живёт вне конфига: подобранный бюджет из кеша и
-    /// наличие своего токена в Keychain. Зовётся при каждом показе окна —
-    /// читать файл на каждую перерисовку вкладки незачем.
+    /// Перечитывает то, что живёт вне конфига: подобранный бюджет из кеша.
+    /// Зовётся при каждом показе окна — читать файл на каждую перерисовку
+    /// вкладки незачем.
     func refreshDiagnostics() {
         pickedBudget = Store.loadCache()?.weeklyBudget
-        tokenSaved = ManualToken.exists
     }
 
     /// Подпись бюджета: заданный человеком важнее подобранного программой,
@@ -59,24 +55,6 @@ final class SettingsModel {
             return String(format: "%.2f $ ≈ 100 %% · подобран сам", pickedBudget)
         }
         return "не подобран"
-    }
-
-    func saveToken() {
-        tokenSaved = ManualToken.save(tokenField)
-        tokenField = ""
-        checkResult = tokenSaved
-            ? ("токен сохранён в Keychain", true)
-            : ("не смог сохранить токен", false)
-        // Сам факт сохранения ничего не меняет в конфиге, но провайдер надо
-        // пересоздать: он держит источник кредов с момента создания.
-        apply(config)
-    }
-
-    func deleteToken() {
-        ManualToken.delete()
-        tokenSaved = false
-        checkResult = ("токен удалён", true)
-        apply(config)
     }
 
     func checkNow() {

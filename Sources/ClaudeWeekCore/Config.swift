@@ -19,15 +19,6 @@ public enum MenuBarStyle: String, Codable, Sendable, CaseIterable {
     case compact
 }
 
-/// Откуда брать OAuth-токен для официального источника.
-public enum AuthSource: String, Codable, Sendable, CaseIterable {
-    /// Из Keychain Claude Code — виджет видит ровно тот аккаунт, что `/usage`.
-    case claudeCode
-    /// Токен, вставленный в настройках. Лежит в своей записи Keychain, а не
-    /// в конфиге: файлу на диске токен не место.
-    case manual
-}
-
 /// Палитра панели. `system` — исходная, прогнанная через валидатор на
 /// дальтонизм и контраст; остальные добавлены, чтобы было чем играть,
 /// и держат те же роли цветов.
@@ -135,8 +126,6 @@ public struct Config: Codable, Sendable, Equatable {
     public var weeklyBudget: Double
     public var calibration: Calibration
     public var thresholds: Thresholds
-    /// Откуда брать токен для официального источника.
-    public var authSource: AuthSource
     /// Вид панели; на цифры не влияет.
     public var appearance: AppearanceConfig
 
@@ -154,7 +143,6 @@ public struct Config: Codable, Sendable, Equatable {
         weeklyBudget: 0,
         calibration: Calibration(),
         thresholds: Thresholds(),
-        authSource: .claudeCode,
         appearance: AppearanceConfig()
     )
 
@@ -170,7 +158,6 @@ public struct Config: Codable, Sendable, Equatable {
         weeklyBudget: Double,
         calibration: Calibration,
         thresholds: Thresholds,
-        authSource: AuthSource = .claudeCode,
         appearance: AppearanceConfig = AppearanceConfig()
     ) {
         self.resetWeekday = resetWeekday
@@ -184,7 +171,6 @@ public struct Config: Codable, Sendable, Equatable {
         self.weeklyBudget = weeklyBudget
         self.calibration = calibration
         self.thresholds = thresholds
-        self.authSource = authSource
         self.appearance = appearance
     }
 
@@ -205,7 +191,6 @@ public struct Config: Codable, Sendable, Equatable {
             weeklyBudget: try c.decodeIfPresent(Double.self, forKey: .weeklyBudget) ?? d.weeklyBudget,
             calibration: try c.decodeIfPresent(Calibration.self, forKey: .calibration) ?? d.calibration,
             thresholds: try c.decodeIfPresent(Thresholds.self, forKey: .thresholds) ?? d.thresholds,
-            authSource: try c.decodeIfPresent(AuthSource.self, forKey: .authSource) ?? d.authSource,
             appearance: try c.decodeIfPresent(AppearanceConfig.self, forKey: .appearance) ?? d.appearance
         )
     }
