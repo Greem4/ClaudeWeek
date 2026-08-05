@@ -69,7 +69,7 @@ struct DayRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(label)
-                .font(Theme.dayFont)
+                .font(isToday ? Theme.todayFont : Theme.dayFont)
                 .foregroundStyle(isToday ? palette.primaryText.color : palette.secondaryText.color)
                 .frame(width: Theme.dayLabelWidth, alignment: .leading)
 
@@ -110,7 +110,9 @@ struct DayRow: View {
 
     private var voiceOverLabel: String {
         let plan = Formatting.percent(day.planPercent, withSign: false)
-        let name = interval.map { "\(fullLabel), \($0)" } ?? fullLabel
+        // Начертание и цвет VoiceOver не читает: текущие сутки он узнаёт словом.
+        let today = isToday ? "\(fullLabel), сегодня" : fullLabel
+        let name = interval.map { "\(today), \($0)" } ?? today
         guard let used = day.usedPercent else {
             return "\(name), план \(plan) процентов, расхода ещё нет"
         }

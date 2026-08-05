@@ -246,6 +246,10 @@ enum Theme {
 
     static let titleFont = Font.system(size: menuFontSize, weight: .semibold).monospacedDigit()
     static let dayFont = Font.system(size: menuFontSize).monospacedDigit()
+    /// Подпись текущих суток: тот же кегль, но полужирная. Одного цвета ей не
+    /// хватало — в ряду из семи одинаковых подписей разница между основным и
+    /// вторичным текстом не ловится взглядом, и день приходилось искать.
+    static let todayFont = Font.system(size: menuFontSize, weight: .semibold).monospacedDigit()
     /// Кнопки футера: глифы ⚙ и ⟳ в кегле сноски становятся неприцельными.
     static let actionFont = Font.system(size: menuFontSize)
     /// Сводка футера — самая мелкая строка панели: в кегле сноски «осталось
