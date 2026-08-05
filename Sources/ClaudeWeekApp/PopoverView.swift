@@ -27,7 +27,6 @@ struct PopoverView: View {
                     now: model.now,
                     criticalThreshold: model.config.thresholds.critical,
                     resetDisplay: appearance.sessionReset,
-                    showLabel: appearance.showSessionLabel,
                     source: model.sourceState,
                     sourceHint: model.sourceHint,
                     calendar: model.config.calendar,
@@ -68,6 +67,13 @@ struct PopoverView: View {
 
     // MARK: Заголовок
 
+    /// Кружок источника живёт в строке сессии, а когда её нет — в заголовке.
+    /// Без строки сессии панель остаётся именно в тех случаях, когда знать
+    /// источник важнее всего: локальный режим сессии не считает вовсе.
+    private var showsSessionRow: Bool {
+        appearance.showSession && model.session != nil
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -88,6 +94,14 @@ struct PopoverView: View {
 
                 Spacer(minLength: 4)
 
+                if !showsSessionRow {
+                    // Кружок не текст, и по базовой линии его равнять нечем:
+                    // без поправки он сел бы на неё донышком и выглядел бы
+                    // просевшим относительно цифр рядом.
+                    SourceDot(state: model.sourceState, hint: model.sourceHint)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                }
+
                 // Момент сброса — в зоне окна, той же, по которой считаются
                 // сутки. Ни московского времени для сверки, ни прежних
                 // «≈14 % в сутки» здесь нет: строке заголовка хватает одного
@@ -99,17 +113,12 @@ struct PopoverView: View {
                         .foregroundStyle(palette.secondaryText.color)
                 }
             }
-
-            if let note = model.sourceNote {
-                Text(note)
-                    .font(Theme.footerFont)
-                    .foregroundStyle(
-                        model.isEstimate ? palette.warning.color : palette.secondaryText.color
-                    )
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
+        // Пометки об источнике под заголовком больше нет — её место занял
+        // кружок. VoiceOver цвет с заливкой не читает, поэтому источник он
+        // получает подсказкой, и только когда кружок стоит здесь.
         .accessibilityElement(children: .combine)
+        .accessibilityHint(showsSessionRow ? "" : model.sourceState.spokenName)
     }
 
     // MARK: Дни

@@ -72,10 +72,6 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     public var cornerRadius: Double
     /// Строка пятичасовой сессии над сутками.
     public var showSession: Bool
-    /// Слово «сессия» в подписи под её полосой. Слева от полосы и так стоит
-    /// «5 Ч», и метка повторяет уже сказанное — но час сброса рядом с ней
-    /// остаётся в любом случае.
-    public var showSessionLabel: Bool
     /// Вторая строка футера с прогнозом «кончится в …».
     public var showForecast: Bool
     /// Каким концом подписан сброс сессии.
@@ -87,7 +83,6 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         panelTintOpacity: Double = 0.18,
         cornerRadius: Double = 12,
         showSession: Bool = true,
-        showSessionLabel: Bool = true,
         showForecast: Bool = true,
         sessionReset: SessionResetDisplay = .relative
     ) {
@@ -96,7 +91,6 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         self.panelTintOpacity = panelTintOpacity
         self.cornerRadius = cornerRadius
         self.showSession = showSession
-        self.showSessionLabel = showSessionLabel
         self.showForecast = showForecast
         self.sessionReset = sessionReset
     }
@@ -115,8 +109,6 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
                 ?? d.panelTintOpacity,
             cornerRadius: try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius,
             showSession: try c.decodeIfPresent(Bool.self, forKey: .showSession) ?? d.showSession,
-            showSessionLabel: try c.decodeIfPresent(Bool.self, forKey: .showSessionLabel)
-                ?? d.showSessionLabel,
             showForecast: try c.decodeIfPresent(Bool.self, forKey: .showForecast) ?? d.showForecast,
             sessionReset: try c.decodeIfPresent(SessionResetDisplay.self, forKey: .sessionReset)
                 ?? d.sessionReset

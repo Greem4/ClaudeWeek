@@ -250,18 +250,16 @@ private struct AppearanceSettings: View {
 
             Section("Что показывать") {
                 Toggle("Строку пятичасовой сессии", isOn: appearance.showSession)
-                Toggle("Слово «сессия» в её подписи", isOn: appearance.showSessionLabel)
-                    .disabled(!model.config.appearance.showSession)
                 Toggle("Прогноз «кончится в …»", isOn: appearance.showForecast)
-                Toggle("Пометку «разбивка по суткам — оценка»", isOn: appearance.showSourceNote)
                 Picker("Строка меню", selection: $model.config.menuBarStyle) {
                     Text("Полоса и процент").tag(MenuBarStyle.percent)
                     Text("Только полоса").tag(MenuBarStyle.compact)
                 }
                 Text("""
-                Пометку об оценке видно только там, где цифры и правда \
-                приблизительные. Сбои и возраст данных она не прячет: \
-                «нет сети» и «данные 20 мин назад» панель говорит всегда.
+                Откуда взяты цифры, говорит кружок рядом с полосой сессии: \
+                залитый зелёный — ответ сервера, залитый жёлтый — он же, но \
+                из кеша, контурный красный — локальная оценка. Наведите на \
+                него, и панель скажет, что именно случилось.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -306,7 +304,7 @@ private struct AppearanceSettings: View {
             display: model.config.appearance.sessionReset,
             calendar: model.config.calendar
         )
-        return "сессия · сброс \(reset)"
+        return "сброс \(reset)"
     }
 
     private var themeHint: String {
