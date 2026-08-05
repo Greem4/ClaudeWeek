@@ -50,8 +50,8 @@ struct SessionRow: View {
     /// Что кружок говорит словами при наведении.
     let sourceHint: String
     /// Кружок нажали — на месте полосы стоит тот же текст словами. Полоса
-    /// уходит, а кружок и процент остаются: строка не должна ни съезжать
-    /// вбок, ни терять число, ради которого её читают.
+    /// гаснет под ним, а кружок и процент остаются: строка не должна ни
+    /// съезжать, ни терять число, ради которого её читают.
     let showsSourceText: Bool
     /// Нажатие на кружок — показать текст или убрать его досрочно.
     let onSourceTap: () -> Void
@@ -74,21 +74,24 @@ struct SessionRow: View {
                     .foregroundStyle(palette.secondaryText.color)
                     .frame(width: Theme.dayLabelWidth, alignment: .leading)
 
-                if showsSourceText {
+                // Полоса остаётся в разметке всегда, а причина ложится на неё
+                // слоем поверх: меняется одна прозрачность, и ни строка, ни
+                // панель от клика по кружку не меняют размера. Отсюда и одна
+                // строка текста — второй ряд раздвинул бы строку по высоте, а
+                // за ней и всю панель. Длинный отказ дочитывается подсказкой.
+                SessionBar(
+                    usedPercent: session.usedPercent,
+                    isWarning: isWarning,
+                    animated: animated
+                )
+                .opacity(showsSourceText ? 0 : 1)
+                .overlay(alignment: .leading) {
                     Text(sourceHint)
                         .font(Theme.captionFont)
                         .foregroundStyle(palette.secondaryText.color)
-                        // Отказ бывает длинным («сеть недоступна: … · данные
-                        // 20 мин назад») — переносим по словам целиком. Резать
-                        // многоточием тут нечего: обрезанная причина не причина.
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    SessionBar(
-                        usedPercent: session.usedPercent,
-                        isWarning: isWarning,
-                        animated: animated
-                    )
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .opacity(showsSourceText ? 1 : 0)
                 }
 
                 SourceDot(state: source, hint: sourceHint, onTap: onSourceTap)

@@ -91,6 +91,12 @@ struct PopoverView: View {
         appearance.showSession && model.session != nil
     }
 
+    /// Причина в заголовке — только когда кружок стоит здесь: со строкой
+    /// сессии текст показывает она, поверх своей полосы.
+    private var showsHeaderSourceText: Bool {
+        showsSourceText && !showsSessionRow
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -129,20 +135,25 @@ struct PopoverView: View {
                 // числа, а два подряд читались как спорящие.
                 //
                 // На эти же несколько секунд его место занимает текст
-                // источника: кружок стоит слева от них обоих и от подмены не
-                // трогается — щёлкать обратно приходится туда же, куда щёлкнул.
-                if showsSourceText, !showsSessionRow {
-                    Text(model.sourceHint)
-                        .font(Theme.captionFont)
-                        .foregroundStyle(palette.secondaryText.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.trailing)
-                } else if let window = model.snapshot?.window {
-                    Text(Formatting.resetLabel(window))
-                        .font(Theme.captionFont)
-                        .fixedSize()
-                        .foregroundStyle(palette.secondaryText.color)
+                // источника. Оба стоят в разметке всегда и меняются одной
+                // прозрачностью: подмена не должна ни раздвигать заголовок по
+                // высоте, ни сдвигать кружок слева — щёлкать обратно
+                // приходится туда же, куда щёлкнул.
+                ZStack(alignment: .trailing) {
+                    if let window = model.snapshot?.window {
+                        Text(Formatting.resetLabel(window))
+                            .fixedSize()
+                            .opacity(showsHeaderSourceText ? 0 : 1)
+                    }
+                    if !showsSessionRow {
+                        Text(model.sourceHint)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .opacity(showsHeaderSourceText ? 1 : 0)
+                    }
                 }
+                .font(Theme.captionFont)
+                .foregroundStyle(palette.secondaryText.color)
             }
         }
         // Пометки об источнике под заголовком больше нет — её место занял
