@@ -102,8 +102,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func show(avoiding obstacle: NSRect? = nil) {
         model.refreshDiagnostics()
         if let window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            present(window)
             onPresent()
             return
         }
@@ -116,14 +115,30 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.center()
         window.setFrameAutosaveName("ClaudeWeekSettings")
+        // moveToActiveSpace — чтобы окно приходило на тот стол, с которого его
+        // позвали, а не утаскивало экран туда, где его открыли в первый раз.
+        // fullScreenAuxiliary — чтобы настройки пускали и поверх полноэкранного
+        // окна: обычному окну в такое пространство хода нет, и без флага
+        // система снова уводила бы человека на другой стол.
+        window.collectionBehavior.formUnion([.moveToActiveSpace, .fullScreenAuxiliary])
         if let obstacle { moveAside(window, from: obstacle) }
         self.window = window
 
-        window.makeKeyAndOrderFront(nil)
-        // Приложение живёт без Dock (`LSUIElement`), и без явной активации
-        // окно откроется за спиной у текущей программы.
-        NSApp.activate(ignoringOtherApps: true)
+        present(window)
         onPresent()
+    }
+
+    /// Показанное окно WindowServer держит за тем столом, где оно появилось, и
+    /// одного `moveToActiveSpace` мало: полноэкранное пространство отпускать
+    /// окно не хочет. Снятие с экрана эту привязку сбрасывает — ровно так же
+    /// разбирается с чужим столом панель в `DropdownPanel.show(from:)`.
+    private func present(_ window: NSWindow) {
+        if window.isVisible && !window.isOnActiveSpace { window.orderOut(nil) }
+        // Приложение живёт без Dock (`LSUIElement`), и без явной активации
+        // окно откроется за спиной у текущей программы. Активируем до показа:
+        // неактивному приложению система сначала ищет окну «своё» пространство.
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
     }
 
     /// Двигаем окно один раз, при создании: дальше место выбирает человек.
