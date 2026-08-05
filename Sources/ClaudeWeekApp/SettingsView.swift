@@ -215,6 +215,9 @@ private struct AppearanceSettings: View {
 
 private struct AccessSettings: View {
     @Bindable var model: SettingsModel
+    /// Буфер обмена молчит, а нажатая кнопка должна отвечать.
+    @State private var commandCopied = false
+    @State private var launchError: String?
 
     var body: some View {
         Form {
@@ -232,6 +235,49 @@ private struct AccessSettings: View {
             }
 
             if model.config.authSource == .manual {
+                Section("Где взять токен") {
+                    Text("""
+                    Токен выпускает сам Claude Code: команда \(SetupToken.command) \
+                    откроет браузер, спросит подтверждение и напечатает строку \
+                    sk-ant-oat01-…. Своего окна авторизации у ClaudeWeek нет — \
+                    чужой client_id означал бы, что в браузере вы разрешаете \
+                    доступ не тому, кто просит.
+                    """)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    HStack {
+                        Button("Выпустить токен…") {
+                            launchError = SetupToken.run()
+                        }
+                        Button(commandCopied ? "Скопировано" : "Скопировать команду") {
+                            SetupToken.copyCommand()
+                            commandCopied = true
+                            Task {
+                                try? await Task.sleep(for: .seconds(2))
+                                commandCopied = false
+                            }
+                        }
+                        Spacer()
+                        Link("Документация", destination: SetupToken.docsURL)
+                            .font(.caption)
+                    }
+
+                    if let launchError {
+                        Text(launchError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    Text("""
+                    Такой токен живёт год, но документация обещает ему только \
+                    запросы к модели. Подойдёт ли он этому эндпоинту — скажет \
+                    «Проверить сейчас» ниже.
+                    """)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
                 Section("Свой токен") {
                     SecureField("sk-ant-oat01-…", text: $model.tokenField)
                         .textFieldStyle(.roundedBorder)
@@ -291,8 +337,8 @@ private struct AccessSettings: View {
             """
         case .manual:
             """
-            Свой OAuth-токен — когда Claude Code стоит под другим пользователем или \
-            нужно смотреть чужой аккаунт. Хранится в отдельной записи Keychain.
+            Свой OAuth-токен, выпущенный владельцем аккаунта. Запись Claude Code в \
+            этом режиме не читается вовсе — токен берётся из отдельной записи Keychain.
             """
         }
     }
