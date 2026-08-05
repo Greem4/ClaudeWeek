@@ -45,6 +45,26 @@ public enum ThemeKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// Как подписан момент сброса пятичасовой сессии. Сам момент приходит из
+/// ответа сервера и от настройки не зависит — она выбирает только то, каким
+/// концом его показать: сколько осталось или когда наступит.
+public enum SessionResetDisplay: String, Codable, Sendable, CaseIterable {
+    /// «сброс через 1 ч 12 мин» — сколько ещё можно работать.
+    case relative
+    /// «сброс в 14:35» — момент на часах, удобно сверять с планами на день.
+    case absolute
+    /// «сброс через 1 ч 12 мин (14:35)» — и то, и другое.
+    case both
+
+    public var title: String {
+        switch self {
+        case .relative: "Сколько осталось"
+        case .absolute: "Во сколько сбросится"
+        case .both: "И то, и другое"
+        }
+    }
+}
+
 /// Всё, что влияет только на вид и ни на одну цифру.
 public struct AppearanceConfig: Codable, Sendable, Equatable {
     public var theme: ThemeKind
@@ -60,6 +80,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     public var showSession: Bool
     /// Вторая строка футера с прогнозом «кончится в …».
     public var showForecast: Bool
+    /// Каким концом подписан сброс сессии.
+    public var sessionReset: SessionResetDisplay
 
     public init(
         theme: ThemeKind = .system,
@@ -67,7 +89,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         panelTintOpacity: Double = 0.45,
         cornerRadius: Double = 12,
         showSession: Bool = true,
-        showForecast: Bool = true
+        showForecast: Bool = true,
+        sessionReset: SessionResetDisplay = .relative
     ) {
         self.theme = theme
         self.transparentPanel = transparentPanel
@@ -75,6 +98,27 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         self.cornerRadius = cornerRadius
         self.showSession = showSession
         self.showForecast = showForecast
+        self.sessionReset = sessionReset
+    }
+
+    // Как и в `Config`: каждое поле необязательно. Конфиг, записанный прошлой
+    // версией, не знает новых ключей, и падать на них нельзя — иначе одна
+    // добавленная настройка сбрасывает человеку все остальные.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = AppearanceConfig()
+        self.init(
+            theme: try c.decodeIfPresent(ThemeKind.self, forKey: .theme) ?? d.theme,
+            transparentPanel: try c.decodeIfPresent(Bool.self, forKey: .transparentPanel)
+                ?? d.transparentPanel,
+            panelTintOpacity: try c.decodeIfPresent(Double.self, forKey: .panelTintOpacity)
+                ?? d.panelTintOpacity,
+            cornerRadius: try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius,
+            showSession: try c.decodeIfPresent(Bool.self, forKey: .showSession) ?? d.showSession,
+            showForecast: try c.decodeIfPresent(Bool.self, forKey: .showForecast) ?? d.showForecast,
+            sessionReset: try c.decodeIfPresent(SessionResetDisplay.self, forKey: .sessionReset)
+                ?? d.sessionReset
+        )
     }
 
     public func validated() -> AppearanceConfig {

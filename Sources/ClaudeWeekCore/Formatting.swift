@@ -57,4 +57,29 @@ public enum Formatting {
     public static func resetLabel(_ window: WeekWindow) -> String {
         "сброс \(weekdayShort(window.end, calendar: window.calendar)) \(clock(window.end, calendar: window.calendar))"
     }
+
+    /// Хвост подписи сессии: «через 1 ч 12 мин», «в 14:35» или «через 1 ч 12
+    /// мин (14:35)». Глагол остаётся снаружи — у исчерпанной сессии он свой
+    /// («отпустит»), а число одно и то же.
+    ///
+    /// Час сброса, попавший на другие сутки, показывается с днём недели:
+    /// пятичасовое окно легко перешагивает полночь, и голое «в 2:15» ночью
+    /// читается как «уже прошло».
+    public static func sessionReset(
+        at resetsAt: Date,
+        now: Date,
+        display: SessionResetDisplay,
+        calendar: Calendar
+    ) -> String {
+        let left = "через \(duration(max(resetsAt.timeIntervalSince(now), 0)))"
+        let sameDay = calendar.isDate(resetsAt, inSameDayAs: now)
+        let day = sameDay ? "" : "\(weekdayShort(resetsAt, calendar: calendar)) "
+        let moment = "\(day)\(clock(resetsAt, calendar: calendar))"
+
+        switch display {
+        case .relative: return left
+        case .absolute: return "в \(moment)"
+        case .both: return "\(left) (\(moment))"
+        }
+    }
 }

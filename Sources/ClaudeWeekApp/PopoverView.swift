@@ -25,6 +25,8 @@ struct PopoverView: View {
                     session: session,
                     now: model.now,
                     criticalThreshold: model.config.thresholds.critical,
+                    resetDisplay: appearance.sessionReset,
+                    calendar: model.config.calendar,
                     animated: !reduceMotion
                 )
             }

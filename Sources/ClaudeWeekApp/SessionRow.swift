@@ -40,6 +40,12 @@ struct SessionRow: View {
     /// Доля лимита, после которой полоса желтеет. Берётся из тех же порогов,
     /// что и неделя: два набора настроек ради одной полосы не нужны.
     let criticalThreshold: Double
+    /// Каким концом подписан сброс: сколько осталось, во сколько наступит
+    /// или и то, и другое.
+    let resetDisplay: SessionResetDisplay
+    /// Календарь конфига — час сброса показываем в той же зоне, что и всё
+    /// остальное в панели, а не в системной.
+    let calendar: Calendar
     let animated: Bool
 
     @Environment(\.palette) private var palette
@@ -86,19 +92,24 @@ struct SessionRow: View {
         .accessibilityLabel(voiceOverLabel)
     }
 
-    private var left: String {
-        Formatting.duration(session.timeLeft(from: now))
+    private var reset: String {
+        Formatting.sessionReset(
+            at: session.resetsAt,
+            now: now,
+            display: resetDisplay,
+            calendar: calendar
+        )
     }
 
     private var caption: String {
         session.isExhausted
-            ? "сессия исчерпана · отпустит через \(left)"
-            : "сессия · сброс через \(left)"
+            ? "сессия исчерпана · отпустит \(reset)"
+            : "сессия · сброс \(reset)"
     }
 
     private var voiceOverLabel: String {
         let percent = Formatting.percent(session.usedPercent, withSign: false)
         let verdict = session.isExhausted ? ", лимит исчерпан" : ""
-        return "Пятичасовая сессия, потрачено \(percent) процентов\(verdict), сброс через \(left)"
+        return "Пятичасовая сессия, потрачено \(percent) процентов\(verdict), сброс \(reset)"
     }
 }

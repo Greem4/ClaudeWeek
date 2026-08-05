@@ -130,6 +130,25 @@ func runConfigTests(_ t: Harness) {
         t.equal(back.appearance.showSession, false, "скрытая сессия пережила запись")
     }
 
+    t.suite("конфиг: подпись сброса сессии") {
+        t.equal(Config.default.appearance.sessionReset, .relative,
+                "по умолчанию — сколько осталось")
+
+        let url = tempFile(#"{ "appearance": { "sessionReset": "both" } }"#)
+        defer { try? FileManager.default.removeItem(at: url) }
+        t.equal(ConfigStore.load(from: url).appearance.sessionReset, .both, "своё значение прочиталось")
+
+        // Внешний вид, записанный прошлой версией: ключа sessionReset в нём
+        // нет. Раньше это ронять не могло — теперь может, и не должно:
+        // одна новая настройка не имеет права сбросить человеку остальные.
+        let old = tempFile(#"{ "appearance": { "theme": "midnight", "cornerRadius": 4 } }"#)
+        defer { try? FileManager.default.removeItem(at: old) }
+        let c = ConfigStore.load(from: old)
+        t.equal(c.appearance.theme, .midnight, "старый внешний вид уцелел")
+        t.equal(c.appearance.cornerRadius, 4, "и второе его поле тоже")
+        t.equal(c.appearance.sessionReset, .relative, "новый ключ взялся из дефолтов")
+    }
+
     t.suite("конфиг: старый файл без внешнего вида") {
         // Конфиг, написанный прошлой версией: новых ключей в нём нет,
         // и появиться они должны дефолтными, а не уронить разбор.

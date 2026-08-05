@@ -197,8 +197,47 @@ private struct AppearanceSettings: View {
                     Text("Только полоса").tag(MenuBarStyle.compact)
                 }
             }
+
+            Section("Сброс сессии") {
+                Picker("Подписывать", selection: appearance.sessionReset) {
+                    ForEach(SessionResetDisplay.allCases, id: \.self) { display in
+                        Text(display.title).tag(display)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!model.config.appearance.showSession)
+
+                LabeledContent("Выглядит так") {
+                    Text(sessionResetSample)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("""
+                Момент сброса приходит от сервера вместе с процентом — настройка \
+                выбирает не его, а лишь то, каким концом его показать. Час \
+                за полночь подписывается днём недели: пятичасовое окно легко \
+                через неё перешагивает.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+    }
+
+    /// Образец подписи на выдуманных 1 ч 12 мин. Живая панель рядом показывает
+    /// настоящую строку, но только когда сессия есть: без данных от сервера её
+    /// нет вовсе, и выбирать пришлось бы вслепую.
+    private var sessionResetSample: String {
+        let now = Date()
+        let reset = Formatting.sessionReset(
+            at: now.addingTimeInterval(72 * 60),
+            now: now,
+            display: model.config.appearance.sessionReset,
+            calendar: model.config.calendar
+        )
+        return "сессия · сброс \(reset)"
     }
 
     private var themeHint: String {
