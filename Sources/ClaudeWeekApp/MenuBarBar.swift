@@ -23,9 +23,10 @@ enum MenuBarBar {
         usedPercent: Double,
         planPercent: Double,
         state: LimitState,
-        title: String?
+        title: String?,
+        palette: Palette = .system
     ) -> NSImage {
-        let label = title.map { attributed($0, state: state) }
+        let label = title.map { attributed($0, state: state, palette: palette) }
         let labelSize = label?.size() ?? .zero
         let width = max(minimumWidth, ceil(labelSize.width) + 2)
 
@@ -37,7 +38,8 @@ enum MenuBarBar {
 
             drawBar(
                 in: NSRect(x: 0, y: top - barHeight, width: rect.width, height: barHeight),
-                usedPercent: usedPercent, planPercent: planPercent, state: state
+                usedPercent: usedPercent, planPercent: planPercent,
+                state: state, palette: palette
             )
 
             if let label {
@@ -50,30 +52,31 @@ enum MenuBarBar {
     }
 
     /// Пустая иконка, пока данных нет.
-    static func placeholder(title: String?) -> NSImage {
-        image(usedPercent: 0, planPercent: 0, state: .onTrack, title: title)
+    static func placeholder(title: String?, palette: Palette = .system) -> NSImage {
+        image(usedPercent: 0, planPercent: 0, state: .onTrack, title: title, palette: palette)
     }
 
     private static func drawBar(
         in rect: NSRect,
         usedPercent: Double,
         planPercent: Double,
-        state: LimitState
+        state: LimitState,
+        palette: Palette
     ) {
         let radius = rect.height / 2
 
-        NSColor(hex: 0x8A8A85).withAlphaComponent(0.35).setFill()
+        palette.track.nsColor.withAlphaComponent(0.65).setFill()
         NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
 
         let planWidth = rect.width * clamp(planPercent)
-        NSColor(hex: 0x6DA7EC).withAlphaComponent(0.65).setFill()
+        palette.plan.nsColor.withAlphaComponent(0.85).setFill()
         NSBezierPath(
             roundedRect: NSRect(x: rect.minX, y: rect.minY, width: planWidth, height: rect.height),
             xRadius: radius, yRadius: radius
         ).fill()
 
         let usedWidth = rect.width * clamp(usedPercent)
-        NSColor(hex: 0x0CA30C).setFill()
+        palette.good.nsColor.setFill()
         NSBezierPath(
             roundedRect: NSRect(
                 x: rect.minX, y: rect.minY,
@@ -85,7 +88,7 @@ enum MenuBarBar {
         if usedWidth > planWidth {
             // Тот же двухпиксельный зазор, что и в панели.
             let start = planWidth + 2
-            NSColor(hex: state == .exhausted ? 0xD03B3B : 0xFAB219).setFill()
+            (state == .exhausted ? palette.critical : palette.warning).nsColor.setFill()
             NSBezierPath(
                 roundedRect: NSRect(
                     x: rect.minX + start, y: rect.minY,
@@ -96,20 +99,24 @@ enum MenuBarBar {
         }
     }
 
-    private static func attributed(_ title: String, state: LimitState) -> NSAttributedString {
+    private static func attributed(
+        _ title: String,
+        state: LimitState,
+        palette: Palette
+    ) -> NSAttributedString {
         NSAttributedString(
             string: title,
-            attributes: [.font: font, .foregroundColor: textColor(for: state)]
+            attributes: [.font: font, .foregroundColor: textColor(for: state, palette: palette)]
         )
     }
 
     /// Цвет цифр. `labelColor` динамический — он разрешается в момент
     /// отрисовки, поэтому подходит и к тёмной, и к светлой строке меню.
-    private static func textColor(for state: LimitState) -> NSColor {
+    private static func textColor(for state: LimitState, palette: Palette) -> NSColor {
         switch state {
         case .onTrack: .labelColor
-        case .overPlan: NSColor(hex: 0xFAB219)
-        case .critical, .exhausted: NSColor(hex: 0xD03B3B)
+        case .overPlan: palette.warning.nsColor
+        case .critical, .exhausted: palette.critical.nsColor
         }
     }
 

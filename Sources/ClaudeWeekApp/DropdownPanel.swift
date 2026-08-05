@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ClaudeWeekCore
 
 /// Выпадающая панель в форме системного меню: без стрелки-хвостика, верхней
 /// кромкой вплотную к строке меню, фон — материал меню, появление мгновенное.
@@ -10,7 +11,10 @@ import SwiftUI
 @MainActor
 final class DropdownPanel {
     private let panel = MenuPanel()
-    private let effect = MenuBackgroundView()
+    /// Корневой слой окна: он несёт скругление, обводку и маску. Материал
+    /// лежит внутри и может быть выключен — форма панели от этого не зависит.
+    private let container = BorderedView()
+    private let effect = NSVisualEffectView()
     private let hosting = SizingHostingView(rootView: AnyView(EmptyView()))
     private var monitors: [Any] = []
     /// Окно пункта строки меню — от него считаем место панели и по нему же
@@ -20,39 +24,52 @@ final class DropdownPanel {
     var isShown: Bool { panel.isVisible }
 
     init() {
-        // .menu — тот же материал, что под системными меню строки: тёмная
-        // полупрозрачная подложка с размытием того, что под ней. Состояние
-        // .active, иначе панель тускнеет вместе с неактивным приложением,
-        // а оно у нас неактивно почти всегда.
-        effect.material = .menu
+        // Материал строки меню: полупрозрачная подложка с размытием того,
+        // что под ней. Состояние .active, иначе панель тускнеет вместе с
+        // неактивным приложением, а оно у нас неактивно почти всегда.
         effect.blendingMode = .behindWindow
         effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = Theme.panelCornerRadius
-        effect.layer?.cornerCurve = .continuous
-        effect.layer?.masksToBounds = true
-        effect.layer?.borderWidth = 1
-        effect.applyBorderColor()
 
-        hosting.translatesAutoresizingMaskIntoConstraints = false
-        effect.addSubview(hosting)
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: effect.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
-        ])
-        panel.contentView = effect
+        container.wantsLayer = true
+        container.layer?.cornerCurve = .continuous
+        container.layer?.masksToBounds = true
+        container.layer?.borderWidth = 1
+
+        for view in [effect, hosting] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                view.topAnchor.constraint(equalTo: container.topAnchor),
+                view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+        }
+        panel.contentView = container
+        apply(appearance: AppearanceConfig(), palette: .system)
 
         hosting.onFittingSizeChange = { [weak self] size in
             self?.resize(to: size)
         }
     }
 
-    /// Тон кладём здесь, а не в самой панели недели: тот же вид уходит в
-    /// `--screenshot`, где фон рисуется свой и вуаль только мешала бы.
     func setContent(_ view: some View) {
-        hosting.rootView = AnyView(view.background(Theme.panelTint))
+        hosting.rootView = AnyView(view)
+    }
+
+    /// Настройки вида. Вуаль поверх материала рисует сама панель недели
+    /// (`PopoverView.backdrop`) — здесь только то, чем владеет окно:
+    /// материал, скругление, обводка и режим прозрачности.
+    func apply(appearance: AppearanceConfig, palette: Palette) {
+        effect.material = palette.material.nsMaterial
+        // Непрозрачный режим: материал гасим, фон рисует SwiftUI сплошным
+        // цветом палитры. Оставить материал под ним значило бы платить за
+        // размытие, которого не видно.
+        effect.isHidden = !appearance.transparentPanel
+        container.layer?.cornerRadius = appearance.cornerRadius
+        container.borderInk = palette.border
+        container.applyBorderColor()
+        panel.invalidateShadow()
     }
 
     // MARK: Показ и скрытие
@@ -150,9 +167,11 @@ final class DropdownPanel {
     }
 }
 
-/// Материал под панелью. Обводку красим сами: цвет слоя, в отличие от
-/// NSColor, при смене темы не пересчитывается — ловим смену и красим заново.
-private final class MenuBackgroundView: NSVisualEffectView {
+/// Корень окна с обводкой. Красим её сами: цвет слоя, в отличие от NSColor,
+/// при смене темы не пересчитывается — ловим смену и красим заново.
+private final class BorderedView: NSView {
+    var borderInk: Ink = Palette.system.border
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         applyBorderColor()
@@ -160,7 +179,7 @@ private final class MenuBackgroundView: NSVisualEffectView {
 
     func applyBorderColor() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.borderColor = Theme.panelBorder.cgColor
+            layer?.borderColor = borderInk.nsColor.cgColor
         }
     }
 }

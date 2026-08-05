@@ -9,6 +9,8 @@ final class StatusItemController: NSObject {
     private let model: PanelModel
     private var provider: any UsageProvider
 
+    private var settings: SettingsWindowController?
+    private var saveTask: Task<Void, Never>?
     private var refreshTimer: Timer?
     private var clockTimer: Timer?
     private var appearanceObserver: NSKeyValueObservation?
@@ -67,8 +69,17 @@ final class StatusItemController: NSObject {
             PopoverView(
                 model: model,
                 onRefresh: { [weak self] in self?.refresh() },
+                onSettings: { [weak self] in self?.openSettings() },
                 onQuit: { NSApp.terminate(nil) }
             )
+        )
+        applyAppearance()
+    }
+
+    private func applyAppearance() {
+        dropdown.apply(
+            appearance: model.config.appearance,
+            palette: model.config.appearance.theme.palette
         )
     }
 
@@ -76,16 +87,18 @@ final class StatusItemController: NSObject {
         guard let button = statusItem.button else { return }
 
         let title = model.config.menuBarStyle == .compact ? nil : model.menuBarTitle
+        let palette = model.config.appearance.theme.palette
 
         if let snapshot = model.snapshot, let metrics = model.metrics {
             button.image = MenuBarBar.image(
                 usedPercent: snapshot.usedPercent,
                 planPercent: metrics.planNowPercent,
                 state: metrics.state,
-                title: title
+                title: title,
+                palette: palette
             )
         } else {
-            button.image = MenuBarBar.placeholder(title: title)
+            button.image = MenuBarBar.placeholder(title: title, palette: palette)
         }
         // Без текстового заголовка кнопку нечего озвучивать — даём подпись сами.
         button.setAccessibilityLabel("ClaudeWeek — потрачено \(model.menuBarTitle)")
@@ -145,12 +158,71 @@ final class StatusItemController: NSObject {
 
     @objc private func refreshFromMenu() { refresh() }
 
-    @objc private func openConfig() {
-        let url = configURL
-        if !FileManager.default.fileExists(atPath: url.path) {
-            try? ConfigStore.save(model.config, to: url)
+    @objc private func openConfig() { openSettings() }
+
+    /// Окно настроек. Правки применяются сразу и тут же ложатся в файл —
+    /// он остаётся источником правды, а окно лишь удобный способ его править.
+    private func openSettings() {
+        dropdown.close()
+        if settings == nil {
+            let model = SettingsModel(
+                config: model.config,
+                apply: { [weak self] config in self?.applyFromSettings(config) },
+                check: { config in await Self.check(config: config) }
+            )
+            settings = SettingsWindowController(model: model)
         }
-        NSWorkspace.shared.open(url)
+        settings?.show()
+    }
+
+    private func applyFromSettings(_ config: Config) {
+        let providerChanged = config.provider != model.config.provider
+            || config.authSource != model.config.authSource
+            || config.timeZone != model.config.timeZone
+            || config.resetWeekday != model.config.resetWeekday
+            || config.resetHour != model.config.resetHour
+            || config.resetMinute != model.config.resetMinute
+            || config.planAnchor != model.config.planAnchor
+            || config.weeklyBudget != model.config.weeklyBudget
+
+        model.config = config
+        applyAppearance()
+        render()
+
+        // Ползунок шлёт по десятку изменений в секунду — на диск ходим
+        // с задержкой, применяя к панели каждое сразу.
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            do {
+                try ConfigStore.save(config, to: self.configURL)
+                // Свою же запись не перечитываем: отпечаток обновляем сразу,
+                // иначе через минуту конфиг применился бы вторым заходом.
+                self.configStamp = ConfigStamp.current(url: self.configURL)
+            } catch {
+                Log.warn("не сохранил настройки: \(error)")
+            }
+        }
+
+        guard providerChanged else { return }
+        provider = ResolvingProvider(config: config)
+        startTimers()
+        refresh()
+    }
+
+    /// Одна честная попытка сходить в официальный источник — чтобы кнопка
+    /// «Проверить» в настройках отвечала не «сохранено», а «работает».
+    private static func check(config: Config) async -> (String, Bool) {
+        var config = config
+        config.provider = .official
+        do {
+            let snapshot = try await ResolvingProvider(config: config).fetch()
+            return ("получилось: \(Formatting.percent(snapshot.usedPercent)) недельного лимита", true)
+        } catch {
+            let text = (error as? UsageError)?.errorDescription ?? error.localizedDescription
+            return (text, false)
+        }
     }
 
     @objc private func showAbout() {
@@ -241,6 +313,7 @@ final class StatusItemController: NSObject {
         guard config != model.config else { return }
         Log.info("конфиг изменился, применяю")
         model.config = config
+        applyAppearance()
         provider = ResolvingProvider(config: config)
         startTimers()
         refresh()

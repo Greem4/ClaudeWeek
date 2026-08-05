@@ -27,6 +27,8 @@ enum Screenshot {
             .dayStart(3)
             .addingTimeInterval(6 * 3600)
 
+        var config = config
+        config.appearance.transparentPanel = false
         let model = PanelModel(config: config)
         model.apply(demoSnapshot(config: config, now: now))
         model.now = now
@@ -114,12 +116,13 @@ enum Screenshot {
         // SwiftUI разрешает по colorScheme из окружения, поэтому задаём оба.
         appearance.performAsCurrentDrawingAppearance {
             // Живьём панель лежит на материале строки меню, размыть который
-            // оффскрин нельзя. Подкладываем плоский фон, но форму сохраняем:
-            // те же скруглённые углы и тень, что видит пользователь.
-            let shape = RoundedRectangle(cornerRadius: Theme.panelCornerRadius, style: .continuous)
+            // оффскрин нельзя, поэтому модели на время рендера выключаем
+            // прозрачность — фон рисуется сплошным цветом палитры. Форму
+            // сохраняем: те же скруглённые углы и тень, что видит человек.
+            let radius = model.config.appearance.cornerRadius
             let renderer = ImageRenderer(
                 content: PopoverView(model: model)
-                    .background(Theme.panelBackground, in: shape)
+                    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                     .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
                     .padding(16)
                     .environment(\.colorScheme, name == .darkAqua ? .dark : .light)

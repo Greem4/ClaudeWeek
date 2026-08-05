@@ -9,28 +9,30 @@ struct DayBar: View {
     let usedPercent: Double?
     let animated: Bool
 
+    @Environment(\.palette) private var palette
+
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let planWidth = offset(planPercent, in: width)
 
             ZStack(alignment: .leading) {
-                Capsule().fill(Theme.track)
+                Capsule().fill(palette.track.color)
 
                 Capsule()
-                    .fill(Theme.plan)
+                    .fill(palette.plan.color)
                     .frame(width: planWidth)
 
                 if let used = usedPercent {
                     let insidePlan = offset(min(used, planPercent), in: width)
                     Capsule()
-                        .fill(Theme.good)
+                        .fill(palette.good.color)
                         .frame(width: insidePlan)
 
                     if used > planPercent {
                         let overspend = offset(used, in: width) - planWidth - Theme.overspendGap
                         Capsule()
-                            .fill(Theme.warning)
+                            .fill(palette.warning.color)
                             .frame(width: max(overspend, 1))
                             .offset(x: planWidth + Theme.overspendGap)
                     }
@@ -55,6 +57,8 @@ struct DayRow: View {
     let isToday: Bool
     let animated: Bool
 
+    @Environment(\.palette) private var palette
+
     private var isOverspent: Bool {
         guard let used = day.usedPercent else { return false }
         return used > day.planPercent
@@ -64,7 +68,7 @@ struct DayRow: View {
         HStack(spacing: 8) {
             Text(label)
                 .font(Theme.dayFont)
-                .foregroundStyle(isToday ? Theme.primaryText : Theme.secondaryText)
+                .foregroundStyle(isToday ? palette.primaryText.color : palette.secondaryText.color)
                 .frame(width: Theme.dayLabelWidth, alignment: .leading)
 
             DayBar(planPercent: day.planPercent, usedPercent: day.usedPercent, animated: animated)
@@ -73,11 +77,15 @@ struct DayRow: View {
                 if isOverspent {
                     Text("⚠")
                         .font(Theme.dayFont)
-                        .foregroundStyle(Theme.warning)
+                        .foregroundStyle(palette.warning.color)
                 }
                 Text(values)
                     .font(Theme.dayFont)
-                    .foregroundStyle(day.usedPercent == nil ? Theme.secondaryText : Theme.primaryText)
+                    .foregroundStyle(
+                        day.usedPercent == nil
+                            ? palette.secondaryText.color
+                            : palette.primaryText.color
+                    )
             }
             .frame(width: Theme.valueWidth, alignment: .trailing)
         }

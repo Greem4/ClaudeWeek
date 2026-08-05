@@ -7,7 +7,11 @@ struct PopoverView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var onRefresh: () -> Void = {}
+    var onSettings: () -> Void = {}
     var onQuit: () -> Void = {}
+
+    private var appearance: AppearanceConfig { model.config.appearance }
+    private var palette: Palette { appearance.theme.palette }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.rowSpacing) {
@@ -16,7 +20,7 @@ struct PopoverView: View {
             // Пятичасовая сессия стоит над разделителем, в одной сетке с
             // сутками, но по свою его сторону: лимит независимый, и путать
             // его с восьмым днём недели нельзя. Нет данных — нет и строки.
-            if let session = model.session {
+            if appearance.showSession, let session = model.session {
                 SessionRow(
                     session: session,
                     now: model.now,
@@ -25,7 +29,7 @@ struct PopoverView: View {
                 )
             }
 
-            Divider().overlay(Theme.separator)
+            Divider().overlay(palette.separator.color)
 
             if let snapshot = model.snapshot {
                 days(snapshot)
@@ -33,14 +37,24 @@ struct PopoverView: View {
                 placeholders
             }
 
-            Divider().overlay(Theme.separator)
+            Divider().overlay(palette.separator.color)
             footer
         }
         .padding(Theme.panelPadding)
         .frame(width: Theme.panelWidth)
-        // Своего фона нет намеренно: под панелью материал строки меню,
-        // и любая заливка поверх убила бы прозрачность (`--screenshot`
-        // подкладывает фон сам — размывать в PNG нечего).
+        // Прозрачный режим: под панелью материал строки меню, а здесь только
+        // вуаль поверх него. Непрозрачный — сплошная заливка палитры.
+        .background(backdrop)
+        .environment(\.palette, palette)
+    }
+
+    @ViewBuilder
+    private var backdrop: some View {
+        if appearance.transparentPanel {
+            palette.panelTint.color.opacity(appearance.panelTintOpacity)
+        } else {
+            palette.panelBackground.color
+        }
     }
 
     // MARK: Заголовок
@@ -51,13 +65,17 @@ struct PopoverView: View {
                 if model.state == .exhausted || model.state == .critical {
                     Text("⚠")
                         .font(Theme.titleFont)
-                        .foregroundStyle(Theme.critical)
+                        .foregroundStyle(palette.critical.color)
                 }
                 Text("ЛИМИТ НЕДЕЛИ")
                     .font(Theme.titleFont)
                     .tracking(0.4)
                     .fixedSize()
-                    .foregroundStyle(model.state == .exhausted ? Theme.critical : Theme.primaryText)
+                    .foregroundStyle(
+                        model.state == .exhausted
+                            ? palette.critical.color
+                            : palette.primaryText.color
+                    )
 
                 Spacer(minLength: 4)
 
@@ -65,19 +83,21 @@ struct PopoverView: View {
                     Text(Formatting.resetLabel(window))
                         .font(Theme.captionFont)
                         .fixedSize()
-                        .foregroundStyle(Theme.secondaryText)
+                        .foregroundStyle(palette.secondaryText.color)
                 }
 
                 Text("≈14 % в сутки")
                     .font(Theme.captionFont)
                     .fixedSize()
-                    .foregroundStyle(Theme.secondaryText)
+                    .foregroundStyle(palette.secondaryText.color)
             }
 
             if let note = model.sourceNote {
                 Text(note)
                     .font(Theme.footerFont)
-                    .foregroundStyle(model.isEstimate ? Theme.warning : Theme.secondaryText)
+                    .foregroundStyle(
+                        model.isEstimate ? palette.warning.color : palette.secondaryText.color
+                    )
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -107,11 +127,11 @@ struct PopoverView: View {
             ForEach(0..<WeekWindow.daysInWeek, id: \.self) { _ in
                 HStack(spacing: 8) {
                     Capsule()
-                        .fill(Theme.track)
+                        .fill(palette.track.color)
                         .frame(width: Theme.dayLabelWidth, height: Theme.barHeight)
-                    Capsule().fill(Theme.track).frame(height: Theme.barHeight)
+                    Capsule().fill(palette.track.color).frame(height: Theme.barHeight)
                     Capsule()
-                        .fill(Theme.track)
+                        .fill(palette.track.color)
                         .frame(width: Theme.valueWidth, height: Theme.barHeight)
                 }
             }
@@ -127,25 +147,37 @@ struct PopoverView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(summary)
                     .font(Theme.captionFont)
-                    .foregroundStyle(model.resetIsClose ? Theme.warning : Theme.secondaryText)
+                    .foregroundStyle(
+                        model.resetIsClose ? palette.warning.color : palette.secondaryText.color
+                    )
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let forecast {
+                if appearance.showForecast, let forecast {
                     Text(forecast)
                         .font(Theme.captionFont)
-                        .foregroundStyle(Theme.critical)
+                        .foregroundStyle(palette.critical.color)
                 }
             }
 
             Spacer(minLength: 8)
 
-            Button(action: onRefresh) {
-                Text(model.isRefreshing ? "…" : "⟳")
-                    .font(Theme.footerFont)
-                    .foregroundStyle(Theme.secondaryText)
+            HStack(spacing: 10) {
+                Button(action: onSettings) {
+                    Text("⚙")
+                        .font(Theme.footerFont)
+                        .foregroundStyle(palette.secondaryText.color)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("настройки")
+
+                Button(action: onRefresh) {
+                    Text(model.isRefreshing ? "…" : "⟳")
+                        .font(Theme.footerFont)
+                        .foregroundStyle(palette.secondaryText.color)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("обновить")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("обновить")
         }
     }
 

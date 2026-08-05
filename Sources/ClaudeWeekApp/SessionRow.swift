@@ -13,14 +13,16 @@ struct SessionBar: View {
     let isWarning: Bool
     let animated: Bool
 
+    @Environment(\.palette) private var palette
+
     var body: some View {
         GeometryReader { geometry in
             let filled = CGFloat(min(max(usedPercent, 0), 100) / 100) * geometry.size.width
 
             ZStack(alignment: .leading) {
-                Capsule().fill(Theme.track)
+                Capsule().fill(palette.track.color)
                 Capsule()
-                    .fill(isWarning ? Theme.warning : Theme.good)
+                    .fill(isWarning ? palette.warning.color : palette.good.color)
                     .frame(width: filled)
             }
             .animation(animated ? .easeOut(duration: Theme.fillAnimation) : nil, value: usedPercent)
@@ -40,6 +42,8 @@ struct SessionRow: View {
     let criticalThreshold: Double
     let animated: Bool
 
+    @Environment(\.palette) private var palette
+
     private var isWarning: Bool {
         session.usedPercent >= criticalThreshold * 100
     }
@@ -49,7 +53,7 @@ struct SessionRow: View {
             HStack(spacing: 8) {
                 Text("5 Ч")
                     .font(Theme.dayFont)
-                    .foregroundStyle(Theme.secondaryText)
+                    .foregroundStyle(palette.secondaryText.color)
                     .frame(width: Theme.dayLabelWidth, alignment: .leading)
 
                 SessionBar(
@@ -62,11 +66,11 @@ struct SessionRow: View {
                     if session.isExhausted {
                         Text("⚠")
                             .font(Theme.dayFont)
-                            .foregroundStyle(Theme.critical)
+                            .foregroundStyle(palette.critical.color)
                     }
                     Text(Formatting.percent(session.usedPercent))
                         .font(Theme.dayFont)
-                        .foregroundStyle(session.isExhausted ? Theme.critical : Theme.primaryText)
+                        .foregroundStyle(session.isExhausted ? palette.critical.color : palette.primaryText.color)
                 }
                 .frame(width: Theme.valueWidth, alignment: .trailing)
             }
@@ -75,7 +79,7 @@ struct SessionRow: View {
             // десять минут до конца окна и 90 % за четыре часа значат разное.
             Text(caption)
                 .font(Theme.captionFont)
-                .foregroundStyle(session.isExhausted ? Theme.critical : Theme.secondaryText)
+                .foregroundStyle(session.isExhausted ? palette.critical.color : palette.secondaryText.color)
                 .padding(.leading, Theme.dayLabelWidth + 8)
         }
         .accessibilityElement(children: .ignore)
