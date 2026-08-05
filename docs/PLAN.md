@@ -267,6 +267,7 @@ ClaudeWeek/
 │   │   ├── OfficialProvider.swift # /api/oauth/usage, декодер, троттлинг, backoff
 │   │   ├── ResolvingProvider.swift# выбор источника и запись кеша
 │   │   ├── Keychain.swift         # OAuth-креды Claude Code
+│   │   ├── ManualToken.swift      # свой токен в отдельной записи Keychain
 │   │   ├── ISO8601.swift          # разбор меток времени обоих видов
 │   │   ├── Formatting.swift       # «3 дн 6 ч», проценты, дни недели
 │   │   ├── Log.swift              # уровни лога в stderr
@@ -281,7 +282,9 @@ ClaudeWeek/
 │   │   ├── DayBar.swift           # одна двухцветная полоса и строка дня
 │   │   ├── SessionRow.swift       # полоса пятичасовой сессии над сутками
 │   │   ├── MenuBarBar.swift       # иконка строки меню: полоса и процент
-│   │   ├── Theme.swift            # цвета/шрифты/отступы
+│   │   ├── Theme.swift            # палитры тем, шрифты, отступы
+│   │   ├── SettingsWindow.swift   # окно настроек: модель и применение
+│   │   ├── SettingsView.swift     # четыре вкладки настроек и предпросмотр
 │   │   ├── ConfigStamp.swift      # отпечаток конфига для перечитывания
 │   │   ├── Screenshot.swift       # --screenshot: панель в PNG, обе темы
 │   │   └── AppIcon.swift          # --icon: .iconset для сборки бандла
@@ -291,7 +294,12 @@ ClaudeWeek/
 │   ├── install-agent.sh           # LaunchAgent автозапуска
 │   └── uninstall-agent.sh         # снять агент и удалить приложение
 ├── Resources/Info.plist
-└── docs/PLAN.md
+└── docs/
+    ├── PLAN.md                    # этот документ
+    ├── ARCHITECTURE.md            # карта кода: кто за что отвечает
+    ├── API.md                     # официальный источник
+    ├── ROADMAP.md                 # чего не хватает
+    └── images/                    # картинки README, рисует --screenshot
 ```
 
 Ядро отделено от UI намеренно: расчёт окна и плана — самая ошибкоопасная часть

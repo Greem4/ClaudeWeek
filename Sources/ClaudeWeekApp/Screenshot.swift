@@ -40,29 +40,51 @@ enum Screenshot {
             return 1
         }
 
-        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            guard let image = image(model: model, appearance: appearance) else {
-                FileHandle.standardError.write(Data("не отрисовал \(name)\n".utf8))
-                return 1
-            }
-            guard let tiff = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff),
-                  let png = bitmap.representation(using: .png, properties: [:]),
-                  let strip = menuBarPNG(model: model, appearance: appearance)
-            else {
-                FileHandle.standardError.write(Data("не отрисовал \(name)\n".utf8))
-                return 1
-            }
-
-            for (file, data) in [("panel-\(name).png", png), ("menubar-\(name).png", strip)] {
-                let url = directory.appendingPathComponent(file)
-                do {
-                    try data.write(to: url)
-                    print(url.path)
-                } catch {
-                    FileHandle.standardError.write(Data("не сохранил \(url.path): \(error)\n".utf8))
+        // Каждая тема в обеих системных оформлениях: галерея в README должна
+        // показывать, что палитра выбирается, а не подбирается пересборкой.
+        for theme in ThemeKind.allCases {
+            model.config.appearance.theme = theme
+            for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+                guard let image = image(model: model, appearance: appearance),
+                      let tiff = image.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiff),
+                      let png = bitmap.representation(using: .png, properties: [:])
+                else {
+                    FileHandle.standardError.write(Data("не отрисовал \(theme.rawValue) \(name)\n".utf8))
                     return 1
                 }
+
+                // Родная палитра лежит и под коротким именем: на неё ссылаются
+                // README и прежние ссылки в задачах.
+                var files = ["panel-\(theme.rawValue)-\(name).png"]
+                if theme == .system { files.append("panel-\(name).png") }
+
+                for file in files {
+                    let url = directory.appendingPathComponent(file)
+                    do {
+                        try png.write(to: url)
+                        print(url.path)
+                    } catch {
+                        FileHandle.standardError.write(Data("не сохранил \(url.path): \(error)\n".utf8))
+                        return 1
+                    }
+                }
+            }
+        }
+
+        model.config.appearance.theme = config.appearance.theme
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            guard let strip = menuBarPNG(model: model, appearance: appearance) else {
+                FileHandle.standardError.write(Data("не отрисовал иконку \(name)\n".utf8))
+                return 1
+            }
+            let url = directory.appendingPathComponent("menubar-\(name).png")
+            do {
+                try strip.write(to: url)
+                print(url.path)
+            } catch {
+                FileHandle.standardError.write(Data("не сохранил \(url.path): \(error)\n".utf8))
+                return 1
             }
         }
         return 0

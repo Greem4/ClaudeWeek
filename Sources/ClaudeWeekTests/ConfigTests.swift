@@ -87,6 +87,63 @@ func runConfigTests(_ t: Harness) {
         t.equal(back.calibration.at, at(2026, 8, 4, 12, 0), "дата калибровки пережила запись")
     }
 
+    t.suite("конфиг: внешний вид") {
+        let d = Config.default
+        t.equal(d.appearance.theme, .system, "тема по умолчанию — системная")
+        t.equal(d.appearance.transparentPanel, true, "панель по умолчанию прозрачная")
+        t.equal(d.authSource, .claudeCode, "токен по умолчанию — из Claude Code")
+
+        var c = Config.default
+        c.appearance.panelTintOpacity = 3
+        c.appearance.cornerRadius = 99
+        let v = c.validated()
+        t.equal(v.appearance.panelTintOpacity, 1, "плотность фона зажимается в 0…1")
+        t.equal(v.appearance.cornerRadius, 24, "скругление зажимается в 0…24")
+
+        var negative = Config.default
+        negative.appearance.panelTintOpacity = -0.5
+        t.equal(negative.validated().appearance.panelTintOpacity, 0, "отрицательная плотность обнуляется")
+    }
+
+    t.suite("конфиг: внешний вид переживает файл") {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-week-test-\(UUID().uuidString)/config.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        var c = Config.default
+        c.appearance = AppearanceConfig(
+            theme: .midnight,
+            transparentPanel: false,
+            panelTintOpacity: 0.7,
+            cornerRadius: 6,
+            showSession: false,
+            showForecast: false
+        )
+        c.authSource = .manual
+        do {
+            try ConfigStore.save(c, to: url)
+        } catch {
+            t.fail("запись конфига упала: \(error)")
+            return
+        }
+        let back = ConfigStore.load(from: url)
+        t.equal(back.appearance.theme, .midnight, "тема пережила запись")
+        t.equal(back.appearance.transparentPanel, false, "выключенная прозрачность пережила запись")
+        t.equal(back.appearance.panelTintOpacity, 0.7, "плотность пережила запись")
+        t.equal(back.appearance.showSession, false, "скрытая сессия пережила запись")
+        t.equal(back.authSource, .manual, "источник токена пережил запись")
+    }
+
+    t.suite("конфиг: старый файл без внешнего вида") {
+        // Конфиг, написанный прошлой версией: новых ключей в нём нет,
+        // и появиться они должны дефолтными, а не уронить разбор.
+        let url = tempFile(#"{ "resetHour": 9, "provider": "local" }"#)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let c = ConfigStore.load(from: url)
+        t.equal(c.resetHour, 9, "старое поле прочиталось")
+        t.equal(c.appearance, AppearanceConfig(), "внешний вид взялся из дефолтов")
+        t.equal(c.authSource, .claudeCode, "источник токена взялся из дефолтов")
+    }
+
     t.suite("конфиг: календарь") {
         let calendar = config(tz: "Europe/Saratov").calendar
         t.equal(calendar.timeZone.identifier, "Europe/Saratov", "таймзона из конфига")
