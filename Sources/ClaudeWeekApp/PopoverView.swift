@@ -2,6 +2,7 @@ import SwiftUI
 import ClaudeWeekCore
 
 /// Панель недели: заголовок, семь двухцветных полос, футер с итогами.
+/// Полос всегда семь — по дням недели, день сброса одной строкой.
 struct PopoverView: View {
     @Bindable var model: PanelModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -26,6 +27,9 @@ struct PopoverView: View {
                     now: model.now,
                     criticalThreshold: model.config.thresholds.critical,
                     resetDisplay: appearance.sessionReset,
+                    showLabel: appearance.showSessionLabel,
+                    source: model.sourceState,
+                    sourceHint: model.sourceHint,
                     calendar: model.config.calendar,
                     animated: !reduceMotion
                 )
@@ -84,11 +88,10 @@ struct PopoverView: View {
 
                 Spacer(minLength: 4)
 
-                // Момент сброса — по своей зоне, с московским временем рядом:
-                // сбрасывается лимит в 12:00 UTC, а в обсуждениях его зовут
-                // «пятница, 15:00», и без пересчёта эти два числа спорят.
-                // Прежняя подпись «≈14 % в сутки» отсюда ушла: сутки на краях
-                // недели неполные, и общей скорости у строк больше нет.
+                // Момент сброса — в зоне окна, той же, по которой считаются
+                // сутки. Ни московского времени для сверки, ни прежних
+                // «≈14 % в сутки» здесь нет: строке заголовка хватает одного
+                // числа, а два подряд читались как спорящие.
                 if let window = model.snapshot?.window {
                     Text(Formatting.resetLabel(window))
                         .font(Theme.captionFont)
@@ -113,14 +116,16 @@ struct PopoverView: View {
 
     private func days(_ snapshot: UsageSnapshot) -> some View {
         let calendar = snapshot.window.calendar
+        // Строк ровно семь. День сброса стоит одной: пока неделя катится — её
+        // вечером после сброса, в последние сутки окна — утром перед следующим.
         return VStack(spacing: Theme.rowSpacing) {
-            ForEach(snapshot.byDay, id: \.index) { day in
+            ForEach(snapshot.rows(at: model.now), id: \.index) { day in
                 DayRow(
                     day: day,
                     label: Formatting.weekdayShort(day.start, calendar: calendar),
                     fullLabel: Formatting.weekdayFull(day.start, calendar: calendar),
-                    // Крайние строки — обрезанные пятницы: одинаковая подпись,
-                    // разные часы. Интервал уточняет, какая из них какая.
+                    // День сброса короче суток: интервал поясняет, какая из
+                    // его половин сейчас на строке.
                     interval: day.isPartial ? Formatting.interval(day.start, day.end, calendar: calendar) : nil,
                     isToday: day.index == model.todayIndex,
                     animated: !reduceMotion
@@ -195,14 +200,11 @@ struct PopoverView: View {
         if model.state == .exhausted {
             return "лимит недели исчерпан · сброс через \(Formatting.duration(metrics.timeLeft))"
         }
-        var parts = [
-            "осталось \(Formatting.percent(metrics.remainingPercent))",
-            "сброс через \(Formatting.duration(metrics.timeLeft))",
-        ]
-        if let rate = metrics.burnRate {
-            parts.append("темп \(Formatting.rate(rate))")
-        }
-        return parts.joined(separator: " · ")
+        // Темпа «1.0×» здесь больше нет: то же самое видно по расхождению
+        // зелёной и синей полос, а числом это читалось как ещё один лимит.
+        // Когда темп ведёт к беде, о ней говорит строка прогноза ниже.
+        return "осталось \(Formatting.percent(metrics.remainingPercent))"
+            + " · сброс через \(Formatting.duration(metrics.timeLeft))"
     }
 
     /// Вторая строка футера появляется только когда при нынешнем темпе лимит

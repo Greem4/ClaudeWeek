@@ -1,16 +1,16 @@
 import Foundation
 
 /// Одни сутки недельного окна — календарные, от местной полуночи до местной
-/// полуночи. Крайние строки окна короче: сброс приходится на середину суток.
+/// полуночи. Крайние сутки короче: сброс приходится на середину суток.
 public struct WeekDaySlot: Sendable, Equatable {
     public let index: Int
     public let start: Date
     public let end: Date
-    /// План на опорной точке суток (`planAnchor`), в процентах.
+    /// Накопительный план к концу этих суток, в процентах от недельного лимита.
     public let planPercent: Double
-    /// Сутки урезаны границей окна: вечер пятницы после сброса или её утро
-    /// до следующего. Полосе это не мешает, но подпись без пояснения
-    /// показывала бы два одинаковых «ПТ» с несопоставимыми процентами.
+    /// Сутки урезаны границей окна: вечер дня сброса после него или утро того
+    /// же дня недели перед следующим. На панели эти две половины делят одну
+    /// строку — показывается та, что идёт сейчас.
     public let isPartial: Bool
 
     public init(index: Int, start: Date, end: Date, planPercent: Double, isPartial: Bool = false) {
@@ -31,17 +31,16 @@ public struct WeekWindow: Sendable, Equatable {
     public let start: Date
     public let end: Date
     public let calendar: Calendar
-    public let anchor: PlanAnchor
     /// Часы, в которые план растёт. Всё остальное время он стоит.
     public let workHours: WorkHours
-    /// Границы строк панели: старт окна, каждая местная полночь внутри него,
-    /// конец окна. Отсюда и число строк, и их план.
+    /// Границы суток окна: старт окна, каждая местная полночь внутри него,
+    /// конец окна. Отсюда и число суток, и их план.
     public let dayBounds: [Date]
     /// Рабочих секунд во всём окне — знаменатель плана.
     private let workTotal: TimeInterval
 
-    /// Длина окна в сутках. Строк на панели может быть больше: сброс редко
-    /// попадает в полночь, и тогда неделя накрывает восемь местных дат.
+    /// Длина окна в сутках. Календарных дат неделя накрывает больше: сброс
+    /// редко попадает в полночь, и тогда день сброса разрезан надвое.
     public static let daysInWeek = 7
 
     public init(containing date: Date, config: Config) {
@@ -73,7 +72,6 @@ public struct WeekWindow: Sendable, Equatable {
             start: start,
             end: calendar.date(byAdding: .day, value: WeekWindow.daysInWeek, to: start) ?? start,
             calendar: calendar,
-            anchor: config.planAnchor,
             workHours: config.workHours
         )
     }
@@ -90,7 +88,6 @@ public struct WeekWindow: Sendable, Equatable {
             start: calendar.date(byAdding: .day, value: -WeekWindow.daysInWeek, to: end) ?? end,
             end: end,
             calendar: calendar,
-            anchor: config.planAnchor,
             workHours: config.workHours
         )
     }
@@ -99,26 +96,25 @@ public struct WeekWindow: Sendable, Equatable {
         start: Date,
         end: Date,
         calendar: Calendar,
-        anchor: PlanAnchor,
         workHours: WorkHours = WorkHours.default
     ) {
         self.start = start
         self.end = end
         self.calendar = calendar
-        self.anchor = anchor
         self.workHours = workHours
         self.dayBounds = WeekWindow.bounds(from: start, to: end, calendar: calendar)
         self.workTotal = workHours.seconds(from: start, to: end, calendar: calendar)
     }
 
-    /// Границы суток панели. Сутки календарные, а не «от сброса до сброса»:
+    /// Границы суток окна. Сутки календарные, а не «от сброса до сброса»:
     /// человек живёт по местной полуночи, и строка «СР» должна подсветиться
     /// в среду утром, а не в 16:00, когда начинаются сутки окна с этой датой.
     ///
-    /// Плата за это — крайние строки: при сбросе в 16:00 неделя начинается
-    /// вечером пятницы (8 часов) и заканчивается её же утром (16 часов), так
-    /// что строк восемь, а не семь. Проценты плана считаются по времени, а не
-    /// по номеру строки, поэтому обрезанные сутки получают свою долю честно.
+    /// Плата за это — края: при сбросе в 16:00 неделя начинается вечером
+    /// пятницы (8 часов) и заканчивается её же утром (16 часов), так что
+    /// календарных суток выходит восемь, а не семь. На панель они всё равно
+    /// ложатся семью строками (см. `rows(at:)`), а проценты плана считаются
+    /// по времени, а не по номеру суток, — обрезанные получают свою долю честно.
     private static func bounds(from start: Date, to end: Date, calendar: Calendar) -> [Date] {
         guard end > start else { return [start, end] }
         var result = [start]
@@ -213,29 +209,25 @@ public struct WeekWindow: Sendable, Equatable {
         date >= start && date < end
     }
 
-    /// Сколько строк на панели: семь при сбросе ровно в полночь, иначе восемь.
+    /// Сколько календарных суток накрывает окно: семь при сбросе ровно
+    /// в полночь, иначе восемь — день сброса попадает в него дважды.
     public var slotCount: Int { max(dayBounds.count - 1, 0) }
 
-    /// Начало строки `index`; на `slotCount` возвращает конец окна — так
+    /// Начало суток `index`; на `slotCount` возвращает конец окна — так
     /// проверяется «эти сутки ещё не наступили».
     public func dayStart(_ index: Int) -> Date {
         guard index >= 0, index < dayBounds.count else { return index < 0 ? start : end }
         return dayBounds[index]
     }
 
-    /// План строки: сколько всего допустимо потратить к концу её суток
-    /// (`endOfDay`) или к их середине (`midDay`). Середина — половина
-    /// рабочего времени строки, а не полдень: у суток с двумя рабочими
-    /// часами и у суток с тринадцатью середина плана разная.
+    /// Накопительный план суток: сколько всего допустимо потратить к их концу.
     ///
-    /// Считается по рабочим часам, а не по номеру строки: сутки бывают
-    /// неполными (края окна) и удлинёнными (перевод часов), и только так ряд
-    /// приходит ровно к 100 % в момент сброса.
-    public func planPercent(forDay index: Int, anchor: PlanAnchor? = nil) -> Double {
+    /// Считается по рабочим часам, а не по номеру суток: они бывают неполными
+    /// (края окна) и удлинёнными (перевод часов), и только так ряд приходит
+    /// ровно к 100 % в момент сброса.
+    public func planPercent(forDay index: Int) -> Double {
         guard index >= 0, index < slotCount else { return 0 }
-        let to = planPercent(at: dayBounds[index + 1])
-        guard (anchor ?? self.anchor) == .midDay else { return to }
-        return (planPercent(at: dayBounds[index]) + to) / 2
+        return planPercent(at: dayBounds[index + 1])
     }
 
     public var days: [WeekDaySlot] {
@@ -252,13 +244,46 @@ public struct WeekWindow: Sendable, Equatable {
         }
     }
 
-    /// Номер строки, в которую попадает `date`; nil — момент вне окна.
+    /// Номер суток окна, в которые попадает `date`; nil — момент вне окна.
     public func dayIndex(for date: Date) -> Int? {
         guard contains(date) else { return nil }
         for index in 0..<slotCount where date < dayBounds[index + 1] {
             return index
         }
         return slotCount - 1
+    }
+
+    // MARK: - Строки панели
+
+    /// Сброс пришёлся не на полночь, и день сброса разрезан надвое: вечер
+    /// открывает окно, утро того же дня недели через семь суток его закрывает.
+    public var splitsResetDay: Bool { slotCount > WeekWindow.daysInWeek }
+
+    /// Строк на панели всегда семь: день сброса занимает одну, а не две.
+    public var rowCount: Int { min(slotCount, WeekWindow.daysInWeek) }
+
+    /// Какие сутки окна показывать строками на момент `date`.
+    ///
+    /// Двух пятниц в списке быть не должно: это один день недели, просто
+    /// разрезанный сбросом, и рядом они спорят несопоставимыми процентами.
+    /// Поэтому показывается та половина, которая идёт сейчас: пока неделя
+    /// катится, строка пятницы — её вечер после сброса (первая строка ряда,
+    /// ~9 %), а с полуночи последних суток окна она превращается в утро перед
+    /// следующим сбросом и встаёт в конец ряда, доводя план до 100 %.
+    public func rowSlots(at date: Date) -> Range<Int> {
+        guard splitsResetDay else { return 0..<slotCount }
+        let lastDayStart = dayBounds[slotCount - 1]
+        let offset = date >= lastDayStart ? 1 : 0
+        return offset..<(offset + rowCount)
+    }
+
+    /// Строки панели на момент `date`. Номера суток сохраняются: по ним
+    /// подтягивается факт и подсвечивается текущая строка.
+    public func rows(at date: Date) -> [WeekDaySlot] {
+        let days = days
+        return rowSlots(at: date).compactMap { index in
+            days.indices.contains(index) ? days[index] : nil
+        }
     }
 
     public func timeLeft(from date: Date) -> TimeInterval {

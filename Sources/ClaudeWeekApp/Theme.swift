@@ -215,6 +215,11 @@ enum Theme {
     static let dayLabelWidth: CGFloat = 30
     static let valueWidth: CGFloat = 96
     static let fillAnimation: TimeInterval = 0.35
+    /// Кружок источника — вровень с полосой, рядом с которой стоит.
+    static let sourceDotSize: CGFloat = 9
+    /// Контур у него заметно толще волосяного: на кружке в 9 pt тонкая линия
+    /// на прозрачном фоне читается как грязь, а не как «не залито».
+    static let sourceDotStroke: CGFloat = 1.5
 
     /// Потолок вуали поверх материала. Единица шкалы — не «непрозрачный фон»:
     /// плотная вуаль съедает размытие, и прозрачный режим переставал

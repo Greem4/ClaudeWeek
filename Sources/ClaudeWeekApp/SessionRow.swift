@@ -43,6 +43,16 @@ struct SessionRow: View {
     /// Каким концом подписан сброс: сколько осталось, во сколько наступит
     /// или и то, и другое.
     let resetDisplay: SessionResetDisplay
+    /// Называть ли подпись словом «сессия». Слева от полосы стоит «5 Ч», и
+    /// повторять то же самое словами нужно не всем. Час сброса остаётся
+    /// в любом случае — он и есть смысл подписи.
+    let showLabel: Bool
+    /// Откуда цифры панели. Кружок висит здесь, а не в заголовке: строка
+    /// сессии есть почти всегда, когда сервер отвечает, и глаз находит её
+    /// первой.
+    let source: SourceState
+    /// Что кружок говорит словами при наведении.
+    let sourceHint: String
     /// Календарь конфига — час сброса показываем в той же зоне, что и всё
     /// остальное в панели, а не в системной.
     let calendar: Calendar
@@ -67,6 +77,8 @@ struct SessionRow: View {
                     isWarning: isWarning,
                     animated: animated
                 )
+
+                SourceDot(state: source, hint: sourceHint)
 
                 HStack(spacing: 3) {
                     if session.isExhausted {
@@ -101,15 +113,24 @@ struct SessionRow: View {
         )
     }
 
+    /// Без метки исчерпанная сессия говорит «лимит исчерпан»: голое
+    /// «исчерпана» осталось бы без подлежащего, а молчать о том, что полоса
+    /// упёрлась в потолок, нельзя.
     private var caption: String {
-        session.isExhausted
-            ? "сессия исчерпана · отпустит \(reset)"
-            : "сессия · сброс \(reset)"
+        if session.isExhausted {
+            return showLabel
+                ? "сессия исчерпана · отпустит \(reset)"
+                : "лимит исчерпан · отпустит \(reset)"
+        }
+        return showLabel ? "сессия · сброс \(reset)" : "сброс \(reset)"
     }
 
     private var voiceOverLabel: String {
         let percent = Formatting.percent(session.usedPercent, withSign: false)
         let verdict = session.isExhausted ? ", лимит исчерпан" : ""
-        return "Пятичасовая сессия, потрачено \(percent) процентов\(verdict), сброс \(reset)"
+        return """
+        Пятичасовая сессия, потрачено \(percent) процентов\(verdict), \
+        сброс \(reset), \(source.spokenName)
+        """
     }
 }

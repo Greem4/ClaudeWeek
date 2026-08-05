@@ -38,34 +38,32 @@ func runPlanTests(_ t: Harness) {
         t.close(window.progress(at: half), 0.5, "и это действительно её середина", tolerance: 0.001)
     }
 
-    // Сутки календарные, поэтому окно ПТ 15:00 → ПТ 15:00 режется на восемь
-    // строк: 9 часов вечера пятницы, шесть полных суток, 15 часов её утра.
-    t.suite("план: ряд midDay") {
+    // Сутки календарные, поэтому окно ПТ 15:00 → ПТ 15:00 режется на восемь:
+    // 9 часов вечера пятницы, шесть полных суток, 15 часов её утра.
+    t.suite("план: накопительный ряд") {
         let row = window.days.map { Int($0.planPercent.rounded()) }
-        t.equal(row, [5, 17, 31, 46, 60, 74, 88, 98], "ряд по рабочим часам суток")
-        t.close(window.planPercent(forDay: 0, anchor: .midDay), 100 * 4.5 / 91,
-                "середина строки — половина её рабочего времени, а не полдень")
-    }
-
-    t.suite("план: ряд endOfDay") {
-        let row = (0..<window.slotCount).map {
-            Int(window.planPercent(forDay: $0, anchor: .endOfDay).rounded())
-        }
-        t.equal(row, [10, 24, 38, 53, 67, 81, 96, 100], "к концу последней строки — ровно 100 %")
+        t.equal(row, [10, 24, 38, 53, 67, 81, 96, 100], "к концу последних суток — ровно 100 %")
         // Полные сутки идут ровно по 13 рабочих часов — те самые «14 % в день».
-        t.close(window.planPercent(forDay: 2, anchor: .endOfDay) - window.planPercent(forDay: 1, anchor: .endOfDay),
+        t.close(window.planPercent(forDay: 2) - window.planPercent(forDay: 1),
                 100 * 13 / 91, "полные сутки весят одинаково")
         // За час до сброса план почти сто: остаток догорит сам.
         t.close(window.planPercent(at: at(2026, 8, 14, 14, 0)), 100 * 90 / 91,
                 "за час до сброса план — 99 %")
     }
 
-    t.suite("план: anchor из конфига") {
-        let midDay = WeekWindow(containing: at(2026, 8, 9, 12, 0), config: config(anchor: .midDay))
-        let endOfDay = WeekWindow(containing: at(2026, 8, 9, 12, 0), config: config(anchor: .endOfDay))
-        t.close(midDay.days[3].planPercent, 100 * 41.5 / 91, "midDay: середина понедельника")
-        t.close(endOfDay.days[endOfDay.slotCount - 1].planPercent, 100,
-                "endOfDay: последняя строка — 100 %")
+    // Ряд на панели: пятница одной строкой, и до 100 % неделю доводит она же.
+    t.suite("план: ряд панели") {
+        let midweek = window.rows(at: at(2026, 8, 9, 12, 0)).map { Int($0.planPercent.rounded()) }
+        t.equal(midweek, [10, 24, 38, 53, 67, 81, 96],
+                "пока неделя катится, ряд заканчивается четвергом на 96 %")
+
+        let lastDay = window.rows(at: at(2026, 8, 14, 9, 0)).map { Int($0.planPercent.rounded()) }
+        t.equal(lastDay, [24, 38, 53, 67, 81, 96, 100],
+                "в последние сутки пятница встаёт в конец и добирает остаток")
+
+        // Обе половины пятницы вместе весят столько же, сколько полные сутки.
+        t.close(window.planPercent(forDay: 0), 100 * 9 / 91, "вечер пятницы — 9 из 91 часа")
+        t.close(100 - window.planPercent(forDay: 6), 100 * 4 / 91, "её утро — оставшиеся 4")
     }
 
     t.suite("метрики") {
@@ -142,18 +140,27 @@ func runPlanTests(_ t: Harness) {
             fetchedAt: now,
             isEstimate: true
         )
-        t.equal(snapshot.byDay.count, 8, "восемь строк: сброс делит пятницу надвое")
+        t.equal(snapshot.byDay.count, 8, "восемь суток: сброс делит пятницу надвое")
         t.equal(snapshot.byDay[0].usedPercent, 10, "факт первых суток")
         t.equal(snapshot.byDay[4].usedPercent, nil, "будущие сутки без факта")
-        t.close(snapshot.byDay[3].overspendPercent, 70 - 100 * 41.5 / 91, "перерасход четвёртых суток")
-        t.close(snapshot.byDay[0].overspendPercent, 10 - 100 * 4.5 / 91, "перерасход первых суток")
-        t.close(snapshot.byDay[1].overspendPercent, 25 - 100 * 15.5 / 91, "перерасход вторых суток")
+        t.close(snapshot.byDay[3].overspendPercent, 70 - 100 * 48 / 91, "перерасход четвёртых суток")
+        t.close(snapshot.byDay[0].overspendPercent, 10 - 100 * 9 / 91, "перерасход первых суток")
+        t.close(snapshot.byDay[1].overspendPercent, 25 - 100 * 22 / 91, "перерасход вторых суток")
         t.close(snapshot.byDay[4].overspendPercent, 0, "у будущих суток перерасхода нет")
 
-        // Обрезанные сутки помечены: подпись дня у них та же, что у полных,
-        // и без пометки панель показала бы две неразличимые пятницы.
+        // Половины дня сброса помечены: подпись дня у них та же, что у полных
+        // суток, а часов меньше.
         t.check(snapshot.byDay[0].isPartial, "вечер пятницы — обрезанные сутки")
         t.check(snapshot.byDay[7].isPartial, "утро пятницы — тоже")
         t.check(!snapshot.byDay[1].isPartial, "суббота — полные сутки")
+
+        // На панель из восьми суток идут семь: пятница одна.
+        let rows = snapshot.rows(at: now)
+        t.equal(rows.count, 7, "строк на панели семь")
+        t.equal(rows.map(\.index), [0, 1, 2, 3, 4, 5, 6], "среди недели — вечер пятницы и до четверга")
+        t.equal(snapshot.rows(at: at(2026, 8, 14, 9, 0)).map(\.index), [1, 2, 3, 4, 5, 6, 7],
+                "в последние сутки — от субботы до утра пятницы")
+        t.equal(snapshot.rows(at: at(2026, 8, 14, 9, 0)).last?.usedPercent, nil,
+                "факт последней строки берётся у её же суток")
     }
 }

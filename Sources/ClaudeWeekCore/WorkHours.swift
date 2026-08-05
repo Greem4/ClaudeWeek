@@ -29,11 +29,31 @@ public struct WorkHours: Codable, Sendable, Equatable, Hashable {
         WorkHours(start: 0, end: 24),
     ]
 
-    /// Подпись для списка: «10:00 – 18:00», «11:00 – полночь».
-    public var title: String {
+    /// Название распорядка: по нему его и выбирают, а часы дописаны рядом,
+    /// чтобы не гадать, что кроется за «вечерним».
+    public var name: String {
         if isAllDay { return "Круглосуточно" }
-        let close = end >= 24 ? "полуночи" : "\(end):00"
-        return "\(start):00 – \(close)"
+        switch (start, end) {
+        case (10, 18): return "Рабочий день"
+        case (10, 22): return "Длинный день"
+        case (11, 24): return "Вечерний"
+        case (9, 22): return "С утра до ночи"
+        default: return "Свои часы"
+        }
+    }
+
+    /// Часы распорядка: «10–18», «11–24».
+    public var range: String { "\(start)–\(end)" }
+
+    /// Подпись для списка: «Рабочий день 10–18», «Круглосуточно».
+    public var title: String {
+        isAllDay ? name : "\(name) \(range)"
+    }
+
+    /// Часы словами: «10:00 – 18:00», «11:00 – полуночи».
+    public var clockRange: String {
+        if isAllDay { return "круглые сутки" }
+        return "\(start):00 – \(end >= 24 ? "полуночи" : "\(end):00")"
     }
 
     public init(start: Int = 11, end: Int = 24) {

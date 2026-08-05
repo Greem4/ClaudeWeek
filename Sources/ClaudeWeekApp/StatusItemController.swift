@@ -194,7 +194,7 @@ final class StatusItemController: NSObject {
             || config.resetWeekday != model.config.resetWeekday
             || config.resetHour != model.config.resetHour
             || config.resetMinute != model.config.resetMinute
-            || config.planAnchor != model.config.planAnchor
+            || config.workHours != model.config.workHours
             || config.weeklyBudget != model.config.weeklyBudget
         // Интервал живёт в таймере, а не в провайдере: не перезапустив таймер,
         // новый интервал ждал бы перезапуска приложения.

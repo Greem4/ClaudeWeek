@@ -56,7 +56,8 @@ enum CLI {
             let end: Date
             let resetLabel: String
             let timeZone: String
-            let planAnchor: String
+            /// Рабочий день, по которому разложен план: «11–24».
+            let workHours: String
         }
 
         struct Percent: Encodable {
@@ -90,8 +91,8 @@ enum CLI {
             let planPercent: Double
             let usedPercent: Double?
             let cost: Double?
-            /// Сутки обрезаны краем недельного окна: у них меньше часов, чем
-            /// у соседних, и сравнивать их проценты в лоб нельзя.
+            /// Половина дня сброса: часов меньше, чем у соседних суток,
+            /// и сравнивать их проценты в лоб нельзя.
             let partial: Bool
 
             enum CodingKeys: String, CodingKey {
@@ -246,7 +247,10 @@ enum CLI {
                 )
             }
 
-        let days = window.days.map { slot in
+        // Те же семь строк, что и на панели: день сброса одной, той его
+        // половиной, что идёт сейчас. `index` — номер суток окна, поэтому
+        // у последней пятницы он седьмой, а не шестой.
+        let days = window.rows(at: now).map { slot in
             Output.Day(
                 index: slot.index,
                 label: Formatting.weekdayShort(slot.start, calendar: window.calendar),
@@ -267,7 +271,7 @@ enum CLI {
                 end: window.end,
                 resetLabel: Formatting.resetLabel(window),
                 timeZone: window.calendar.timeZone.identifier,
-                planAnchor: window.anchor.rawValue
+                workHours: window.workHours.range
             ),
             percent: percent,
             session: session,

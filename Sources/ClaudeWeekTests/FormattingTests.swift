@@ -18,7 +18,6 @@ func runFormattingTests(_ t: Harness) {
         t.equal(Formatting.percent(0), "0 %", "ноль")
         t.equal(Formatting.percent(7.142857), "7 %", "первые сутки плана")
         t.equal(Formatting.percent(50, withSign: false), "50", "без знака процента")
-        t.equal(Formatting.rate(1.42), "1.4×", "темп")
     }
 
     t.suite("форматирование: возраст данных") {

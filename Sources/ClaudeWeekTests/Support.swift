@@ -21,7 +21,6 @@ func config(
     hour: Int = 15,
     minute: Int = 0,
     tz: String = "Europe/Saratov",
-    anchor: PlanAnchor = .midDay,
     work: WorkHours = WorkHours.default
 ) -> Config {
     var c = Config.default
@@ -29,7 +28,6 @@ func config(
     c.resetHour = hour
     c.resetMinute = minute
     c.timeZone = tz
-    c.planAnchor = anchor
     c.workHours = work
     return c
 }

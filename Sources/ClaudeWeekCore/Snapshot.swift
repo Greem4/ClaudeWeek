@@ -5,7 +5,8 @@ public enum SourceKind: String, Codable, Sendable {
     case local
 }
 
-/// Одна строка панели: план на сутки и накопительный факт на их конец.
+/// Одни сутки окна: накопительный план к их концу и такой же накопительный
+/// факт. На панель попадают семь из них — см. `rows(at:)`.
 public struct DayUsage: Sendable, Equatable {
     public let index: Int
     public let start: Date
@@ -13,8 +14,8 @@ public struct DayUsage: Sendable, Equatable {
     public let planPercent: Double
     /// Накопительный расход от начала недели; nil — сутки ещё не наступили.
     public let usedPercent: Double?
-    /// Сутки обрезаны краем недельного окна: у них та же подпись дня, что у
-    /// полных, но меньше часов и меньше плана.
+    /// Сутки обрезаны краем недельного окна: это половина дня сброса —
+    /// у неё та же подпись дня, что у полных суток, но меньше часов и плана.
     public let isPartial: Bool
 
     public init(
@@ -164,6 +165,15 @@ public struct UsageSnapshot: Sendable {
             shapeIsEstimate: shapeIsEstimate,
             session: session
         )
+    }
+
+    /// Строки панели на момент `now`: семь суток, где день сброса представлен
+    /// той своей половиной, которая идёт сейчас. До полуночи последних суток
+    /// окна это вечер после сброса, дальше — утро перед следующим.
+    public func rows(at now: Date) -> [DayUsage] {
+        window.rowSlots(at: now).compactMap { index in
+            byDay.indices.contains(index) ? byDay[index] : nil
+        }
     }
 
     /// Тот же снимок с другой сессией. Нужна потому, что считает неделю один

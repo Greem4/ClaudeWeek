@@ -1,13 +1,5 @@
 import Foundation
 
-/// Опорная точка, на которую считается план в строке дня.
-/// `midDay` даёт ряд 7/21/36/50/64/79/93 (как на исходном скриншоте),
-/// `endOfDay` — 14/29/43/57/71/86/100 (как в подписи к нему).
-public enum PlanAnchor: String, Codable, Sendable, CaseIterable {
-    case midDay
-    case endOfDay
-}
-
 public enum ProviderPreference: String, Codable, Sendable, CaseIterable {
     case official
     case local
@@ -80,6 +72,10 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     public var cornerRadius: Double
     /// Строка пятичасовой сессии над сутками.
     public var showSession: Bool
+    /// Слово «сессия» в подписи под её полосой. Слева от полосы и так стоит
+    /// «5 Ч», и метка повторяет уже сказанное — но час сброса рядом с ней
+    /// остаётся в любом случае.
+    public var showSessionLabel: Bool
     /// Вторая строка футера с прогнозом «кончится в …».
     public var showForecast: Bool
     /// Каким концом подписан сброс сессии.
@@ -91,6 +87,7 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         panelTintOpacity: Double = 0.18,
         cornerRadius: Double = 12,
         showSession: Bool = true,
+        showSessionLabel: Bool = true,
         showForecast: Bool = true,
         sessionReset: SessionResetDisplay = .relative
     ) {
@@ -99,6 +96,7 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         self.panelTintOpacity = panelTintOpacity
         self.cornerRadius = cornerRadius
         self.showSession = showSession
+        self.showSessionLabel = showSessionLabel
         self.showForecast = showForecast
         self.sessionReset = sessionReset
     }
@@ -117,6 +115,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
                 ?? d.panelTintOpacity,
             cornerRadius: try c.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? d.cornerRadius,
             showSession: try c.decodeIfPresent(Bool.self, forKey: .showSession) ?? d.showSession,
+            showSessionLabel: try c.decodeIfPresent(Bool.self, forKey: .showSessionLabel)
+                ?? d.showSessionLabel,
             showForecast: try c.decodeIfPresent(Bool.self, forKey: .showForecast) ?? d.showForecast,
             sessionReset: try c.decodeIfPresent(SessionResetDisplay.self, forKey: .sessionReset)
                 ?? d.sessionReset
@@ -166,7 +166,6 @@ public struct Config: Codable, Sendable, Equatable {
     /// Секунды между опросами, не меньше `minimumRefreshInterval`.
     public var refreshInterval: TimeInterval
     public var provider: ProviderPreference
-    public var planAnchor: PlanAnchor
     /// Часы, между которыми растёт план. Вне их он стоит: недельный лимит
     /// раскладывается по рабочему времени, а не по астрономическому.
     public var workHours: WorkHours
@@ -191,7 +190,6 @@ public struct Config: Codable, Sendable, Equatable {
         timeZone: "Europe/Saratov",
         refreshInterval: 300,
         provider: .auto,
-        planAnchor: .midDay,
         workHours: WorkHours.default,
         menuBarStyle: .percent,
         weeklyBudget: 0,
@@ -207,7 +205,6 @@ public struct Config: Codable, Sendable, Equatable {
         timeZone: String,
         refreshInterval: TimeInterval,
         provider: ProviderPreference,
-        planAnchor: PlanAnchor,
         workHours: WorkHours = WorkHours.default,
         menuBarStyle: MenuBarStyle,
         weeklyBudget: Double,
@@ -221,7 +218,6 @@ public struct Config: Codable, Sendable, Equatable {
         self.timeZone = timeZone
         self.refreshInterval = refreshInterval
         self.provider = provider
-        self.planAnchor = planAnchor
         self.workHours = workHours
         self.menuBarStyle = menuBarStyle
         self.weeklyBudget = weeklyBudget
@@ -242,7 +238,6 @@ public struct Config: Codable, Sendable, Equatable {
             timeZone: try c.decodeIfPresent(String.self, forKey: .timeZone) ?? d.timeZone,
             refreshInterval: try c.decodeIfPresent(TimeInterval.self, forKey: .refreshInterval) ?? d.refreshInterval,
             provider: try c.decodeIfPresent(ProviderPreference.self, forKey: .provider) ?? d.provider,
-            planAnchor: try c.decodeIfPresent(PlanAnchor.self, forKey: .planAnchor) ?? d.planAnchor,
             workHours: try c.decodeIfPresent(WorkHours.self, forKey: .workHours) ?? d.workHours,
             menuBarStyle: try c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle) ?? d.menuBarStyle,
             weeklyBudget: try c.decodeIfPresent(Double.self, forKey: .weeklyBudget) ?? d.weeklyBudget,

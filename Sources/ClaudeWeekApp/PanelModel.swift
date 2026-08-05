@@ -13,6 +13,21 @@ enum PanelStatus: Equatable {
     case failed(String)
 }
 
+/// Откуда пришли цифры — то, что раньше говорила строка под заголовком, а
+/// теперь показывает кружок в строке сессии. Различаются не только цветом:
+/// зелёный и красный при дейтеранопии почти сливаются, поэтому свои цифры
+/// панель заливает кружок целиком, а чужие обводит контуром.
+enum SourceState {
+    /// Свежий ответ сервера — то же число, что в /usage.
+    case synced
+    /// Цифры официальные, но из кеша: сеть или авторизация отвалились.
+    case stale
+    /// Локальная оценка по транскриптам ~/.claude/projects.
+    case local
+    /// Данных нет вовсе — первый запуск или отказ без кеша.
+    case missing
+}
+
 @MainActor
 @Observable
 final class PanelModel {
@@ -41,17 +56,16 @@ final class PanelModel {
         metrics?.state ?? .onTrack
     }
 
-    /// Индекс текущих суток окна — строку подсвечиваем.
+    /// Номер текущих суток окна — их строку подсвечиваем. Совпадает с
+    /// `DayUsage.index`: строки нумеруются сутками окна, а не позицией в ряду.
     var todayIndex: Int? {
         snapshot?.window.dayIndex(for: now)
     }
 
-    /// Сколько строк рисовать до прихода данных. Не константа: неделя
-    /// накрывает семь или восемь местных дат — смотря попадает ли сброс
-    /// в полночь. Ошибиться здесь значит дёрнуть высоту панели в момент,
-    /// когда данные наконец пришли.
+    /// Сколько строк рисовать до прихода данных: столько же, сколько потом,
+    /// иначе панель дёрнется в высоте, когда данные наконец придут.
     var placeholderRows: Int {
-        WeekWindow(containing: now, config: config).slotCount
+        WeekWindow(containing: now, config: config).rowCount
     }
 
     /// Пятичасовая сессия — только пока её окно не истекло. После сброса от
@@ -69,25 +83,33 @@ final class PanelModel {
         return snapshot.isEstimate ? "≈\(value)%" : "\(value)%"
     }
 
-    /// Подпись под заголовком панели: пометка об источнике и свежести.
-    var sourceNote: String? {
-        switch status {
-        case .loading: "получаю данные…"
-        case .failed(let text): text
-        case .stale(let text): text
-        case .ready: readyNote
-        }
+    /// Цвет и форма кружка источника. Устаревшие официальные цифры — это всё
+    /// ещё цифры сервера, поэтому кружок остаётся залитым и лишь желтеет:
+    /// контур означает «посчитано здесь», а не «давно».
+    var sourceState: SourceState {
+        guard let snapshot else { return .missing }
+        if snapshot.isEstimate { return .local }
+        if case .ready = status { return .synced }
+        return .stale
     }
 
-    /// У официального источника точен итог, но не форма недели: разбивка по
-    /// суткам восстановлена из транскриптов. Молчать об этом нельзя — иначе
-    /// приблизительные полосы выглядят как официальные.
-    private var readyNote: String? {
-        guard let snapshot else { return nil }
-        if snapshot.isEstimate {
-            return "оценка по локальным транскриптам, не официальные данные"
+    /// То же словами — подсказка при наведении на кружок. Строки под
+    /// заголовком больше нет, и «нет сети», возраст кеша и оговорка про
+    /// разбивку по суткам живут только здесь.
+    var sourceHint: String {
+        switch status {
+        case .loading: return "получаю данные…"
+        case .failed(let text): return text
+        case .stale(let text): return text
+        case .ready:
+            guard let snapshot else { return "нет данных" }
+            if snapshot.isEstimate {
+                return "оценка по локальным транскриптам, не официальные данные"
+            }
+            return snapshot.shapeIsEstimate
+                ? "официальный итог, разбивка по суткам — оценка"
+                : "официальные данные, как в /usage"
         }
-        return snapshot.shapeIsEstimate ? "официальный итог, разбивка по суткам — оценка" : nil
     }
 
     var isEstimate: Bool { snapshot?.isEstimate ?? false }

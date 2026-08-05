@@ -13,17 +13,19 @@ func runConfigTests(_ t: Harness) {
         let d = Config.default
         t.equal(d.resetWeekday, 6, "сброс в пятницу")
         t.equal(d.resetHour, 16, "сброс в 16:00 — это 15:00 по Москве")
-        t.equal(d.planAnchor, .midDay, "план на середину суток")
+        t.equal(d.workHours, WorkHours(start: 11, end: 24), "рабочий день 11–24")
         t.equal(ConfigStore.load(from: URL(fileURLWithPath: "/nope/нет-такого.json")),
                 Config.default.validated(), "отсутствующий файл — дефолты")
     }
 
     t.suite("конфиг: частичный файл") {
-        // Задано одно поле — остальные должны остаться дефолтными.
-        let url = tempFile(#"{ "planAnchor": "endOfDay" }"#)
+        // Задано одно поле — остальные должны остаться дефолтными. Ключи от
+        // прошлых версий (тот же `planAnchor`) просто игнорируются: настройка
+        // ушла, а конфиг с ней должен читаться как ни в чём не бывало.
+        let url = tempFile(#"{ "workHours": { "start": 10, "end": 18 }, "planAnchor": "midDay" }"#)
         defer { try? FileManager.default.removeItem(at: url) }
         let c = ConfigStore.load(from: url)
-        t.equal(c.planAnchor, .endOfDay, "своё значение прочиталось")
+        t.equal(c.workHours, WorkHours(start: 10, end: 18), "своё значение прочиталось")
         t.equal(c.resetHour, 16, "остальное осталось дефолтным")
     }
 

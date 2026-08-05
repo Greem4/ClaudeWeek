@@ -80,11 +80,6 @@ private struct GeneralSettings: View {
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
-                Picker("План считать на", selection: config.planAnchor) {
-                    Text("середину суток").tag(PlanAnchor.midDay)
-                    Text("конец суток").tag(PlanAnchor.endOfDay)
-                }
             }
 
             Section("Рабочий день") {
@@ -114,6 +109,7 @@ private struct GeneralSettings: View {
                         in: (model.config.workHours.start + 1)...24
                     )
                 }
+                LabeledContent("Получается", value: workHoursSummary)
                 Text(workHoursHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -152,6 +148,14 @@ private struct GeneralSettings: View {
     /// в степпере это край шкалы, и человеку нужно понимать, что дальше некуда.
     private func hourLabel(_ hour: Int) -> String {
         hour >= 24 ? "полуночи" : "\(hour):00"
+    }
+
+    /// «10:00 – 18:00, 8 ч в сутки» — часы словами, чтобы не считать их
+    /// в уме по двум степперам.
+    private var workHoursSummary: String {
+        let work = model.config.workHours
+        guard !work.isAllDay else { return "круглые сутки, 24 ч" }
+        return "\(work.clockRange), \(work.hours) ч в сутки"
     }
 
     private var workHoursHint: String {
@@ -246,11 +250,21 @@ private struct AppearanceSettings: View {
 
             Section("Что показывать") {
                 Toggle("Строку пятичасовой сессии", isOn: appearance.showSession)
+                Toggle("Слово «сессия» в её подписи", isOn: appearance.showSessionLabel)
+                    .disabled(!model.config.appearance.showSession)
                 Toggle("Прогноз «кончится в …»", isOn: appearance.showForecast)
+                Toggle("Пометку «разбивка по суткам — оценка»", isOn: appearance.showSourceNote)
                 Picker("Строка меню", selection: $model.config.menuBarStyle) {
                     Text("Полоса и процент").tag(MenuBarStyle.percent)
                     Text("Только полоса").tag(MenuBarStyle.compact)
                 }
+                Text("""
+                Пометку об оценке видно только там, где цифры и правда \
+                приблизительные. Сбои и возраст данных она не прячет: \
+                «нет сети» и «данные 20 мин назад» панель говорит всегда.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section("Сброс сессии") {
