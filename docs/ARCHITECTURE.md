@@ -282,22 +282,29 @@ swift build                     # оба таргета
 swift run ClaudeWeekTests       # 307 проверок, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./Scripts/make-app.sh           # собрать dist/ClaudeWeek.app
-./Scripts/make-dmg.sh           # упаковать бандл в dist/ClaudeWeek-<версия>.dmg
+./Scripts/make-dmg.sh           # упаковать бандл в dist/ClaudeWeek-<версия>[-арх].dmg
 ./Scripts/install-agent.sh      # пересобрать, снести старую версию, поставить и запустить
 ./Scripts/uninstall-agent.sh    # снять агент и удалить приложение
 ```
 
-`UNIVERSAL=1` перед `make-app.sh` или `make-dmg.sh` даёт бандл на обе
-архитектуры: скрипт собирает `--arch arm64` и `--arch x86_64` по отдельности и
-склеивает `lipo`. Одним проходом (`swift build --arch arm64 --arch x86_64`) это
-не делается — тот путь требует полного Xcode, а раздельный идёт и на Command
-Line Tools.
+`ARCH=arm64` или `ARCH=x86_64` перед `make-app.sh` или `make-dmg.sh` собирает
+бандл под одну заданную архитектуру, `UNIVERSAL=1` — под обе сразу, через
+`lipo`. Одним проходом (`swift build --arch arm64 --arch x86_64`) универсальный
+не делается: тот путь требует полного Xcode, а раздельные проходы идут и на
+Command Line Tools. Суффикс в имени образа `make-dmg.sh` берёт не из `ARCH`,
+а из `lipo -archs` готового бинаря — при `SKIP_BUILD=1` своего `ARCH` может и
+не быть, а называться образ должен по тому, что в нём лежит.
 
 Те же команды гоняет CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
 на каждый push и pull request. Релиз собирает
 [`release.yml`](../.github/workflows/release.yml) по тегу `vX.Y.Z`: сверяет тег
-с `Version.swift`, прогоняет проверки, кладёт в Releases универсальный `.dmg`
-и его контрольную сумму.
+с `Version.swift`, прогоняет проверки, кладёт в Releases `.dmg` под Apple
+Silicon и его контрольную сумму.
+
+Intel в релизы не уезжает: раннер arm64, готовый Intel-бинарь на нём не
+запустить (иконку бандлу делает сам бинарь — без Rosetta шаг молча отваливается,
+и образ уедет без иконки), а нативного Intel-раннера в проекте нет. Кому нужен
+Intel — собирает у себя, `install-agent.sh` соберёт нативно.
 
 Тесты — свой раннер (`Sources/ClaudeWeekTests/Harness.swift`): `t.suite(...)`,
 `t.equal(...)`, `t.fail(...)`. Сети в них нет: официальный источник

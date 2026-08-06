@@ -43,10 +43,13 @@ ID, ни платной подписки разработчика не нужн�
 xattr -dr com.apple.quarantine /Applications/ClaudeWeek.app
 ```
 
-Образ универсальный (Apple Silicon и Intel) и подписан ad-hoc, без Apple
+Образ собран под Apple Silicon (M1 и новее) и подписан ad-hoc, без Apple
 Developer ID, — потому Gatekeeper и просит подтверждения. Кто предпочитает не
 верить чужому бинарю, собирает из исходников: там ровно те же три команды, что
 выполняет CI.
+
+На Intel готового образа нет — только сборка из исходников, разделом ниже. Она
+там работает, но регулярно её никто не проверяет.
 
 ### Из исходников
 
@@ -97,13 +100,13 @@ Claude Code из Keychain — только читает, наружу не от�
 swift build                  # обе цели, без предупреждений
 swift run ClaudeWeekTests    # 307 проверок: без сети, без UI, свой раннер
 ./Scripts/make-app.sh        # dist/ClaudeWeek.app — бандл, ничего не устанавливая
-UNIVERSAL=1 ./Scripts/make-dmg.sh   # dist/ClaudeWeek-<версия>.dmg, arm64 + x86_64
+ARCH=arm64 ./Scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
 ```
 
 То же самое гоняет [CI](.github/workflows/ci.yml) на каждый push и pull request.
 Релиз выпускается тегом: `git tag v0.2.0 && git push origin v0.2.0` —
 [workflow](.github/workflows/release.yml) сверит тег с `Version.swift`, прогонит
-проверки, соберёт универсальный образ и выложит его в Releases вместе с
+проверки, соберёт образ под Apple Silicon и выложит его в Releases вместе с
 контрольной суммой.
 
 Библиотека и два исполняемых таргета: `ClaudeWeekCore` — расчёты без единого

@@ -3,30 +3,45 @@
 # Xcode не требуется — хватает Command Line Tools.
 #
 #   ./Scripts/make-app.sh              бандл под свою архитектуру
+#   ARCH=arm64 ./Scripts/make-app.sh   бандл под конкретную архитектуру (arm64|x86_64)
 #   UNIVERSAL=1 ./Scripts/make-app.sh  универсальный бандл (arm64 + x86_64)
 #
 # Универсальный собирается двумя проходами и склейкой lipo, а не одним
 # `swift build --arch arm64 --arch x86_64`: тот требует полного Xcode, а
-# отдельные проходы идут и на голых Command Line Tools.
+# отдельные проходы идут и на голых Command Line Tools. По той же причине
+# ARCH тоже даёт отдельный проход — просто без склейки, один срез как есть.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
 UNIVERSAL="${UNIVERSAL:-0}"
+ARCH="${ARCH:-}"
 APP="$ROOT/dist/ClaudeWeek.app"
 
 cd "$ROOT"
 
+# Результат отдаёт через глобальный SLICE, а не печатью на stdout: вызов внутри
+# `$(...)` увёл бы туда же вывод самой сборки, а `exit 1` при ненайденном
+# бинаре погасил бы только подоболочку, и скрипт поехал бы дальше.
+SLICE=""
+build_slice() {
+    local arch="$1"
+    echo "==> swift build -c $CONFIG --arch $arch"
+    swift build -c "$CONFIG" --arch "$arch" --product ClaudeWeekApp
+    SLICE="$(swift build -c "$CONFIG" --arch "$arch" --product ClaudeWeekApp \
+        --show-bin-path)/ClaudeWeekApp"
+    [ -x "$SLICE" ] || { echo "не нашёл бинарь $arch: $SLICE" >&2; exit 1; }
+}
+
 SLICES=()
 if [ "$UNIVERSAL" = "1" ]; then
-    for ARCH in arm64 x86_64; do
-        echo "==> swift build -c $CONFIG --arch $ARCH"
-        swift build -c "$CONFIG" --arch "$ARCH" --product ClaudeWeekApp
-        SLICE="$(swift build -c "$CONFIG" --arch "$ARCH" --product ClaudeWeekApp \
-            --show-bin-path)/ClaudeWeekApp"
-        [ -x "$SLICE" ] || { echo "не нашёл бинарь $ARCH: $SLICE" >&2; exit 1; }
+    for A in arm64 x86_64; do
+        build_slice "$A"
         SLICES+=("$SLICE")
     done
+elif [ -n "$ARCH" ]; then
+    build_slice "$ARCH"
+    SLICES+=("$SLICE")
 else
     echo "==> swift build -c $CONFIG"
     swift build -c "$CONFIG" --product ClaudeWeekApp

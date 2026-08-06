@@ -1,10 +1,16 @@
 #!/bin/bash
-# Пакует ClaudeWeek.app в dist/ClaudeWeek-<версия>.dmg — тот самый файл,
-# который уезжает в GitHub Releases.
+# Пакует ClaudeWeek.app в dist/ClaudeWeek-<версия>[-архитектура].dmg — тот
+# самый файл, который уезжает в GitHub Releases.
 #
 #   ./Scripts/make-dmg.sh              собрать бандл и упаковать
-#   UNIVERSAL=1 ./Scripts/make-dmg.sh  универсальный бандл (arm64 + x86_64)
+#   ARCH=arm64 ./Scripts/make-dmg.sh   бандл под arm64 → ...-arm64.dmg
+#   ARCH=x86_64 ./Scripts/make-dmg.sh  бандл под x86_64 → ...-x86_64.dmg
+#   UNIVERSAL=1 ./Scripts/make-dmg.sh  универсальный бандл, суффикса нет
 #   SKIP_BUILD=1 ./Scripts/make-dmg.sh упаковать уже собранный dist/ClaudeWeek.app
+#
+# Архитектуру для суффикса берём не из ARCH, а из готового бинаря (`lipo
+# -archs`): у SKIP_BUILD=1 своего ARCH может не быть, а образ всё равно
+# должен называться по правде, а не по тому, что попросили собрать.
 #
 # Раскладку окна образа Finder'ом не рисуем: это делается AppleScript'ом,
 # который на машине без графической сессии (то есть в CI) отваливается.
@@ -26,7 +32,15 @@ fi
 # ровно то, что лежит в .app, даже если Version.swift успели поправить.
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
     "$APP/Contents/Info.plist")"
-DMG="$ROOT/dist/ClaudeWeek-$VERSION.dmg"
+
+BUNDLE_ARCHES="$(lipo -archs "$APP/Contents/MacOS/ClaudeWeek")"
+case "$BUNDLE_ARCHES" in
+    "arm64 x86_64"|"x86_64 arm64") SUFFIX="" ;;
+    "arm64")                       SUFFIX="-arm64" ;;
+    "x86_64")                      SUFFIX="-x86_64" ;;
+    *)                             SUFFIX="-${BUNDLE_ARCHES// /-}" ;;
+esac
+DMG="$ROOT/dist/ClaudeWeek-$VERSION$SUFFIX.dmg"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT

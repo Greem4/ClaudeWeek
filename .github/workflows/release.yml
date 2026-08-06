@@ -1,7 +1,11 @@
 name: Release
 
-# Выпуск версии: поставили тег vX.Y.Z — GitHub собрал универсальный образ,
+# Выпуск версии: поставили тег vX.Y.Z — GitHub собрал образ под Apple Silicon,
 # посчитал контрольную сумму и выложил в Releases.
+#
+# Собираем только arm64: Intel-сборку негде честно проверить, а образ, который
+# никто не запускал, обещает больше, чем проект может выдержать. Кому нужен
+# Intel — `./Scripts/install-agent.sh` соберёт нативно на своей машине.
 #
 #   git tag v0.2.0 && git push origin v0.2.0
 #
@@ -21,7 +25,7 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # нужна вся история: заметки собираются от прошлого тега
 
@@ -40,12 +44,12 @@ jobs:
       - name: Проверки
         run: swift run ClaudeWeekTests
 
-      - name: Универсальный образ
-        run: UNIVERSAL=1 ./Scripts/make-dmg.sh
+      - name: Образ — Apple Silicon (arm64)
+        run: ARCH=arm64 ./Scripts/make-dmg.sh
 
       - name: Контрольная сумма
         working-directory: dist
-        run: shasum -a 256 "ClaudeWeek-$VERSION.dmg" | tee SHA256SUMS.txt
+        run: shasum -a 256 "ClaudeWeek-$VERSION-arm64.dmg" | tee SHA256SUMS.txt
 
       - name: Заметки к релизу
         run: |
@@ -53,8 +57,8 @@ jobs:
           {
             echo '## Установка'
             echo
-            echo "Скачайте \`ClaudeWeek-$VERSION.dmg\`, перетащите приложение в Applications"
-            echo 'и снимите карантин:'
+            echo "Скачайте \`ClaudeWeek-$VERSION-arm64.dmg\`, перетащите приложение"
+            echo 'в Applications и снимите карантин:'
             echo
             echo '```bash'
             echo 'xattr -dr com.apple.quarantine /Applications/ClaudeWeek.app'
@@ -64,7 +68,8 @@ jobs:
             echo 'просит подтверждения. Кому это не нравится — собирайте из исходников:'
             echo '`./Scripts/install-agent.sh`.'
             echo
-            echo 'Требуется macOS 14+, образ универсальный: Apple Silicon и Intel.'
+            echo 'Требуется macOS 14+ на Apple Silicon (M1 и новее). Готового образа'
+            echo 'под Intel нет — там сборка из исходников тем же `install-agent.sh`.'
             echo
             echo '## Что изменилось'
             echo
@@ -91,5 +96,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "ClaudeWeek $VERSION" \
             --notes-file dist/NOTES.md \
-            "dist/ClaudeWeek-$VERSION.dmg" \
+            "dist/ClaudeWeek-$VERSION-arm64.dmg" \
             dist/SHA256SUMS.txt
