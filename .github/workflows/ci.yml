@@ -1,0 +1,42 @@
+name: CI
+
+# Каждый push и каждый pull request собираются и прогоняются целиком:
+# сборка без предупреждений, свой тест-раннер, склейка бандла. Последнее —
+# не формальность: бандл клеится скриптом, а не SwiftPM, и ломается он молча.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Сборка и проверки
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Окружение
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Сборка
+        run: swift build
+
+      - name: Проверки
+        run: swift run ClaudeWeekTests
+
+      - name: Бандл ClaudeWeek.app
+        run: ./Scripts/make-app.sh
+
+      - name: Что получилось
+        run: |
+          codesign -dv dist/ClaudeWeek.app 2>&1 | head -5
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            dist/ClaudeWeek.app/Contents/Info.plist

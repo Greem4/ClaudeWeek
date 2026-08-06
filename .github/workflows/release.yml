@@ -1,0 +1,95 @@
+name: Release
+
+# Выпуск версии: поставили тег vX.Y.Z — GitHub собрал универсальный образ,
+# посчитал контрольную сумму и выложил в Releases.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Версия в теге и в Sources/ClaudeWeekCore/Version.swift должны совпадать —
+# иначе сборка останавливается: релиз, чья цифра расходится с той, что
+# программа показывает в «О программе», хуже отсутствующего.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Сборка и публикация
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # нужна вся история: заметки собираются от прошлого тега
+
+      - name: Сверяю тег с Version.swift
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          SRC="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' \
+            Sources/ClaudeWeekCore/Version.swift)"
+          echo "тег: $TAG, Version.swift: $SRC"
+          if [ "$TAG" != "$SRC" ]; then
+            echo "::error::тег $GITHUB_REF_NAME не совпадает с версией $SRC в Version.swift"
+            exit 1
+          fi
+          echo "VERSION=$SRC" >> "$GITHUB_ENV"
+
+      - name: Проверки
+        run: swift run ClaudeWeekTests
+
+      - name: Универсальный образ
+        run: UNIVERSAL=1 ./Scripts/make-dmg.sh
+
+      - name: Контрольная сумма
+        working-directory: dist
+        run: shasum -a 256 "ClaudeWeek-$VERSION.dmg" | tee SHA256SUMS.txt
+
+      - name: Заметки к релизу
+        run: |
+          PREV="$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)"
+          {
+            echo '## Установка'
+            echo
+            echo "Скачайте \`ClaudeWeek-$VERSION.dmg\`, перетащите приложение в Applications"
+            echo 'и снимите карантин:'
+            echo
+            echo '```bash'
+            echo 'xattr -dr com.apple.quarantine /Applications/ClaudeWeek.app'
+            echo '```'
+            echo
+            echo 'Сборка подписана ad-hoc, без Apple Developer ID, поэтому Gatekeeper'
+            echo 'просит подтверждения. Кому это не нравится — собирайте из исходников:'
+            echo '`./Scripts/install-agent.sh`.'
+            echo
+            echo 'Требуется macOS 14+, образ универсальный: Apple Silicon и Intel.'
+            echo
+            echo '## Что изменилось'
+            echo
+            if [ -n "$PREV" ]; then
+              git log --pretty='- %s' "$PREV..$GITHUB_REF_NAME"
+              echo
+              echo "[Все изменения с $PREV](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/$PREV...$GITHUB_REF_NAME)"
+            else
+              echo '- первый релиз'
+            fi
+            echo
+            echo '## Контрольная сумма'
+            echo
+            echo '```'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+          } > dist/NOTES.md
+          cat dist/NOTES.md
+
+      - name: Публикация
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "ClaudeWeek $VERSION" \
+            --notes-file dist/NOTES.md \
+            "dist/ClaudeWeek-$VERSION.dmg" \
+            dist/SHA256SUMS.txt
