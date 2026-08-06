@@ -11,6 +11,11 @@ final class StatusItemController: NSObject {
 
     private var settings: SettingsWindowController?
     private var saveTask: Task<Void, Never>?
+    /// Конфиг, ждущий записи из-под дебаунса. Держим отдельно от захвата в
+    /// замыкании `saveTask`: без него правку, попавшую в эту задержку,
+    /// нечем было бы дописать синхронно на `applicationWillTerminate` —
+    /// `Task.sleep` до выхода просто не успевает.
+    private var pendingConfigWrite: Config?
     private var refreshTimer: Timer?
     private var clockTimer: Timer?
     private var appearanceObserver: NSKeyValueObservation?
@@ -228,17 +233,11 @@ final class StatusItemController: NSObject {
         // Ползунок шлёт по десятку изменений в секунду — на диск ходим
         // с задержкой, применяя к панели каждое сразу.
         saveTask?.cancel()
+        pendingConfigWrite = config
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, let self else { return }
-            do {
-                try ConfigStore.save(config, to: self.configURL)
-                // Свою же запись не перечитываем: отпечаток обновляем сразу,
-                // иначе через минуту конфиг применился бы вторым заходом.
-                self.configStamp = ConfigStamp.current(url: self.configURL)
-            } catch {
-                Log.warn("не сохранил настройки: \(error)")
-            }
+            guard !Task.isCancelled else { return }
+            self?.flushConfigWrite()
         }
 
         guard providerChanged else {
@@ -248,6 +247,25 @@ final class StatusItemController: NSObject {
         provider = ResolvingProvider(config: config)
         startTimers()
         refresh()
+    }
+
+    /// Пишет отложенную правку немедленно, если она ещё не легла на диск.
+    /// Зовётся и таймером дебаунса, и `applicationWillTerminate`: выйти из
+    /// приложения можно в любой момент этих 400 мс, и без досрочного сброса
+    /// последняя двинутая ползунком настройка терялась бы молча.
+    private func flushConfigWrite() {
+        saveTask?.cancel()
+        saveTask = nil
+        guard let config = pendingConfigWrite else { return }
+        pendingConfigWrite = nil
+        do {
+            try ConfigStore.save(config, to: configURL)
+            // Свою же запись не перечитываем: отпечаток обновляем сразу,
+            // иначе через минуту конфиг применился бы вторым заходом.
+            configStamp = ConfigStamp.current(url: configURL)
+        } catch {
+            Log.warn("не сохранил настройки: \(error)")
+        }
     }
 
     /// Одна честная попытка сходить в официальный источник — чтобы кнопка
@@ -320,6 +338,10 @@ final class StatusItemController: NSObject {
             self, selector: #selector(timeZoneChanged),
             name: .NSSystemTimeZoneDidChange, object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(applicationWillTerminate),
+            name: NSApplication.willTerminateNotification, object: nil
+        )
     }
 
     /// Пока Mac спит, тикать некуда: гасим таймер, чтобы не копить
@@ -341,6 +363,14 @@ final class StatusItemController: NSObject {
         Log.info("сменилась системная таймзона, пересчитываю окно")
         tick()
         refresh()
+    }
+
+    /// Приложение выходит — дебаунс записи конфига (400 мс) больше нечем
+    /// довести до конца: `Task.sleep` внутри него до этого момента не успеет.
+    /// Без сброса здесь последняя правка ползунком, сделанная перед самым
+    /// выходом («Выйти» в меню сразу после смены темы), терялась бы молча.
+    @objc private func applicationWillTerminate() {
+        flushConfigWrite()
     }
 
     private func reloadConfigIfChanged() {
