@@ -445,7 +445,7 @@ ClaudeWeek --verbose       подробный лог в stderr
 Проверки:
 
 ```bash
-swift run ClaudeWeekTests      # 247 проверок, без сети и без UI
+swift run ClaudeWeekTests      # 299 проверок, без сети и без UI
 swift build                    # сборка обоих таргетов, без предупреждений
 ```
 

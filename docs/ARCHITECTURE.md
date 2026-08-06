@@ -272,7 +272,7 @@ swift Scripts/probe-usage.swift    # один запрос, печатает о�
 
 ```bash
 swift build                     # оба таргета
-swift run ClaudeWeekTests       # 247 проверок, без сети и без UI
+swift run ClaudeWeekTests       # 299 проверок, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./Scripts/make-app.sh           # собрать dist/ClaudeWeek.app
 ./Scripts/install-agent.sh      # пересобрать, снести старую версию, поставить и запустить
@@ -290,6 +290,14 @@ swift run ClaudeWeekApp         # запустить из исходников (
   привязано к подписи, а она ad-hoc и меняется. Это не баг.
 - **`swift run ClaudeWeekApp` даёт вторую иконку** рядом с установленной
   копией. Для проверки живьём лучше `./Scripts/install-agent.sh`.
+- **`isOnActiveSpace` бесполезен для окна с `.canJoinAllSpaces`.** Панель
+  (`DropdownPanel`, `MenuPanel`) показывается на всех столах, и вопрос «на
+  активном ли я столе» для такого окна не имеет ответа — пока оно видимо,
+  свойство всегда `true`, независимо от того, какой стол видит человек (аудит
+  2026-08-06 нашёл на этом три мёртвые проверки — панель не открывалась на
+  части столов). Состояние «показана» и решение о закрытии на смене стола
+  ведём сами, окно не спрашиваем. У обычного окна (`.moveToActiveSpace`,
+  `SettingsWindow`) то же свойство отвечает честно — там спрашивать можно.
 - **Swift 6, строгая изоляция.** Колбэки AppKit (`Timer`,
   `NSEvent.addLocalMonitorForEvents`) не изолированы: внутри —
   `MainActor.assumeIsolated { … }`, и возвращать из него можно только
