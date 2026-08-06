@@ -5,8 +5,8 @@ import Foundation
 /// Без них план шёл по астрономическому времени: каждый час недели весил
 /// 0,6 %, и треть бюджета доставалась сну. На краях окна это видно в лоб —
 /// при сбросе в 16:00 вечеру пятницы (8 часов, из них рабочие все) отводилось
-/// 4,8 %, а её утру (16 часов, из них 9 — сон) вдвое больше. Считая по
-/// рабочим часам, обе половины получают по своим делам: 8,8 % и 5,5 %.
+/// 4,8 %, а её утру (16 часов, из которых рабочих только 5) вдвое больше.
+/// Считая по рабочим часам, обе половины получают по своим делам: 8,8 % и 5,5 %.
 ///
 /// Ночные часы плана не двигают вовсе. Отсюда и обратная сторона: работа в
 /// три ночи ложится в перерасход целиком — плана на этот час нет.
@@ -96,8 +96,10 @@ public struct WorkHours: Codable, Sendable, Equatable, Hashable {
     }
 
     /// Сколько рабочих секунд попадает в отрезок `[from, to)`. Отрезок может
-    /// накрывать сколько угодно суток; границы дня берутся у календаря, а не
-    /// прибавлением 3600 секунд, — иначе неделя с переводом часов съедет.
+    /// накрывать сколько угодно суток; границы дня календарь ищет по часам на
+    /// циферблате, а не прибавлением 3600 секунд к полуночи, — иначе в сутки
+    /// перевода часов рабочий день съезжает на час (весной начинается в 12:00,
+    /// осенью в 10:00).
     func seconds(from: Date, to: Date, calendar: Calendar) -> TimeInterval {
         guard to > from else { return 0 }
         if isAllDay { return to.timeIntervalSince(from) }
@@ -111,16 +113,43 @@ public struct WorkHours: Codable, Sendable, Equatable, Hashable {
                 calendar.startOfDay(for: $0)
             }), next > midnight else { break }
 
-            if let open = calendar.date(byAdding: .hour, value: start, to: midnight),
-               let close = calendar.date(byAdding: .hour, value: end, to: midnight) {
-                let lower = max(open, from)
-                let upper = min(close, to)
-                if upper > lower { total += upper.timeIntervalSince(lower) }
-            }
+            let open = moment(hour: start, after: midnight, notLaterThan: next, calendar: calendar)
+            // Конец в 24 — это полночь следующих суток, и искать её на
+            // циферблате нечего: она уже посчитана как `next`.
+            let close = end >= 24
+                ? next
+                : moment(hour: end, after: midnight, notLaterThan: next, calendar: calendar)
+
+            let lower = max(open, from)
+            let upper = min(close, to)
+            if upper > lower { total += upper.timeIntervalSince(lower) }
 
             midnight = next
         }
 
         return total
+    }
+
+    /// Момент `hour:00` внутри суток, начинающихся в `midnight`.
+    ///
+    /// Час, пропавший при переводе часов (весной в 2:00 суток нет вовсе),
+    /// календарь отдаёт следующим существующим — `.nextTime`; час, случившийся
+    /// дважды, берётся первым. Результат зажат сутками: если совпадения в них
+    /// не нашлось, рабочего отрезка в этот день просто нет.
+    private func moment(
+        hour: Int,
+        after midnight: Date,
+        notLaterThan next: Date,
+        calendar: Calendar
+    ) -> Date {
+        guard hour > 0 else { return midnight }
+        guard let match = calendar.date(
+            bySettingHour: hour, minute: 0, second: 0,
+            of: midnight,
+            matchingPolicy: .nextTime,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        ) else { return next }
+        return min(max(match, midnight), next)
     }
 }

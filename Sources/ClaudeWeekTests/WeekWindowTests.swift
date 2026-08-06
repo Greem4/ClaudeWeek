@@ -128,6 +128,54 @@ func runWeekWindowTests(_ t: Harness) {
                 "последние сутки — 100 % даже в неделю с переводом часов")
     }
 
+    // Рабочий день — правило циферблата, а не «полночь плюс столько-то часов».
+    // Пока границы искались прибавлением часов, в сутки перевода план начинал
+    // расти в 10:00 осенью и в 12:00 весной — вместо 11:00 в оба дня.
+    t.suite("окно недели: рабочий день в сутки перевода часов") {
+        let berlin = "Europe/Berlin"
+        let autumn = WeekWindow(containing: at(2026, 10, 26, 12, 0, tz: berlin),
+                                config: config(tz: berlin))
+        let plan: (WeekWindow, Int, Int, Int) -> Double = { window, month, day, hour in
+            window.planPercent(at: at(2026, month, day, hour, 0, tz: berlin))
+        }
+
+        // 25 октября сутки длятся 25 часов, и лишний час приходится на ночь.
+        // Час недели тут весит 100/91: 9 рабочих часов вечера пятницы, по 13
+        // в шести полных сутках и 4 в её утро.
+        t.close(plan(autumn, 10, 25, 11), plan(autumn, 10, 25, 0),
+                "осенью в 11:00 план ещё на ночной отметке")
+        t.close(plan(autumn, 10, 25, 12) - plan(autumn, 10, 25, 11), 100 / 91,
+                "первый рабочий час — с 11:00 до 12:00", tolerance: 1e-9)
+        // Полные сутки весят одинаково: перевод часов рабочего дня не двигает.
+        t.close(autumn.planPercent(forDay: 2) - autumn.planPercent(forDay: 1),
+                autumn.planPercent(forDay: 4) - autumn.planPercent(forDay: 3),
+                "сутки перевода весят столько же, сколько обычные", tolerance: 1e-9)
+
+        // 29 марта суток на час меньше, и пропадает он ночью, до работы.
+        let spring = WeekWindow(containing: at(2026, 3, 30, 12, 0, tz: berlin),
+                                config: config(tz: berlin))
+        t.close(plan(spring, 3, 29, 11), plan(spring, 3, 29, 0),
+                "весной в 11:00 план ещё на нуле суток")
+        t.close(plan(spring, 3, 29, 12) - plan(spring, 3, 29, 11), 100 / 91,
+                "а первый рабочий час — тот же, с 11:00 до 12:00", tolerance: 1e-9)
+        t.close(spring.planPercent(forDay: 2) - spring.planPercent(forDay: 1),
+                spring.planPercent(forDay: 4) - spring.planPercent(forDay: 3),
+                "и весенние сутки перевода тоже весят как обычные", tolerance: 1e-9)
+    }
+
+    t.suite("рабочий день: починка недопустимых значений") {
+        t.equal(WorkHours(start: 30, end: 24).validated().start, WorkHours.default.start,
+                "час начала вне 0…23 чинится")
+        t.equal(WorkHours(start: 11, end: 30).validated().end, WorkHours.default.end,
+                "час конца вне 1…24 чинится")
+        // Пустой день оставил бы неделю вовсе без плана — делить было бы не на что.
+        t.equal(WorkHours(start: 18, end: 10).validated(), WorkHours(start: 0, end: 24),
+                "вывернутый день чинится на круглосуточный")
+        t.equal(WorkHours(start: 12, end: 12).validated(), WorkHours(start: 0, end: 24),
+                "и пустой тоже")
+        t.check(WorkHours(start: 0, end: 24).isAllDay, "0…24 — круглые сутки")
+    }
+
     t.suite("окно недели: другой день сброса") {
         // Конфиг переставляется на понедельник 09:00 без правок кода.
         let window = WeekWindow(containing: at(2026, 8, 5, 12, 0), config: config(weekday: 2, hour: 9))
