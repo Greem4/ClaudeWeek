@@ -492,6 +492,9 @@ codesign --force --sign - ClaudeWeek.app     # ad-hoc подпись
 - Цвет по состоянию: в графике — обычный `labelColor`; выше плана — янтарный;
   ≥ 90 % — красный.
 - Режим `compact` (только полоска, без числа) — для тех, кто бережёт место.
+- Режим `ring` — кольцо диаметром 18 pt, заполняется по часовой от 12 часов
+  на недельный процент, число внутри вместо под полосой; в стиле системных
+  значков строки меню (заряд, сеть).
 - Цифры нарисованы внутри иконки, поэтому за тёмной и светлой строкой меню
   следим сами: KVO на `effectiveAppearance` кнопки перерисовывает картинку.
 
@@ -534,7 +537,7 @@ codesign --force --sign - ClaudeWeek.app     # ad-hoc подпись
   "timeZone": "Europe/Saratov",
   "refreshInterval": 300,     // секунды, минимум 30; в сеть — не чаще 60 с
   "provider": "auto",         // official | local | auto
-  "menuBarStyle": "percent",  // percent | compact
+  "menuBarStyle": "percent",  // percent | compact | ring
   "weeklyBudget": 0,          // условная стоимость недели для локального режима
   "calibration": { "observedPercent": null, "at": null },
   "thresholds": { "warn": 1.0, "critical": 0.9 }

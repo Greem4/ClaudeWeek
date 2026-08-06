@@ -9,6 +9,8 @@ public enum ProviderPreference: String, Codable, Sendable, CaseIterable {
 public enum MenuBarStyle: String, Codable, Sendable, CaseIterable {
     case percent
     case compact
+    /// Кольцо с процентом внутри вместо полосы — в стиле системных значков.
+    case ring
 }
 
 /// Палитра панели. `system` — исходная, прогнанная через валидатор на

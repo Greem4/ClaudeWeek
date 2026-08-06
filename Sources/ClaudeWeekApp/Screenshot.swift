@@ -77,7 +77,7 @@ enum Screenshot {
 
         model.config.appearance.theme = config.appearance.theme
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            guard let strip = menuBarPNG(model: model, appearance: appearance) else {
+            guard let strip = menuBarPNG(model: model, appearance: appearance, ring: false) else {
                 FileHandle.standardError.write(Data("не отрисовал иконку \(name)\n".utf8))
                 return 1
             }
@@ -89,13 +89,17 @@ enum Screenshot {
                 FileHandle.standardError.write(Data("не сохранил \(url.path): \(error)\n".utf8))
                 return 1
             }
+            guard let ringStrip = menuBarPNG(model: model, appearance: appearance, ring: true) else { return 1 }
+            let ringURL = directory.appendingPathComponent("menubar-ring-\(name).png")
+            try? ringStrip.write(to: ringURL)
+            print(ringURL.path)
         }
         return 0
     }
 
     /// Иконка строки меню на кусочке фона, увеличенная вчетверо: в реальном
     /// масштабе 28×16 pt глазами не проверишь.
-    private static func menuBarPNG(model: PanelModel, appearance name: NSAppearance.Name) -> Data? {
+    private static func menuBarPNG(model: PanelModel, appearance name: NSAppearance.Name, ring: Bool) -> Data? {
         guard let appearance = NSAppearance(named: name),
               let snapshot = model.snapshot,
               let metrics = model.metrics
@@ -104,12 +108,14 @@ enum Screenshot {
         let scale: CGFloat = 4
         var data: Data?
         appearance.performAsCurrentDrawingAppearance {
-            let icon = MenuBarBar.image(
-                usedPercent: snapshot.usedPercent,
-                planPercent: metrics.planNowPercent,
-                state: metrics.state,
-                title: model.menuBarTitle
-            )
+            let icon = ring
+                ? MenuBarRing.image(usedPercent: snapshot.usedPercent, state: metrics.state)
+                : MenuBarBar.image(
+                    usedPercent: snapshot.usedPercent,
+                    planPercent: metrics.planNowPercent,
+                    state: metrics.state,
+                    title: model.menuBarTitle
+                )
             // Высота полосы меню macOS — 24 pt, поля по 6 pt как у соседей.
             let size = NSSize(width: icon.size.width + 12, height: 24)
             guard let rep = NSBitmapImageRep(

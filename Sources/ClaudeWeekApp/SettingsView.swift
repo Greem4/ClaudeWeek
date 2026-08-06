@@ -264,6 +264,7 @@ private struct AppearanceSettings: View {
                 Picker("Строка меню", selection: $model.config.menuBarStyle) {
                     Text("Полоса и процент").tag(MenuBarStyle.percent)
                     Text("Только полоса").tag(MenuBarStyle.compact)
+                    Text("Кольцо с процентом").tag(MenuBarStyle.ring)
                 }
                 Text("""
                 Откуда взяты цифры, говорит кружок рядом с полосой сессии: \

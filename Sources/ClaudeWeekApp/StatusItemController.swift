@@ -86,23 +86,36 @@ final class StatusItemController: NSObject {
     private func render() {
         guard let button = statusItem.button else { return }
 
-        let title = model.config.menuBarStyle == .compact ? nil : model.menuBarTitle
-        let palette = model.config.appearance.theme.palette
-
-        if let snapshot = model.snapshot, let metrics = model.metrics {
-            button.image = MenuBarBar.image(
-                usedPercent: snapshot.usedPercent,
-                planPercent: metrics.planNowPercent,
-                state: metrics.state,
-                title: title,
-                palette: palette
-            )
-        } else {
-            button.image = MenuBarBar.placeholder(title: title, palette: palette)
-        }
+        button.image = menuBarImage(palette: model.config.appearance.theme.palette)
         // Без текстового заголовка кнопку нечего озвучивать — даём подпись сами.
         button.setAccessibilityLabel("ClaudeWeek — потрачено \(model.menuBarTitle)")
         button.toolTip = tooltip
+    }
+
+    /// Картинка кнопки: три стиля на выбор в настройках — полоса с числом,
+    /// одна полоса или кольцо с числом внутри.
+    private func menuBarImage(palette: Palette) -> NSImage {
+        guard let snapshot = model.snapshot, let metrics = model.metrics else {
+            switch model.config.menuBarStyle {
+            case .percent: return MenuBarBar.placeholder(title: model.menuBarTitle, palette: palette)
+            case .compact: return MenuBarBar.placeholder(title: nil, palette: palette)
+            case .ring: return MenuBarRing.placeholder(palette: palette)
+            }
+        }
+        switch model.config.menuBarStyle {
+        case .percent:
+            return MenuBarBar.image(
+                usedPercent: snapshot.usedPercent, planPercent: metrics.planNowPercent,
+                state: metrics.state, title: model.menuBarTitle, palette: palette
+            )
+        case .compact:
+            return MenuBarBar.image(
+                usedPercent: snapshot.usedPercent, planPercent: metrics.planNowPercent,
+                state: metrics.state, title: nil, palette: palette
+            )
+        case .ring:
+            return MenuBarRing.image(usedPercent: snapshot.usedPercent, state: metrics.state, palette: palette)
+        }
     }
 
     private var tooltip: String {
