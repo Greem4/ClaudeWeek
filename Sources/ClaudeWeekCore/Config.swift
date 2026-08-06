@@ -57,6 +57,24 @@ public enum SessionResetDisplay: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// Сколько суточных полос держит панель. Обе половины недельного лимита —
+/// и итог, и момент сброса — остаются на месте в любом виде: сворачивается
+/// только ряд дней.
+public enum PanelLayout: String, Codable, Sendable, CaseIterable {
+    /// Весь ряд — семь полос, по дню недели каждая.
+    case week
+    /// Только текущие сутки. Неделя за ними не потеряна: клик по строке дня
+    /// раскрывает её целиком, пока панель открыта.
+    case compact
+
+    public var title: String {
+        switch self {
+        case .week: "Вся неделя"
+        case .compact: "Только сегодня"
+        }
+    }
+}
+
 /// Всё, что влияет только на вид и ни на одну цифру.
 public struct AppearanceConfig: Codable, Sendable, Equatable {
     public var theme: ThemeKind
@@ -76,6 +94,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     public var showForecast: Bool
     /// Каким концом подписан сброс сессии.
     public var sessionReset: SessionResetDisplay
+    /// Весь недельный ряд или только текущие сутки.
+    public var panelLayout: PanelLayout
 
     public init(
         theme: ThemeKind = .system,
@@ -84,7 +104,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         cornerRadius: Double = 12,
         showSession: Bool = true,
         showForecast: Bool = true,
-        sessionReset: SessionResetDisplay = .relative
+        sessionReset: SessionResetDisplay = .relative,
+        panelLayout: PanelLayout = .week
     ) {
         self.theme = theme
         self.transparentPanel = transparentPanel
@@ -93,6 +114,7 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         self.showSession = showSession
         self.showForecast = showForecast
         self.sessionReset = sessionReset
+        self.panelLayout = panelLayout
     }
 
     // Как и в `Config`: каждое поле необязательно. Конфиг, записанный прошлой
@@ -111,7 +133,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
             showSession: try c.decodeIfPresent(Bool.self, forKey: .showSession) ?? d.showSession,
             showForecast: try c.decodeIfPresent(Bool.self, forKey: .showForecast) ?? d.showForecast,
             sessionReset: try c.decodeIfPresent(SessionResetDisplay.self, forKey: .sessionReset)
-                ?? d.sessionReset
+                ?? d.sessionReset,
+            panelLayout: try c.decodeIfPresent(PanelLayout.self, forKey: .panelLayout) ?? d.panelLayout
         )
     }
 

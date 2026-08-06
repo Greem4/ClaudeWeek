@@ -151,6 +151,29 @@ func runConfigTests(_ t: Harness) {
         t.equal(c.appearance.sessionReset, .relative, "новый ключ взялся из дефолтов")
     }
 
+    t.suite("конфиг: вид панели") {
+        t.equal(Config.default.appearance.panelLayout, .week, "по умолчанию — вся неделя")
+
+        let url = tempFile(#"{ "appearance": { "panelLayout": "compact" } }"#)
+        defer { try? FileManager.default.removeItem(at: url) }
+        t.equal(ConfigStore.load(from: url).appearance.panelLayout, .compact,
+                "компактный вид прочитался")
+
+        // Ключа panelLayout в конфиге прошлой версии нет, и появиться он должен
+        // дефолтным — не тронув остальной внешний вид.
+        let old = tempFile(#"{ "appearance": { "theme": "paper", "showSession": false } }"#)
+        defer { try? FileManager.default.removeItem(at: old) }
+        let c = ConfigStore.load(from: old)
+        t.equal(c.appearance.panelLayout, .week, "новый ключ взялся из дефолтов")
+        t.equal(c.appearance.theme, .paper, "прежний внешний вид уцелел")
+        t.equal(c.appearance.showSession, false, "и второе его поле тоже")
+
+        let mistake = tempFile(#"{ "appearance": { "panelLayout": "неделя" } }"#)
+        defer { try? FileManager.default.removeItem(at: mistake) }
+        t.equal(ConfigStore.load(from: mistake), Config.default.validated(),
+                "непонятное значение — дефолты, а не падение")
+    }
+
     t.suite("конфиг: старый файл без внешнего вида") {
         // Конфиг, написанный прошлой версией: новых ключей в нём нет,
         // и появиться они должны дефолтными, а не уронить разбор.

@@ -170,10 +170,11 @@ struct PopoverView: View {
 
     private func days(_ snapshot: UsageSnapshot) -> some View {
         let calendar = snapshot.window.calendar
-        // Строк ровно семь. День сброса стоит одной: пока неделя катится — её
-        // вечером после сброса, в последние сутки окна — утром перед следующим.
+        // Строк семь — или одна, текущих суток, если панель настроена
+        // компактно. День сброса стоит одной: пока неделя катится — её вечером
+        // после сброса, в последние сутки окна — утром перед следующим.
         return VStack(spacing: Theme.rowSpacing) {
-            ForEach(snapshot.rows(at: model.now), id: \.index) { day in
+            ForEach(model.dayRows(snapshot), id: \.index) { day in
                 DayRow(
                     day: day,
                     label: Formatting.weekdayShort(day.start, calendar: calendar),
@@ -182,9 +183,21 @@ struct PopoverView: View {
                     // его половин сейчас на строке.
                     interval: day.isPartial ? Formatting.interval(day.start, day.end, calendar: calendar) : nil,
                     isToday: day.index == model.todayIndex,
-                    animated: !reduceMotion
+                    animated: !reduceMotion,
+                    tap: dayTap
                 )
             }
+        }
+    }
+
+    /// В компактном виде клик по любой строке дня переключает ряд: свёрнутый
+    /// раскрывается на всю неделю, раскрытый сворачивается обратно. Настройку
+    /// это не трогает — раскрытие живёт до закрытия панели, и следующий её
+    /// показ снова компактный.
+    private var dayTap: DayRowTap? {
+        guard appearance.panelLayout == .compact else { return nil }
+        return DayRowTap(expands: !model.expandsWeek) {
+            model.expandsWeek.toggle()
         }
     }
 

@@ -130,10 +130,18 @@ final class StatusItemController: NSObject {
         if dropdown.isShown {
             dropdown.close()
         } else {
-            model.now = Date()
+            prepareToShowPanel()
             dropdown.show(from: button)
             refresh()
         }
+    }
+
+    /// Панель открывают заново: часы подводим, а раскрытый кликом недельный
+    /// ряд сворачиваем. Раскрытие живёт один показ — закрывают панель щелчком
+    /// мимо и по Esc, и сбросить его больше негде.
+    private func prepareToShowPanel() {
+        model.now = Date()
+        model.expandsWeek = false
     }
 
     private func showMenu() {
@@ -184,7 +192,7 @@ final class StatusItemController: NSObject {
 
     private func pinPanel() {
         guard let button = statusItem.button else { return }
-        model.now = Date()
+        prepareToShowPanel()
         dropdown.pin(from: button)
     }
 

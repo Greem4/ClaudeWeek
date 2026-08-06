@@ -249,6 +249,16 @@ private struct AppearanceSettings: View {
             }
 
             Section("Что показывать") {
+                Picker("Суточные полосы", selection: appearance.panelLayout) {
+                    ForEach(PanelLayout.allCases, id: \.self) { layout in
+                        Text(layout.title).tag(layout)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text(layoutHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Строку пятичасовой сессии", isOn: appearance.showSession)
                 Toggle("Прогноз «кончится в …»", isOn: appearance.showForecast)
                 Picker("Строка меню", selection: $model.config.menuBarStyle) {
@@ -305,6 +315,20 @@ private struct AppearanceSettings: View {
             calendar: model.config.calendar
         )
         return "сброс \(reset)"
+    }
+
+    private var layoutHint: String {
+        switch model.config.appearance.panelLayout {
+        case .week:
+            "Семь полос, по дню недели каждая: весь ряд перед глазами."
+        case .compact:
+            """
+            Только текущие сутки — панель короче на шесть строк. Неделя не \
+            потеряна: щёлкните по строке дня, и ряд раскроется целиком, пока \
+            панель открыта. Итог недели и час сброса остаются на месте в любом \
+            случае.
+            """
+        }
     }
 
     private var themeHint: String {

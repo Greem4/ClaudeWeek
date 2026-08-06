@@ -48,6 +48,20 @@ struct DayBar: View {
     }
 }
 
+/// Что делает клик по строке дня. Есть только в компактном виде: там строка —
+/// ещё и способ развернуть ряд, а с полным рядом разворачивать нечего.
+struct DayRowTap {
+    /// Клик раскроет неделю; иначе — свернёт её обратно до текущих суток.
+    let expands: Bool
+    let action: () -> Void
+
+    /// Что случится по клику — словами, для подсказки при наведении и
+    /// VoiceOver: полосы сами о своей нажимаемости не говорят.
+    var hint: String {
+        expands ? "нажмите — вся неделя" : "нажмите — только сегодня"
+    }
+}
+
 /// Строка панели: подпись дня, полоса и числа «факт / план».
 /// Числа обязательны — цвет нигде не остаётся единственным носителем смысла.
 struct DayRow: View {
@@ -58,6 +72,8 @@ struct DayRow: View {
     var interval: String?
     let isToday: Bool
     let animated: Bool
+    /// Клик по строке; nil — панель показывает весь ряд, и щёлкать незачем.
+    var tap: DayRowTap?
 
     @Environment(\.palette) private var palette
 
@@ -67,6 +83,26 @@ struct DayRow: View {
     }
 
     var body: some View {
+        let row = content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(voiceOverLabel)
+            .help(tooltip)
+
+        // Нажимаемой строка становится целиком, вместе с прозрачными зазорами
+        // между подписью, полосой и числами: попасть в неё надо мышью, а не
+        // прицелом.
+        if let tap {
+            row
+                .contentShape(Rectangle())
+                .onTapGesture(perform: tap.action)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(tap.hint)
+        } else {
+            row
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: 8) {
             Text(label)
                 .font(isToday ? Theme.todayFont : Theme.dayFont)
@@ -91,16 +127,16 @@ struct DayRow: View {
             }
             .frame(width: Theme.valueWidth, alignment: .trailing)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(voiceOverLabel)
-        .help(tooltip)
     }
 
     /// Наведение поясняет, какие именно часы стоят за строкой: у крайних
     /// суток недели подпись дня повторяется, и различает их только время.
+    /// В компактном виде оно же и подсказывает про клик — иначе о раскрытии
+    /// недели никто не догадается.
     private var tooltip: String {
-        guard let interval else { return fullLabel }
-        return "\(fullLabel), \(interval)"
+        let day = interval.map { "\(fullLabel), \($0)" } ?? fullLabel
+        guard let tap else { return day }
+        return "\(day) · \(tap.hint)"
     }
 
     private var values: String {
