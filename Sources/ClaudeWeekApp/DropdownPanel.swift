@@ -33,12 +33,15 @@ final class DropdownPanel {
     private var activationObservers: [NSObjectProtocol] = []
     private var spaceObserver: NSObjectProtocol?
     private var resizeObserver: NSObjectProtocol?
+    private var screenObserver: NSObjectProtocol?
 
-    /// Открыта — значит, открыта здесь. Окно, оставшееся на другом рабочем
-    /// столе (например, в полноэкранном пространстве плеера), для нас
-    /// закрыто: иначе клик по пункту меню «закрывал» бы невидимую панель,
-    /// и со стороны это выглядит как «перестала открываться».
-    var isShown: Bool { panel.isVisible && panel.isOnActiveSpace }
+    /// Панель показана — здесь, а не «где-то на другом столе»: `isOnActiveSpace`
+    /// для окна с `.canJoinAllSpaces` ничего не говорит (пока окно видимо, он
+    /// всегда `true`, на каком бы столе WindowServer его ни держал), поэтому
+    /// «свой стол» не спрашиваем у окна, а обеспечиваем сами — `handleSpaceChange`
+    /// закрывает панель на каждой смене активного стола, и после этого
+    /// показанная панель однозначно здесь.
+    var isShown: Bool { panel.isVisible }
     var frame: NSRect { panel.frame }
 
     init() {
@@ -71,6 +74,7 @@ final class DropdownPanel {
         }
         observeSpaceChange()
         observeResize()
+        observeScreenChange()
     }
 
     func setContent(_ view: some View) {
@@ -107,8 +111,11 @@ final class DropdownPanel {
         // показанное поверх фильма, дальше оно так и остаётся там — на других
         // столах панели нет, а попытка вывести её туда лишь перекидывает
         // экран обратно к плееру. Снятие с экрана эту привязку отпускает,
-        // и следующий показ достаётся текущему столу.
-        if panel.isVisible && !panel.isOnActiveSpace { panel.orderOut(nil) }
+        // и следующий показ достаётся текущему столу. Отличить «свой» стол от
+        // чужого нельзя (`isOnActiveSpace` для all-spaces окна не отвечает на
+        // этот вопрос), поэтому `orderOut` делаем безусловно, когда панель уже
+        // видима, — лишний для своего стола, но безвредный: анимации показа нет.
+        if panel.isVisible { panel.orderOut(nil) }
 
         panel.setFrame(frame(for: hosting.fittingSize, anchor: anchor), display: false)
         // orderFrontRegardless, а не makeKeyAndOrderFront: приложение живёт
@@ -194,6 +201,12 @@ final class DropdownPanel {
     /// такой ситуации просто закрывается, и мы делаем то же: брошенное окно
     /// не только висит невидимкой, но и тянет привязку к чужому пространству
     /// на следующий показ.
+    ///
+    /// Вопрос «а мы точно ушли с её стола?» окну не задаём: `isOnActiveSpace`
+    /// у all-spaces окна отвечает «да» всегда, пока оно видимо, независимо от
+    /// того, какой стол видит человек. Поэтому решение однозначное — при
+    /// каждой смене активного стола панель закрывается (или переезжает, если
+    /// закреплена), а не только тогда, когда «действительно ушли».
     private func observeSpaceChange() {
         spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
@@ -203,7 +216,7 @@ final class DropdownPanel {
     }
 
     private func handleSpaceChange() {
-        guard panel.isVisible, !panel.isOnActiveSpace else { return }
+        guard panel.isVisible else { return }
         // Закреплённую панель держим открытой — она предпросмотр к настройкам,
         // и закрыть её значило бы отобрать то, ради чего её закрепляли.
         // Переносим на текущий стол; если приложение при этом ушло в фон,
@@ -266,6 +279,21 @@ final class DropdownPanel {
     private func observeResize() {
         resizeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pinToAnchor() }
+        }
+    }
+
+    /// Монитор отключили, разрешение сменили или строку меню отодвинула
+    /// Notch/Dock — `anchor.frame` подхватывает новое место сама (WindowServer
+    /// двигает окно пункта строки меню), а вот панель без этой подписки
+    /// оставалась бы висеть там, где её открыли. Незакреплённую это не сильно
+    /// заботит: следующий клик мимо или показ пересчитает место сам, — но
+    /// закреплённая (открыты настройки) живёт на экране произвольно долго и
+    /// пересчёта дожидается только отсюда.
+    private func observeScreenChange() {
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.pinToAnchor() }
         }
