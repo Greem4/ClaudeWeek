@@ -20,13 +20,6 @@ func runFormattingTests(_ t: Harness) {
         t.equal(Formatting.percent(50, withSign: false), "50", "без знака процента")
     }
 
-    t.suite("форматирование: возраст данных") {
-        let now = at(2026, 8, 4, 12, 0)
-        t.equal(Formatting.age(now.addingTimeInterval(-30), now: now), "только что", "полминуты назад")
-        t.equal(Formatting.age(now.addingTimeInterval(-180), now: now), "3 мин назад", "три минуты назад")
-        t.equal(Formatting.age(now.addingTimeInterval(-7200), now: now), "2 ч 0 мин назад", "два часа назад")
-    }
-
     t.suite("форматирование: дни недели") {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/Saratov")!

@@ -90,9 +90,9 @@ private struct TranscriptSandbox {
 
 private let testNow = at(2026, 8, 4, 12, 0)
 
-/// Сервер отдаёт момент сброса с микросекундами (`12:00:00.357993`), и мы
-/// сохраняем его как есть — округлять чужие данные незачем. Поэтому даты
-/// сверяем с допуском в секунду, а не на точное равенство.
+/// Сравнение дат с допуском в секунду: там, где проверяется не округление, а
+/// сам факт разбора, привязываться к тому, срезаны доли секунды или нет,
+/// незачем — этим занят отдельный набор «округление момента сброса».
 private func same(_ t: Harness, _ got: Date?, _ want: Date, _ what: String) {
     guard let got else { return t.fail("\(what): даты нет вовсе") }
     t.close(got.timeIntervalSince(want), 0, what, tolerance: 1)
@@ -293,7 +293,7 @@ func runOfficialProviderTests(_ t: Harness) async {
 
     await t.suite("снимок помнит момент наблюдения") {
         // Число, взятое из памяти, нельзя метить текущим моментом: по этой
-        // метке панель говорит «данные 6 мин назад».
+        // метке панель решает, свежие перед ней данные или уже «offline».
         let clock = MutableClock(testNow)
         let transport = FakeTransport(answers: [(200, realResponse)])
         let official = OfficialProvider(

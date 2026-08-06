@@ -253,7 +253,7 @@ enum Theme {
     /// Кнопки футера: глифы ⚙ и ⟳ в кегле сноски становятся неприцельными.
     static let actionFont = Font.system(size: menuFontSize)
     /// Сводка футера — самая мелкая строка панели: в кегле сноски «осталось
-    /// 42 % · сброс через 3 дн 18 ч · темп 1.2×» рвётся на два ряда.
+    /// 42 % · сброс через 3 дн 18 ч» вместе с прогнозом рвётся на два ряда.
     static let footerFont = Font.system(size: menuFontSize - 3).monospacedDigit()
     static let captionFont = Font.system(size: captionFontSize).monospacedDigit()
 }

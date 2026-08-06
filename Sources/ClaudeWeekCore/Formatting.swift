@@ -48,13 +48,6 @@ public enum Formatting {
         return sign ? "\(rounded) %" : "\(rounded)"
     }
 
-    /// «обновлено 3 мин назад», «обновлено только что».
-    public static func age(_ date: Date, now: Date = Date()) -> String {
-        let seconds = now.timeIntervalSince(date)
-        if seconds < 60 { return "только что" }
-        return "\(duration(seconds)) назад"
-    }
-
     /// «сброс ПТ 16:00» — час сброса в зоне окна, той же, по которой панель
     /// считает сутки. Московского хвоста для сверки здесь больше нет: два часа
     /// подряд читались как спорящие, а нужен всегда только свой.
