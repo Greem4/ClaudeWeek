@@ -43,20 +43,17 @@ if arguments.contains("--json") {
     exit(await CLI.run(config: config))
 }
 
-if let index = arguments.firstIndex(of: "--icon") {
-    let directory = arguments.count > index + 1
-        ? URL(fileURLWithPath: arguments[index + 1])
-        : URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    exit(AppIcon.render(into: directory))
+if arguments.contains("--icon") {
+    exit(AppIcon.render(into: CLI.directory(after: "--icon", in: arguments)))
 }
 
-if let index = arguments.firstIndex(of: "--screenshot") {
-    let directory = arguments.count > index + 1
-        ? URL(fileURLWithPath: arguments[index + 1])
-        : URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+if arguments.contains("--screenshot") {
     // Без await: `Screenshot` изолирован главным актором, а код верхнего
     // уровня и так на нём.
-    exit(Screenshot.render(into: directory, config: config))
+    exit(Screenshot.render(
+        into: CLI.directory(after: "--screenshot", in: arguments),
+        config: config
+    ))
 }
 
 // LSUIElement в Info.plist убирает иконку из Dock у собранного бандла;

@@ -30,6 +30,17 @@ enum CLI {
         flags.contains(argument) || flagPrefixes.contains { argument.hasPrefix($0) }
     }
 
+    /// Каталог, названный после `--screenshot` или `--icon`; без него —
+    /// текущий. Аргумент, начинающийся с «-», — это соседний флаг, а не путь:
+    /// `--screenshot --verbose` иначе завёл бы каталог с именем «--verbose».
+    static func directory(after flag: String, in arguments: [String]) -> URL {
+        guard let index = arguments.firstIndex(of: flag),
+              arguments.count > index + 1,
+              !arguments[index + 1].hasPrefix("-")
+        else { return URL(fileURLWithPath: FileManager.default.currentDirectoryPath) }
+        return URL(fileURLWithPath: arguments[index + 1])
+    }
+
     /// Незнакомый флаг — не повод молча поднять строку меню: человек просил
     /// не то, что получит, и узнает об этом в лучшем случае через час.
     static func complain(_ message: String) -> Int32 {
