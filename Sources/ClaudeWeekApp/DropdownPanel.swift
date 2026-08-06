@@ -229,14 +229,18 @@ final class DropdownPanel {
     }
 
     /// Содержимое меняет высоту на ходу: приходят данные, появляется строка
-    /// сессии или прогноз исчерпания. Растём вниз — верхняя кромка приклеена
-    /// к строке меню и дёргаться не должна.
+    /// сессии или прогноза, раскрывается недельный ряд. Растём вниз — верхняя
+    /// кромка приклеена к строке меню и дёргаться не должна.
+    ///
+    /// Поэтому место считается заново от пункта строки меню, а не от
+    /// собственной рамки окна. Своя рамка для этого не годится: сразу после
+    /// `setFrame` она ещё отдаёт прежнюю высоту — новую досчитывает Auto Layout
+    /// следующим проходом, — и отсчёт верха как `maxY` уводил панель вниз ровно
+    /// на разницу высот. Одна строка сессии смещала её незаметно, раскрытая
+    /// неделя отрывала от строки меню на шесть строк.
     private func resize(to size: NSSize) {
-        guard panel.isVisible else { return }
-        var frame = panel.frame
-        frame.origin.y = frame.maxY - size.height
-        frame.size = size
-        panel.setFrame(frame, display: true)
+        guard panel.isVisible, let anchor else { return }
+        panel.setFrame(frame(for: size, anchor: anchor), display: true)
         panel.invalidateShadow()
     }
 
