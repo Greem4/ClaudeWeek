@@ -32,6 +32,7 @@ final class DropdownPanel {
     private var hiddenByDeactivation = false
     private var activationObservers: [NSObjectProtocol] = []
     private var spaceObserver: NSObjectProtocol?
+    private var resizeObserver: NSObjectProtocol?
 
     /// Открыта — значит, открыта здесь. Окно, оставшееся на другом рабочем
     /// столе (например, в полноэкранном пространстве плеера), для нас
@@ -69,6 +70,7 @@ final class DropdownPanel {
             self?.resize(to: size)
         }
         observeSpaceChange()
+        observeResize()
     }
 
     func setContent(_ view: some View) {
@@ -241,7 +243,32 @@ final class DropdownPanel {
     private func resize(to size: NSSize) {
         guard panel.isVisible, let anchor else { return }
         panel.setFrame(frame(for: size, anchor: anchor), display: true)
+        pinToAnchor()
+    }
+
+    /// Возвращает верхнюю кромку под строку меню, не трогая размер.
+    ///
+    /// Высоту окна в конце концов назначает Auto Layout хостинга, и наш
+    /// `setFrame` он переигрывает: размер применяется следующим проходом, а
+    /// положение остаётся наше — посчитанное под другую высоту. Окно и
+    /// оказывалось ниже строки меню ровно на разницу высот (а свёрнутое —
+    /// выше, за верхним краем экрана). Поэтому кромку правим по факту: на
+    /// каждое изменение размера, от кого бы оно ни пришло, и по уже
+    /// применённой высоте, а не по той, которую мы просили.
+    private func pinToAnchor() {
+        guard panel.isVisible, let anchor else { return }
+        let target = frame(for: panel.frame.size, anchor: anchor).origin
+        guard target != panel.frame.origin else { return }
+        panel.setFrameOrigin(target)
         panel.invalidateShadow()
+    }
+
+    private func observeResize() {
+        resizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pinToAnchor() }
+        }
     }
 
     // MARK: Закрытие по клику мимо
