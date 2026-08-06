@@ -38,14 +38,25 @@ public enum ModelPricing {
     /// Локально сгенерированные сообщения — не вызовы API, в расход не идут.
     public static let syntheticModel = "<synthetic>"
 
+    /// Не только диагностика: `LocalProvider` — актор, но экземпляров его
+    /// много одновременно (свой у `ResolvingProvider`, свой у CLI, свой у
+    /// `--calibrate`), и каждый может разбирать транскрипт на своём потоке.
+    /// `Set` под конкурентной записью без блокировки — гонка данных, поэтому
+    /// доступ к нему всегда идёт через `reportedUnknownLock`.
     nonisolated(unsafe) private static var reportedUnknown: Set<String> = []
+    private static let reportedUnknownLock = NSLock()
 
     public static func weights(for model: String?) -> ModelWeights? {
         guard let model, model != syntheticModel else { return nil }
         for entry in table where model.hasPrefix(entry.prefix) {
             return entry.weights
         }
-        if reportedUnknown.insert(model).inserted {
+        let isFirstReport: Bool = {
+            reportedUnknownLock.lock()
+            defer { reportedUnknownLock.unlock() }
+            return reportedUnknown.insert(model).inserted
+        }()
+        if isFirstReport {
             Log.warn("незнакомая модель «\(model)», считаю по весам Sonnet")
         }
         return sonnet
