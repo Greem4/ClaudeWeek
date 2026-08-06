@@ -204,6 +204,9 @@ final class StatusItemController: NSObject {
             controller.onDismiss = { [weak self] in self?.dropdown.unpin() }
             settings = controller
         }
+        // Окно живёт до выхода из приложения, а конфиг за это время могли
+        // поправить руками — показываем то, что сейчас в файле.
+        settings?.adopt(model.config)
         pinPanel()
         settings?.show(avoiding: dropdown.isShown ? dropdown.frame : nil)
     }
@@ -382,6 +385,7 @@ final class StatusItemController: NSObject {
         guard config != model.config else { return }
         Log.info("конфиг изменился, применяю")
         model.config = config
+        settings?.adopt(config)
         applyAppearance()
         provider = ResolvingProvider(config: config)
         startTimers()

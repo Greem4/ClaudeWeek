@@ -11,10 +11,14 @@ import ClaudeWeekCore
 final class SettingsModel {
     var config: Config {
         didSet {
-            guard config != oldValue else { return }
+            guard !isAdopting, config != oldValue else { return }
             apply(config)
         }
     }
+
+    /// Конфиг пришёл снаружи, а не из ползунка: гнать его обратно через
+    /// `apply` незачем — он уже применён и уже лежит на диске.
+    private var isAdopting = false
 
     /// Итог последней проверки токена: текст и удача/неудача.
     var checkResult: (text: String, ok: Bool)?
@@ -43,6 +47,17 @@ final class SettingsModel {
     /// вкладки незачем.
     func refreshDiagnostics() {
         pickedBudget = Store.loadCache()?.weeklyBudget
+    }
+
+    /// Принять конфиг, изменившийся мимо этого окна: файл правили руками.
+    /// Модель живёт от первого открытия настроек до выхода из приложения, и
+    /// без этого второй показ окна выкладывал бы значения, которых в файле
+    /// давно нет, — а первый же сдвинутый ползунок затирал бы правку.
+    func adopt(_ config: Config) {
+        guard config != self.config else { return }
+        isAdopting = true
+        self.config = config
+        isAdopting = false
     }
 
     /// Подпись бюджета: заданный человеком важнее подобранного программой,
@@ -96,6 +111,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     init(model: SettingsModel) {
         self.model = model
     }
+
+    /// Конфиг переписали мимо окна — покажем то, что в файле, а не то, что
+    /// окно помнит с прошлого раза.
+    func adopt(_ config: Config) { model.adopt(config) }
 
     /// `obstacle` — рамка живой панели: новое окно ставим так, чтобы её
     /// не накрыть, иначе предпросмотр придётся откапывать мышью.
