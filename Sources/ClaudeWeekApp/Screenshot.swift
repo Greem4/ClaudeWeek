@@ -32,6 +32,15 @@ enum Screenshot {
             .addingTimeInterval(6 * 3600)
 
         var config = config
+        // Картинки идут в README, и выглядеть они должны одинаково, чей бы
+        // конфиг ни лежал рядом: у автора может стоять компактная панель,
+        // своя палитра и свои пороги — в документации это читалось бы как
+        // поведение программы. Вид и пороги берём заводские, окно недели и
+        // рабочий день оставляем из конфига: от них зависят подписи строк.
+        config.appearance = AppearanceConfig()
+        config.thresholds = Thresholds()
+        // Материал строки меню в оффскрин-рендер не попадает — фон рисуем
+        // сплошным цветом палитры.
         config.appearance.transparentPanel = false
         let model = PanelModel(config: config)
         model.apply(demoSnapshot(config: config, now: now), at: now)

@@ -11,11 +11,14 @@
   <img src="docs/images/panel-light.png" width="380" alt="Панель недели, светлая тема">
 </p>
 
-Иконка в строке меню — полоса недели и процент под ней, всего ~28 pt ширины:
+Иконка в строке меню — полоса недели и процент под ней, всего ~28 pt ширины;
+в настройках вместо полосы можно поставить кольцо:
 
 <p align="center">
-  <img src="docs/images/menubar-dark.png" width="150" alt="Иконка в тёмной строке меню">
-  <img src="docs/images/menubar-light.png" width="150" alt="Иконка в светлой строке меню">
+  <img src="docs/images/menubar-dark.png" width="130" alt="Иконка в тёмной строке меню">
+  <img src="docs/images/menubar-light.png" width="130" alt="Иконка в светлой строке меню">
+  <img src="docs/images/menubar-ring-dark.png" width="80" alt="Кольцо в тёмной строке меню">
+  <img src="docs/images/menubar-ring-light.png" width="80" alt="Кольцо в светлой строке меню">
 </p>
 
 Строки суток — **календарные**: они меняются в местную полночь, а не в час
@@ -226,7 +229,8 @@ Claude Code из Keychain (запись `Claude Code-credentials`) и потом
 
 Все картинки в этом README рисует сама программа:
 `ClaudeWeek --screenshot docs/images` — панель во всех темах и обоих системных
-оформлениях плюс иконка строки меню.
+оформлениях плюс обе иконки строки меню. Вид на них заводской, а не ваш: чужие
+пороги и свёрнутый ряд в документации читались бы как поведение программы.
 
 ---
 
