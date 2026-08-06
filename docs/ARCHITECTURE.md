@@ -230,7 +230,8 @@ mtime) — атомарная запись меняет inode, поэтому н
    таймера не дошла и ждёт перезапуска приложения.
 6. Тест в `Sources/ClaudeWeekTests/ConfigTests.swift`: дефолт, починка,
    переживание записи-чтения, старый файл без нового ключа.
-7. Строка в таблице настроек README.
+7. Строка в таблице настроек [USAGE.md](USAGE.md#настройки) и, если ключ новый,
+   в таблице конфига там же.
 
 ### Добавить тему
 
@@ -281,9 +282,22 @@ swift build                     # оба таргета
 swift run ClaudeWeekTests       # 307 проверок, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./Scripts/make-app.sh           # собрать dist/ClaudeWeek.app
+./Scripts/make-dmg.sh           # упаковать бандл в dist/ClaudeWeek-<версия>.dmg
 ./Scripts/install-agent.sh      # пересобрать, снести старую версию, поставить и запустить
 ./Scripts/uninstall-agent.sh    # снять агент и удалить приложение
 ```
+
+`UNIVERSAL=1` перед `make-app.sh` или `make-dmg.sh` даёт бандл на обе
+архитектуры: скрипт собирает `--arch arm64` и `--arch x86_64` по отдельности и
+склеивает `lipo`. Одним проходом (`swift build --arch arm64 --arch x86_64`) это
+не делается — тот путь требует полного Xcode, а раздельный идёт и на Command
+Line Tools.
+
+Те же команды гоняет CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
+на каждый push и pull request. Релиз собирает
+[`release.yml`](../.github/workflows/release.yml) по тегу `vX.Y.Z`: сверяет тег
+с `Version.swift`, прогоняет проверки, кладёт в Releases универсальный `.dmg`
+и его контрольную сумму.
 
 Тесты — свой раннер (`Sources/ClaudeWeekTests/Harness.swift`): `t.suite(...)`,
 `t.equal(...)`, `t.fail(...)`. Сети в них нет: официальный источник
