@@ -20,6 +20,11 @@ public struct OfficialUsage: Sendable, Equatable {
         return SessionUsage(usedPercent: sessionPercent, resetsAt: sessionResetsAt)
     }
 
+    /// Неделя этого числа ещё не закрылась. То же правило, что у сессии, и по
+    /// той же причине: после сброса прежний процент не «слегка устарел», а
+    /// обнулился — 100 % прошлой недели в новой значат ноль, а не сотню.
+    public func isFresh(at now: Date) -> Bool { now < weekResetsAt }
+
     public init(
         weekPercent: Double,
         weekResetsAt: Date,
@@ -209,17 +214,23 @@ public actor OfficialProvider: UsageProvider {
 
     /// Свежий процент, с учётом троттлинга и паузы после ошибок.
     public func usage(at now: Date) async throws -> OfficialUsage {
-        if let lastUsage, let lastFetch,
+        // Число из памяти годится, только пока не наступил его собственный
+        // сброс. После него это не «данные минутной давности», а прошлая
+        // неделя: держась за неё, панель показывала исчерпанный лимит ещё
+        // четверть часа после обнуления — ровно на длину паузы после отказа.
+        let remembered = lastUsage.flatMap { $0.isFresh(at: now) ? $0 : nil }
+
+        if let remembered, let lastFetch,
            now.timeIntervalSince(lastFetch) < OfficialProvider.minimumInterval {
-            return lastUsage
+            return remembered
         }
         if let retryAfter, now < retryAfter {
             // Пауза ещё держится: отдаём последнее удачное значение, пока оно
             // не слишком старое. Просроченное — честная ошибка, чтобы
             // вызывающий ушёл на локальную оценку: она хотя бы сегодняшняя.
-            if let lastUsage, let lastFetch,
+            if let remembered, let lastFetch,
                now.timeIntervalSince(lastFetch) <= OfficialProvider.staleLimit {
-                return lastUsage
+                return remembered
             }
             throw UsageError.unavailable(
                 "жду \(Formatting.duration(retryAfter.timeIntervalSince(now))) после неудачи"

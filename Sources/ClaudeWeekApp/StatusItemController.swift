@@ -18,6 +18,10 @@ final class StatusItemController: NSObject {
     private var pendingConfigWrite: Config?
     private var refreshTimer: Timer?
     private var clockTimer: Timer?
+    /// Будильник на момент сброса недели. Плановый опрос идёт раз в несколько
+    /// минут, и без него панель показывала бы исчерпанный лимит ещё весь этот
+    /// круг после обнуления.
+    private var resetTimer: Timer?
     private var appearanceObserver: NSKeyValueObservation?
     /// Отпечаток файла конфига — по нему замечаем правки без file watcher:
     /// атомарная запись меняет inode, и наблюдатель по дескриптору её теряет.
@@ -325,6 +329,41 @@ final class StatusItemController: NSObject {
         model.now = Date()
         reloadConfigIfChanged()
         render()
+        // Страховка к будильнику ниже: он мог не сработать вовсе — снимка на
+        // момент установки не было, машина спала, часы перевели.
+        if windowClosed { refresh() }
+    }
+
+    /// Окно снимка закрылось: на панели прошлая неделя.
+    private var windowClosed: Bool {
+        guard let window = model.snapshot?.window else { return false }
+        return model.now >= window.end
+    }
+
+    /// Ставит будильник на сброс недели. Момент известен заранее — он же
+    /// написан в заголовке панели, — и ждать после него очередного планового
+    /// опроса незачем: человек смотрит на «100 %» уже после обнуления.
+    private func scheduleResetRefresh() {
+        resetTimer?.invalidate()
+        resetTimer = nil
+        guard let window = model.snapshot?.window else { return }
+
+        // Пара секунд сверху: момент сброса у сервера плавает на доли секунды,
+        // и запрос ровно в него ещё застаёт прошлую неделю.
+        let fire = window.end.addingTimeInterval(2)
+        guard fire > Date() else { return }
+
+        let timer = Timer(fire: fire, interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // Часы вперёд — и сразу за числом. `tick` сам обновится только
+                // если окно уже закрылось, а будильник мог прийти и мгновением
+                // раньше; повторный `refresh` при этом ничего не стоит.
+                self?.tick()
+                self?.refresh()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        resetTimer = timer
     }
 
     private func observeSystemEvents() {
@@ -409,6 +448,10 @@ final class StatusItemController: NSObject {
             }
             self?.model.isRefreshing = false
             self?.render()
+            // Окно снимка могло смениться — переставляем будильник под него.
+            // Отсюда же он ставится и в первый раз: `init` заканчивается
+            // обновлением, а до его ответа окна может не быть вовсе.
+            self?.scheduleResetRefresh()
         }
     }
 }
