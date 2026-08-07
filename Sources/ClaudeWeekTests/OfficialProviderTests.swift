@@ -291,6 +291,39 @@ func runOfficialProviderTests(_ t: Harness) async {
         }
     }
 
+    await t.suite("сброс недели обесценивает число из памяти") {
+        // В ответе неделя сбрасывается 2026-08-07 в 16:00 по Саратову.
+        let reset = at(2026, 8, 7, 16, 0)
+        let usage = OfficialUsage(weekPercent: 100, weekResetsAt: reset)
+        t.check(usage.isFresh(at: reset.addingTimeInterval(-1)), "до сброса число годно")
+        t.check(!usage.isFresh(at: reset), "ровно на сбросе — уже нет")
+
+        // Троттлинг: внутри минуты в сеть не ходим — но не тогда, когда за эту
+        // минуту неделя успела обнулиться.
+        let (throttled, transport) = provider()
+        _ = try await throttled.usage(at: reset.addingTimeInterval(-30))
+        _ = try await throttled.usage(at: reset.addingTimeInterval(10))
+        t.equal(await transport.callCount(), 2,
+                "после сброса идём в сеть, не дожидаясь конца минуты")
+
+        // Пауза после отказа: последнее удачное число держится до staleLimit,
+        // но и оно живёт не дольше собственной недели. Иначе панель показывала
+        // исчерпанный лимит ещё четверть часа после обнуления.
+        let (paused, _) = provider(answers: [(200, realResponse), (500, "")])
+        _ = try await paused.usage(at: at(2026, 8, 7, 15, 50))
+        do { _ = try await paused.usage(at: at(2026, 8, 7, 15, 59, 30)) } catch {}
+
+        let duringPause = try await paused.usage(at: at(2026, 8, 7, 15, 59, 40))
+        t.close(duringPause.weekPercent, 50, "до сброса пауза отдаёт последнее удачное число")
+
+        do {
+            _ = try await paused.usage(at: reset.addingTimeInterval(10))
+            t.fail("ждали отказ вместо процента прошлой недели")
+        } catch UsageError.unavailable {
+            t.check(true, "после сброса — отказ, и вызывающий уйдёт на локальную оценку")
+        }
+    }
+
     await t.suite("снимок помнит момент наблюдения") {
         // Число, взятое из памяти, нельзя метить текущим моментом: по этой
         // метке панель решает, свежие перед ней данные или уже «offline».

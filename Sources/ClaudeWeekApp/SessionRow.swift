@@ -98,7 +98,7 @@ struct SessionRow: View {
 
                 SourceDot(state: source, hint: sourceHint, onTap: onSourceTap)
 
-                HStack(spacing: 3) {
+                HStack(spacing: Theme.valueGap) {
                     if session.isExhausted {
                         Text("⚠")
                             .font(Theme.dayFont)
@@ -106,6 +106,7 @@ struct SessionRow: View {
                     }
                     Text(Formatting.percent(session.usedPercent))
                         .font(Theme.dayFont)
+                        .fixedSize()
                         .foregroundStyle(session.isExhausted ? palette.critical.color : palette.primaryText.color)
                 }
                 .frame(width: Theme.valueWidth, alignment: .trailing)

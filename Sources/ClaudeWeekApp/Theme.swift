@@ -213,7 +213,17 @@ enum Theme {
     /// сливаются (тританопия в тёмной теме даёт ΔE 5.1 на паре факт ↔ вылет).
     static let overspendGap: CGFloat = 2
     static let dayLabelWidth: CGFloat = 30
-    static let valueWidth: CGFloat = 96
+    /// Зазор между значком перерасхода и самим числом.
+    static let valueGap: CGFloat = 3
+    /// Колонка значений справа. Числом её задавать нельзя: кегль берётся у
+    /// системного меню и в универсальном доступе растёт вместе с ним, а самая
+    /// длинная строка колонки — «⚠ 100 / 100 %» — не влезала в прежние 96 pt
+    /// и на исчерпанной неделе рвалась на два ряда, унося за собой высоту
+    /// строки. Поэтому ширину меряем по ней же, а полоса рядом отдаёт эти
+    /// пункты: её длина и так условная, а число обязано читаться целиком.
+    /// Пункт запаса — на то, что SwiftUI размечает текст чуть иначе AppKit.
+    static let valueWidth: CGFloat =
+        (textWidth("⚠") + valueGap + textWidth("100 / 100 %")).rounded(.up) + 2
     static let fillAnimation: TimeInterval = 0.35
     /// Кружок источника — вровень с полосой, рядом с которой стоит.
     static let sourceDotSize: CGFloat = 9
@@ -257,6 +267,14 @@ enum Theme {
     /// 42 % · сброс через 3 дн 18 ч» вместе с прогнозом рвётся на два ряда.
     static let footerFont = Font.system(size: menuFontSize - 3).monospacedDigit()
     static let captionFont = Font.system(size: captionFontSize).monospacedDigit()
+
+    /// Ширина строки в шрифте суточных полос: `Font.system(size:)` с
+    /// `.monospacedDigit()` — это он же, только со стороны SwiftUI.
+    private static func textWidth(_ text: String) -> CGFloat {
+        (text as NSString).size(withAttributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: menuFontSize, weight: .regular)
+        ]).width
+    }
 }
 
 extension Color {
