@@ -147,7 +147,7 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 | `LoginItem.swift` | автозапуск: тот же launchd-агент, что пишет `install.sh` |
 | `Theme.swift` | палитры тем, метрики, шрифты, `Ink` и `Palette` |
 | `SettingsWindow.swift` | окно настроек: модель, применение изменений, проверка токена, место рядом с панелью |
-| `SettingsView.swift` | четыре вкладки настроек |
+| `SettingsView.swift` | пять вкладок настроек: общие, строка меню, панель, доступ, о программе |
 | `ConfigStamp.swift` | отпечаток файла конфига (замечает правки без file watcher) |
 | `Screenshot.swift` | `--screenshot`: панель во всех темах и иконка в PNG |
 | `AppIcon.swift` | `--icon`: `.iconset` для сборки бандла |
@@ -294,7 +294,8 @@ swift scripts/probe-usage.swift    # один запрос, печатает о�
 
 ```bash
 swift build                     # оба таргета
-swift run ClaudeWeekTests       # 331 проверка, без сети и без UI
+swift build -Xswiftc -warnings-as-errors   # так же, как в CI: предупреждение = падение
+swift run ClaudeWeekTests       # 336 проверок, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/make-app.sh           # собрать dist/ClaudeWeek.app
 ./scripts/make-dmg.sh           # упаковать бандл в dist/ClaudeWeek-<версия>[-арх].dmg

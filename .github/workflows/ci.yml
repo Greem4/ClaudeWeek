@@ -26,8 +26,11 @@ jobs:
           swift --version
           xcodebuild -version
 
+      # -warnings-as-errors: «сборка без предупреждений» — обещание README, и
+      # проверять его должен CI, а не честное слово. Предупреждение здесь
+      # ломает сборку, поэтому чинится оно в той же правке, что и завело.
       - name: Сборка
-        run: swift build
+        run: swift build -Xswiftc -warnings-as-errors
 
       - name: Проверки
         run: swift run ClaudeWeekTests

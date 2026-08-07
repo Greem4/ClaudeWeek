@@ -117,13 +117,14 @@ Claude Code из Keychain — только читает, наружу не от�
 ## Сборка и проверки
 
 ```bash
-swift build                  # обе цели, без предупреждений
-swift run ClaudeWeekTests    # 331 проверка: без сети, без UI, свой раннер
+swift build                  # обе цели
+swift run ClaudeWeekTests    # 336 проверок: без сети, без UI, свой раннер
 ./scripts/make-app.sh        # dist/ClaudeWeek.app — бандл, ничего не устанавливая
 ARCH=arm64 ./scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
 ```
 
-То же самое гоняет [CI](.github/workflows/ci.yml) на каждый push и pull request.
+То же самое гоняет [CI](.github/workflows/ci.yml) на каждый push и pull request —
+и собирает строже, с `-warnings-as-errors`: предупреждение роняет сборку.
 Релиз выпускается тегом: `git tag v0.2.0 && git push origin v0.2.0` —
 [workflow](.github/workflows/release.yml) сверит тег с `Version.swift`, прогонит
 проверки, соберёт образ под Apple Silicon и выложит его в Releases вместе с

@@ -300,16 +300,19 @@ ClaudeWeek/
 │   │   ├── MenuBarBar.swift       # иконка строки меню: полоса и процент
 │   │   ├── MenuBarRing.swift      # иконка строки меню: кольцо с процентом
 │   │   ├── Theme.swift            # палитры тем, шрифты, отступы
+│   │   ├── LoginItem.swift        # галочка автозапуска: тот же launchd-агент
 │   │   ├── SettingsWindow.swift   # окно настроек: модель и применение
-│   │   ├── SettingsView.swift     # четыре вкладки настроек
+│   │   ├── SettingsView.swift     # пять вкладок настроек
 │   │   ├── ConfigStamp.swift      # отпечаток конфига для перечитывания
 │   │   ├── Screenshot.swift       # --screenshot: панель в PNG, обе темы
 │   │   └── AppIcon.swift          # --icon: .iconset для сборки бандла
 │   └── ClaudeWeekTests/           # исполняемый таргет с проверками (см. §8)
 ├── scripts/
 │   ├── make-app.sh                # сборка .app вместе с иконкой
-│   ├── install.sh           # LaunchAgent автозапуска
-│   └── uninstall.sh         # снять агент и удалить приложение
+│   ├── make-dmg.sh                # упаковка бандла в .dmg для релиза
+│   ├── install.sh                 # собрать, снести прежнее, поставить, запустить
+│   ├── uninstall.sh               # снять агент и удалить приложение
+│   └── probe-usage.swift          # один запрос к эндпоинту, печатает ответ
 ├── Resources/Info.plist
 └── docs/
     ├── PLAN.md                    # этот документ
@@ -391,9 +394,15 @@ codesign --force --sign - ClaudeWeek.app     # ad-hoc подпись
 `scripts/install.sh` кладёт
 `~/Library/LaunchAgents/com.greem4.claudeweek.plist` c `RunAtLoad = true` и
 `KeepAlive = false`, затем `launchctl bootstrap gui/$UID …`. Повторный запуск —
-полная переустановка: сборка свежего бандла, затем `uninstall.sh --quiet`
-(агент, работающий процесс, прежнее приложение) и только потом установка новой
-версии. Копии не плодятся. Удаление — тот же парный `uninstall.sh`.
+полная переустановка: сборка свежего бандла, затем снос прежнего (все агенты,
+чьи plist поминают ClaudeWeek, работающий процесс, приложение в `~/Applications`
+и `/Applications`) и только потом установка новой версии. Копии не плодятся.
+Удаление — `uninstall.sh`, он сносит ровно то же самое.
+
+Тот же агент правит галочка «Запускать при входе в систему» в меню
+(`LoginItem.swift`): label, путь плиста и файл лога совпадают до буквы, а
+`bootstrap`/`bootout` она не зовёт — файла довольно, чтобы launchd поднял
+приложение со следующего входа.
 
 ---
 
@@ -634,7 +643,7 @@ assert-хелперов, запускаемый `swift run ClaudeWeekTests`; н�
 = падение. Когда/если появится Xcode, таргет переносится на swift-testing без
 изменения самих проверок.
 
-Что покрыто (331 проверка, `swift run ClaudeWeekTests`):
+Что покрыто (336 проверок, `swift run ClaudeWeekTests`):
 
 1. **Окно недели.** Момент ровно на сбросе; за минуту до и после; полсекунды до;
    воскресный полдень; смена таймзоны между вызовами; другой день сброса.
