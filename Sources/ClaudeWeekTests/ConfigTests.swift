@@ -57,7 +57,10 @@ func runConfigTests(_ t: Harness) {
         c.refreshInterval = 5
         c.timeZone = "Europe/Тьмутаракань"
         c.weeklyBudget = -10
-        c.thresholds = Thresholds(warn: 0, warnFloor: 500, critical: 5)
+        c.thresholds = Thresholds(
+            weekWarn: 500, weekCritical: -1,
+            sessionWarn: 90, sessionCritical: 60
+        )
         let v = c.validated()
         t.equal(v.resetWeekday, 6, "день недели вне 1…7 чинится")
         t.equal(v.resetHour, 16, "час вне 0…23 чинится")
@@ -66,9 +69,10 @@ func runConfigTests(_ t: Harness) {
         t.equal(v.timeZone, "", "неизвестная таймзона — системная")
         t.equal(v.resolvedTimeZone, TimeZone.current, "пустая таймзона разворачивается в системную")
         t.equal(v.weeklyBudget, 0, "отрицательный бюджет обнуляется")
-        t.equal(v.thresholds.warn, 1.0, "нулевой порог предупреждения чинится")
-        t.equal(v.thresholds.warnFloor, 80, "нижний порог вне 0…100 чинится")
-        t.equal(v.thresholds.critical, 0.9, "порог критичности вне 0…1 чинится")
+        t.equal(v.thresholds.weekWarn, 80, "жёлтый порог вне 0…100 чинится")
+        t.equal(v.thresholds.weekCritical, 95, "красный порог вне 0…100 чинится")
+        t.equal(v.thresholds.sessionCritical, 90, "красный ниже жёлтого подтягивается к нему")
+        t.equal(v.thresholds.sessionWarn, 90, "…а сам жёлтый остаётся как задан")
     }
 
     t.suite("конфиг: запись и чтение") {
@@ -152,21 +156,28 @@ func runConfigTests(_ t: Harness) {
         t.equal(c.appearance.sessionReset, .relative, "новый ключ взялся из дефолтов")
     }
 
-    t.suite("конфиг: нижний порог жёлтого") {
-        t.equal(Config.default.thresholds.warnFloor, 80, "по умолчанию — 80 % недели")
+    t.suite("конфиг: пороги окраски") {
+        let d = Config.default.thresholds
+        t.equal(d.weekWarn, 80, "неделя желтеет с 80 %")
+        t.equal(d.weekCritical, 95, "и краснеет с 95 %")
+        t.equal(d.sessionWarn, 80, "у сессии те же 80 %")
+        t.equal(d.sessionCritical, 95, "и те же 95 %")
+        t.check(d.colorizeMenuBar, "строка меню красится по умолчанию")
 
-        let url = tempFile(#"{ "thresholds": { "warnFloor": 50 } }"#)
+        let url = tempFile(#"{ "thresholds": { "weekWarn": 50, "colorizeMenuBar": false } }"#)
         defer { try? FileManager.default.removeItem(at: url) }
-        t.equal(ConfigStore.load(from: url).thresholds.warnFloor, 50, "своё значение прочиталось")
+        let mine = ConfigStore.load(from: url).thresholds
+        t.equal(mine.weekWarn, 50, "своё значение прочиталось")
+        t.check(!mine.colorizeMenuBar, "выключенная окраска прочиталась")
+        t.equal(mine.sessionWarn, 80, "нетронутый порог взялся из дефолтов")
 
-        // Пороги, записанные прошлой версией: ключа warnFloor в них нет,
-        // и он должен взяться из дефолтов, не тронув соседние.
-        let old = tempFile(#"{ "thresholds": { "warn": 1.3, "critical": 0.85 } }"#)
+        // Пороги прошлой версии считались от плана и в долях. Переносить их
+        // нельзя — 0.9 доли превратились бы в 0.9 %, — и падать на них тоже.
+        let old = tempFile(#"{ "thresholds": { "warn": 1.3, "warnFloor": 50, "critical": 0.85 } }"#)
         defer { try? FileManager.default.removeItem(at: old) }
-        let c = ConfigStore.load(from: old)
-        t.equal(c.thresholds.warn, 1.3, "старый порог обгона уцелел")
-        t.equal(c.thresholds.critical, 0.85, "и порог критичности тоже")
-        t.equal(c.thresholds.warnFloor, 80, "новый ключ взялся из дефолтов")
+        let legacy = ConfigStore.load(from: old)
+        t.equal(legacy.thresholds, Thresholds(), "старые ключи игнорируются, берутся дефолты")
+        t.equal(legacy.resetWeekday, Config.default.resetWeekday, "остальной конфиг цел")
     }
 
     t.suite("конфиг: вид панели") {

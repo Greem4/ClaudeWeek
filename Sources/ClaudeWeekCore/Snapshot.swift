@@ -65,19 +65,41 @@ public struct SessionUsage: Codable, Sendable, Equatable {
     }
 
     public var isExhausted: Bool { usedPercent >= 100 }
+
+    /// Состояние сессии по её собственным порогам.
+    public func state(thresholds: Thresholds = Thresholds()) -> LimitState {
+        LimitState.forPercent(
+            usedPercent,
+            warn: thresholds.sessionWarn,
+            critical: thresholds.sessionCritical
+        )
+    }
 }
 
 /// Состояние лимита — единственная точка, к которой подключаются уведомления,
 /// если они когда-нибудь понадобятся (сейчас их нет, см. §10 плана).
+///
+/// Считается по одному только факту: сколько потрачено сейчас. Недельный
+/// лимит и пятичасовая сессия проходят через одну и ту же лестницу порогов,
+/// каждый со своими значениями.
 public enum LimitState: String, Sendable {
-    /// Идём в графике.
-    case onTrack
-    /// Обгоняем план.
-    case overPlan
+    /// Расхода ещё немного.
+    case normal
+    /// Пора приглядывать.
+    case warning
     /// Лимит на исходе.
     case critical
-    /// Лимит недели исчерпан.
+    /// Лимит исчерпан.
     case exhausted
+
+    /// Порог берётся включительно: настроенные 80 % загораются ровно на 80 %,
+    /// а не на 80.1 — человек читает шкалу именно так.
+    public static func forPercent(_ percent: Double, warn: Double, critical: Double) -> LimitState {
+        if percent >= 100 { return .exhausted }
+        if percent >= critical { return .critical }
+        if percent >= warn { return .warning }
+        return .normal
+    }
 }
 
 public struct UsageMetrics: Sendable, Equatable {
@@ -215,23 +237,17 @@ public struct UsageSnapshot: Sendable {
             burnRate: burnRate,
             projectedPercent: projected,
             exhaustionDate: exhaustion,
-            state: state(at: now, thresholds: thresholds)
+            state: state(thresholds: thresholds)
         )
     }
 
-    /// Жёлтое состояние требует двух условий сразу: факт обгоняет план И уже
-    /// израсходован ощутимый кусок недели (`warnFloor`). Одного обгона мало —
-    /// в первые часы после сброса план околонулевой, и три процента обгоняют
-    /// его в разы, хотя тревожиться не о чем.
-    public func state(at now: Date, thresholds: Thresholds = Thresholds()) -> LimitState {
-        if usedPercent >= 100 { return .exhausted }
-        if usedPercent >= thresholds.critical * 100 { return .critical }
-        let planNow = window.planPercent(at: now)
-        if usedPercent >= thresholds.warnFloor,
-           planNow > 0,
-           usedPercent > planNow * thresholds.warn {
-            return .overPlan
-        }
-        return .onTrack
+    /// Состояние недели — по потраченному проценту, без оглядки на план.
+    /// Обгон плана виден в панели темпом и прогнозом; цвет он больше не трогает.
+    public func state(thresholds: Thresholds = Thresholds()) -> LimitState {
+        LimitState.forPercent(
+            usedPercent,
+            warn: thresholds.weekWarn,
+            critical: thresholds.weekCritical
+        )
     }
 }

@@ -85,9 +85,7 @@ func runPlanTests(_ t: Harness) {
         t.close(m.burnRate ?? 0, 1.4, "темп 1.4× плана", tolerance: 0.002)
         t.close(m.projectedPercent ?? 0, 140, "к сбросу натечёт 140 %", tolerance: 0.2)
         t.close(m.timeLeft, window.end.timeIntervalSince(now), "до сброса — остаток окна")
-        t.equal(m.state, .onTrack, "70 % при плане 50 % — обгон есть, но нижний порог не взят")
-        t.equal(snapshot.state(at: now, thresholds: Thresholds(warnFloor: 0)), .overPlan,
-                "без нижнего порога тот же обгон желтеет")
+        t.equal(m.state, .normal, "70 % — обгон плана виден темпом, но цвет спокойный")
 
         // Лимит кончится там, где прогноз пересечёт 100 %: план в этот момент
         // равен доле уже потраченного — 100/1.4 от недели.
@@ -99,44 +97,54 @@ func runPlanTests(_ t: Harness) {
             t.fail("ждали дату исчерпания лимита")
         }
 
-        // В графике: 45 % при плане 50 %.
-        let onTrack = UsageSnapshot.make(
+        // Ниже жёлтого порога: 45 % при плане 50 %.
+        let calm = UsageSnapshot.make(
             usedPercent: 45, cumulativeByDay: [], window: window,
             source: .official, fetchedAt: now, isEstimate: false
         )
-        t.equal(onTrack.state(at: now), .onTrack, "45 % при плане 50 % — в графике")
-        t.check(onTrack.metrics(at: now).exhaustionDate == nil, "в графике лимит не кончится")
+        t.equal(calm.state(), .normal, "45 % — спокойно")
+        t.check(calm.metrics(at: now).exhaustionDate == nil, "в графике лимит не кончится")
 
-        // Обгон плана выше нижнего порога — вот теперь жёлтое.
-        let overPlan = UsageSnapshot.make(
-            usedPercent: 85, cumulativeByDay: [], window: window,
+        // Пороги берутся включительно: настроенные 80 % загораются ровно на 80.
+        let warning = UsageSnapshot.make(
+            usedPercent: 80, cumulativeByDay: [], window: window,
             source: .official, fetchedAt: now, isEstimate: false
         )
-        t.equal(overPlan.state(at: now), .overPlan, "85 % при плане 50 % — обгоняем план")
+        t.equal(warning.state(), .warning, "80 % — жёлтый ровно на пороге")
 
         // Первый рабочий час новой недели: план околонулевой, и три процента
-        // обгоняют его в разы. Строка меню при этом обязана остаться белой.
+        // обгоняют его в разы. Цвет при этом обязан остаться спокойным.
         let justAfterReset = window.date(atProgress: 0.01)
         let earlyBurst = UsageSnapshot.make(
             usedPercent: 3, cumulativeByDay: [], window: window,
             source: .official, fetchedAt: justAfterReset, isEstimate: false
         )
-        t.equal(earlyBurst.state(at: justAfterReset), .onTrack,
-                "3 % сразу после сброса — в графике, а не тревога")
+        t.equal(earlyBurst.state(), .normal, "3 % сразу после сброса — не тревога")
+        t.check(earlyBurst.metrics(at: justAfterReset).burnRate ?? 0 > 1,
+                "…хотя темп честно показывает обгон плана")
 
         // Пороговые состояния.
         let critical = UsageSnapshot.make(
-            usedPercent: 92, cumulativeByDay: [], window: window,
+            usedPercent: 96, cumulativeByDay: [], window: window,
             source: .official, fetchedAt: now, isEstimate: false
         )
-        t.equal(critical.state(at: now), .critical, "92 % — лимит на исходе")
+        t.equal(critical.state(), .critical, "96 % — лимит на исходе")
+        t.equal(critical.state(thresholds: Thresholds(weekWarn: 20, weekCritical: 99)), .warning,
+                "свои пороги двигают ту же лестницу")
 
         let exhausted = UsageSnapshot.make(
             usedPercent: 100, cumulativeByDay: [], window: window,
             source: .official, fetchedAt: now, isEstimate: false
         )
-        t.equal(exhausted.state(at: now), .exhausted, "100 % — лимит исчерпан")
+        t.equal(exhausted.state(), .exhausted, "100 % — лимит исчерпан")
         t.close(exhausted.metrics(at: now).remainingPercent, 0, "остаток не уходит в минус")
+
+        // Сессия живёт своей лестницей: неделя спокойна, а сессия уже красная.
+        let session = SessionUsage(usedPercent: 96, resetsAt: now.addingTimeInterval(3600))
+        t.equal(session.state(), .critical, "96 % сессии — красная")
+        t.equal(calm.state(), .normal, "…при спокойной неделе рядом")
+        t.equal(SessionUsage(usedPercent: 79, resetsAt: now).state(), .normal,
+                "79 % сессии — ещё спокойно")
 
         // Сразу после сброса плана ещё нет — темп неопределён, а не бесконечен.
         let fresh = UsageSnapshot.make(
@@ -146,7 +154,7 @@ func runPlanTests(_ t: Harness) {
         let freshMetrics = fresh.metrics(at: window.start)
         t.check(freshMetrics.burnRate == nil, "темп в момент сброса не считается")
         t.check(freshMetrics.projectedPercent == nil, "прогноз в момент сброса не считается")
-        t.equal(freshMetrics.state, .onTrack, "после сброса — в графике")
+        t.equal(freshMetrics.state, .normal, "после сброса — спокойно")
     }
 
     t.suite("строки дней") {

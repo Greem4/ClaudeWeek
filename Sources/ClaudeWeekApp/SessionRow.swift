@@ -37,9 +37,9 @@ struct SessionBar: View {
 struct SessionRow: View {
     let session: SessionUsage
     let now: Date
-    /// Доля лимита, после которой полоса желтеет. Берётся из тех же порогов,
-    /// что и неделя: два набора настроек ради одной полосы не нужны.
-    let criticalThreshold: Double
+    /// Состояние сессии по её собственным порогам — тем же, что красят кольцо
+    /// в строке меню.
+    let state: LimitState
     /// Каким концом подписан сброс: сколько осталось, во сколько наступит
     /// или и то, и другое.
     let resetDisplay: SessionResetDisplay
@@ -63,7 +63,7 @@ struct SessionRow: View {
     @Environment(\.palette) private var palette
 
     private var isWarning: Bool {
-        session.usedPercent >= criticalThreshold * 100
+        state != .normal
     }
 
     var body: some View {

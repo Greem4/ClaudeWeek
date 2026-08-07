@@ -115,25 +115,35 @@ final class StatusItemController: NSObject {
         case .percent:
             return MenuBarBar.image(
                 usedPercent: snapshot.usedPercent, planPercent: metrics.planNowPercent,
-                state: metrics.state, title: model.menuBarTitle, palette: palette
+                state: model.menuBarWeekState, title: model.menuBarTitle, palette: palette
             )
         case .compact:
             return MenuBarBar.image(
                 usedPercent: snapshot.usedPercent, planPercent: metrics.planNowPercent,
-                state: metrics.state, title: nil, palette: palette
+                state: model.menuBarWeekState, title: nil, palette: palette
             )
         case .ring:
-            return MenuBarRing.image(usedPercent: snapshot.usedPercent, state: metrics.state, palette: palette)
+            return MenuBarRing.image(
+                sessionPercent: model.sessionPercent,
+                sessionState: model.menuBarSessionState,
+                weekPercent: snapshot.usedPercent,
+                weekState: model.menuBarWeekState,
+                palette: palette
+            )
         }
     }
 
+    /// Кольцо показывает два лимита сразу, и подсказка обязана назвать оба:
+    /// иначе непонятно, чей процент горит красным.
     private var tooltip: String {
         guard let metrics = model.metrics else { return "ClaudeWeek — данных пока нет" }
-        return """
-        Потрачено \(Formatting.percent(metrics.usedPercent)) из недельного лимита
-        План на сейчас — \(Formatting.percent(metrics.planNowPercent))
-        До сброса \(Formatting.duration(metrics.timeLeft))
-        """
+        var lines = ["Неделя — \(Formatting.percent(metrics.usedPercent)) из лимита"]
+        if let session = model.session {
+            lines.append("Сессия 5 ч — \(Formatting.percent(session.usedPercent)) из лимита")
+        }
+        lines.append("План на сейчас — \(Formatting.percent(metrics.planNowPercent))")
+        lines.append("До сброса недели \(Formatting.duration(metrics.timeLeft))")
+        return lines.joined(separator: "\n")
     }
 
     // MARK: Действия

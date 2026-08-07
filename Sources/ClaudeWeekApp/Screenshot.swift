@@ -118,11 +118,16 @@ enum Screenshot {
         var data: Data?
         appearance.performAsCurrentDrawingAppearance {
             let icon = ring
-                ? MenuBarRing.image(usedPercent: snapshot.usedPercent, state: metrics.state)
+                ? MenuBarRing.image(
+                    sessionPercent: model.sessionPercent,
+                    sessionState: model.menuBarSessionState,
+                    weekPercent: snapshot.usedPercent,
+                    weekState: model.menuBarWeekState
+                )
                 : MenuBarBar.image(
                     usedPercent: snapshot.usedPercent,
                     planPercent: metrics.planNowPercent,
-                    state: metrics.state,
+                    state: model.menuBarWeekState,
                     title: model.menuBarTitle
                 )
             // Высота полосы меню macOS — 24 pt, поля по 6 pt как у соседей.

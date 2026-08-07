@@ -31,7 +31,7 @@ struct PopoverView: View {
                 SessionRow(
                     session: session,
                     now: model.now,
-                    criticalThreshold: model.config.thresholds.critical,
+                    state: model.sessionState,
                     resetDisplay: appearance.sessionReset,
                     source: model.sourceState,
                     sourceHint: model.sourceHint,

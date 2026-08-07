@@ -2,8 +2,10 @@ import SwiftUI
 import AppKit
 import ClaudeWeekCore
 
-/// Окно настроек: четыре вкладки. Предпросмотром служит сама панель — она
-/// закреплена на экране, пока окно открыто, и перерисовывается на каждую правку.
+/// Окно настроек: пять вкладок, по одной на предмет разговора — откуда цифры,
+/// что показывает строка меню, как выглядит панель, доступ к токену, справка.
+/// Предпросмотром служит сама панель: она закреплена на экране, пока окно
+/// открыто, и перерисовывается на каждую правку.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
@@ -12,8 +14,11 @@ struct SettingsView: View {
             GeneralSettings(model: model)
                 .tabItem { Label("Общие", systemImage: "gearshape") }
 
+            MenuBarSettings(model: model)
+                .tabItem { Label("Строка меню", systemImage: "menubar.rectangle") }
+
             AppearanceSettings(model: model)
-                .tabItem { Label("Внешний вид", systemImage: "paintpalette") }
+                .tabItem { Label("Панель", systemImage: "paintpalette") }
 
             AccessSettings(model: model)
                 .tabItem { Label("Доступ", systemImage: "key") }
@@ -115,41 +120,6 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Пороги") {
-                LabeledContent("Строка меню желтеет при превышении плана в") {
-                    HStack {
-                        Slider(value: config.thresholds.warn, in: 1...2, step: 0.05)
-                        Text(String(format: "%.2f×", model.config.thresholds.warn))
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 50, alignment: .trailing)
-                    }
-                }
-                LabeledContent("…но не раньше, чем израсходовано") {
-                    HStack {
-                        Slider(value: config.thresholds.warnFloor, in: 0...100, step: 5)
-                        Text(Formatting.percent(model.config.thresholds.warnFloor))
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 50, alignment: .trailing)
-                    }
-                }
-                LabeledContent("Заголовок и сессия тревожатся после") {
-                    HStack {
-                        Slider(value: config.thresholds.critical, in: 0.5...1, step: 0.01)
-                        Text(Formatting.percent(model.config.thresholds.critical * 100))
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 50, alignment: .trailing)
-                    }
-                }
-                Text("""
-                Суточные полосы желтеют на любом перерасходе — это сам график, \
-                а не тревога. Пороги красят цифру в строке меню, заголовок \
-                панели и полосу пятичасовой сессии. Нижняя граница держит \
-                строку меню белой в первые дни недели, когда план ещё \
-                околонулевой и обгоняется любым расходом.
-                """)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
     }
@@ -206,7 +176,137 @@ private struct GeneralSettings: View {
     ]
 }
 
-// MARK: - Внешний вид
+// MARK: - Строка меню
+
+/// Всё про значок у часов: что он показывает и когда меняет цвет. Пороги
+/// живут здесь же, хотя красят и панель: разговор про цвет один, и разносить
+/// его по двум вкладкам значит искать половину в другом месте.
+private struct MenuBarSettings: View {
+    @Bindable var model: SettingsModel
+
+    private var thresholds: Thresholds { model.config.thresholds }
+
+    var body: some View {
+        Form {
+            Section("Значок") {
+                Picker("Показывать", selection: $model.config.menuBarStyle) {
+                    Text("Полоса и процент").tag(MenuBarStyle.percent)
+                    Text("Только полоса").tag(MenuBarStyle.compact)
+                    Text("Кольцо с процентом").tag(MenuBarStyle.ring)
+                }
+                Text(styleHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Цвет") {
+                Toggle("Менять цвет по порогам", isOn: colorize)
+                Text("""
+                Выключенный — значок всегда нейтрального цвета, а расход \
+                по-прежнему виден заполнением и цифрой. Панель красится в любом \
+                случае: пороги ниже задают цвет и её заголовку с полосой сессии.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Section("Недельный лимит — цифра") {
+                percentRow("Жёлтый после", value: weekWarn)
+                percentRow("Красный после", value: weekCritical)
+            }
+
+            Section("Пятичасовая сессия — кольцо") {
+                percentRow("Жёлтый после", value: sessionWarn)
+                percentRow("Красный после", value: sessionCritical)
+                Text("""
+                Считается по факту: сколько потрачено прямо сейчас. План и \
+                прогноз на цвет больше не влияют — они отвечают на вопрос \
+                «в графике ли я», а цвет на «пора ли беспокоиться». Сессию \
+                сообщает только официальный источник: на локальной оценке \
+                кольцо стоит на нуле.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func percentRow(_ title: String, value: Binding<Double>) -> some View {
+        LabeledContent(title) {
+            HStack {
+                Slider(value: value, in: 0...100, step: 1)
+                Text(Formatting.percent(value.wrappedValue))
+                    .font(.caption.monospacedDigit())
+                    .frame(width: 50, alignment: .trailing)
+            }
+        }
+    }
+
+    private var styleHint: String {
+        switch model.config.menuBarStyle {
+        case .percent: "Полоса недели с планом, под ней недельный процент."
+        case .compact: "Одна полоса недели, без числа — самый узкий значок."
+        case .ring:
+            """
+            Кольцо заполняется пятичасовой сессией, цифра внутри — недельный \
+            процент. Два лимита в одном значке, у каждого свой цвет.
+            """
+        }
+    }
+
+    // Пороги держим в порядке прямо в биндингах: жёлтый выше красного —
+    // не «неверная настройка», а неотличимое от красного поведение, и
+    // объяснять его окошком с ошибкой хуже, чем не дать сделать.
+    private var weekWarn: Binding<Double> {
+        Binding(
+            get: { thresholds.weekWarn },
+            set: {
+                model.config.thresholds.weekWarn = $0
+                model.config.thresholds.weekCritical = max(thresholds.weekCritical, $0)
+            }
+        )
+    }
+
+    private var weekCritical: Binding<Double> {
+        Binding(
+            get: { thresholds.weekCritical },
+            set: {
+                model.config.thresholds.weekCritical = $0
+                model.config.thresholds.weekWarn = min(thresholds.weekWarn, $0)
+            }
+        )
+    }
+
+    private var sessionWarn: Binding<Double> {
+        Binding(
+            get: { thresholds.sessionWarn },
+            set: {
+                model.config.thresholds.sessionWarn = $0
+                model.config.thresholds.sessionCritical = max(thresholds.sessionCritical, $0)
+            }
+        )
+    }
+
+    private var sessionCritical: Binding<Double> {
+        Binding(
+            get: { thresholds.sessionCritical },
+            set: {
+                model.config.thresholds.sessionCritical = $0
+                model.config.thresholds.sessionWarn = min(thresholds.sessionWarn, $0)
+            }
+        )
+    }
+
+    private var colorize: Binding<Bool> {
+        Binding(
+            get: { thresholds.colorizeMenuBar },
+            set: { model.config.thresholds.colorizeMenuBar = $0 }
+        )
+    }
+}
+
+// MARK: - Панель
 
 private struct AppearanceSettings: View {
     @Bindable var model: SettingsModel
@@ -258,8 +358,8 @@ private struct AppearanceSettings: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section("Что показывать") {
-                Picker("Суточные полосы", selection: appearance.panelLayout) {
+            Section("Суточные полосы") {
+                Picker("Показывать", selection: appearance.panelLayout) {
                     ForEach(PanelLayout.allCases, id: \.self) { layout in
                         Text(layout.title).tag(layout)
                     }
@@ -268,14 +368,11 @@ private struct AppearanceSettings: View {
                 Text(layoutHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
 
-                Toggle("Строку пятичасовой сессии", isOn: appearance.showSession)
+            Section("Строки панели") {
+                Toggle("Пятичасовая сессия", isOn: appearance.showSession)
                 Toggle("Прогноз «кончится в …»", isOn: appearance.showForecast)
-                Picker("Строка меню", selection: $model.config.menuBarStyle) {
-                    Text("Полоса и процент").tag(MenuBarStyle.percent)
-                    Text("Только полоса").tag(MenuBarStyle.compact)
-                    Text("Кольцо с процентом").tag(MenuBarStyle.ring)
-                }
                 Text("""
                 Откуда взяты цифры, говорит кружок рядом с полосой сессии: \
                 залитый зелёный — ответ сервера, залитый жёлтый — он же, но \

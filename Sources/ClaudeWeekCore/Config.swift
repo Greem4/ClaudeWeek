@@ -160,34 +160,68 @@ public struct Calibration: Codable, Sendable, Equatable {
     }
 }
 
+/// Пороги окраски — проценты расхода, и ничего кроме. Ни план, ни прогноз
+/// в цвет не входят: план отвечает на вопрос «в графике ли я», а цвет — на
+/// «пора ли беспокоиться», и это разные вопросы. Смешивать их значит желтеть
+/// на трёх процентах в первый рабочий час недели, когда плана ещё нет.
 public struct Thresholds: Codable, Sendable, Equatable {
-    /// Во сколько раз факт может превышать план, прежде чем полоса станет
-    /// янтарной. 1.0 = сразу за плановой отметкой.
-    public var warn: Double
-    /// Процент недельного лимита, ниже которого об обгоне плана не
-    /// предупреждаем. Сразу после сброса план околонулевой, и любые
-    /// потраченные проценты обгоняют его в разы — без этого пола строка
-    /// меню желтела бы на трёх процентах в первый же рабочий час.
-    public var warnFloor: Double
-    /// Доля лимита, после которой заголовок краснеет.
-    public var critical: Double
+    /// Процент недельного лимита, после которого цифра желтеет.
+    public var weekWarn: Double
+    /// …и краснеет.
+    public var weekCritical: Double
+    /// То же для пятичасовой сессии: она живёт своей жизнью, и её 95 %
+    /// упираются в потолок независимо от того, где неделя.
+    public var sessionWarn: Double
+    public var sessionCritical: Double
+    /// Красить ли иконку в строке меню по этим порогам. Выключенная —
+    /// иконка нейтральна в любом состоянии, а расход по-прежнему виден
+    /// заполнением кольца и цифрой.
+    public var colorizeMenuBar: Bool
 
-    public init(warn: Double = 1.0, warnFloor: Double = 80, critical: Double = 0.9) {
-        self.warn = warn
-        self.warnFloor = warnFloor
-        self.critical = critical
+    public init(
+        weekWarn: Double = 80,
+        weekCritical: Double = 95,
+        sessionWarn: Double = 80,
+        sessionCritical: Double = 95,
+        colorizeMenuBar: Bool = true
+    ) {
+        self.weekWarn = weekWarn
+        self.weekCritical = weekCritical
+        self.sessionWarn = sessionWarn
+        self.sessionCritical = sessionCritical
+        self.colorizeMenuBar = colorizeMenuBar
     }
 
-    // Конфиг прошлой версии не знает про `warnFloor`, и падать на этом нельзя:
-    // иначе один новый ключ сбрасывает человеку все остальные пороги.
+    // Каждый ключ необязателен — как и во всём остальном конфиге. Пороги
+    // прошлой версии (`warn` кратностью плана, `warnFloor`, `critical` долей)
+    // сюда не переносятся: это другая величина в других единицах, и перенос
+    // дал бы 0.9 % вместо 90 %. Лишние ключи Codable молча игнорирует.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Thresholds()
         self.init(
-            warn: try c.decodeIfPresent(Double.self, forKey: .warn) ?? d.warn,
-            warnFloor: try c.decodeIfPresent(Double.self, forKey: .warnFloor) ?? d.warnFloor,
-            critical: try c.decodeIfPresent(Double.self, forKey: .critical) ?? d.critical
+            weekWarn: try c.decodeIfPresent(Double.self, forKey: .weekWarn) ?? d.weekWarn,
+            weekCritical: try c.decodeIfPresent(Double.self, forKey: .weekCritical) ?? d.weekCritical,
+            sessionWarn: try c.decodeIfPresent(Double.self, forKey: .sessionWarn) ?? d.sessionWarn,
+            sessionCritical: try c.decodeIfPresent(Double.self, forKey: .sessionCritical)
+                ?? d.sessionCritical,
+            colorizeMenuBar: try c.decodeIfPresent(Bool.self, forKey: .colorizeMenuBar)
+                ?? d.colorizeMenuBar
         )
+    }
+
+    /// Пороги в порядке возрастания и внутри шкалы. Красный ниже жёлтого
+    /// не «неверная настройка», а неотличимое от жёлтого поведение — чиним
+    /// молча, как и всё остальное в конфиге.
+    public func validated() -> Thresholds {
+        var t = self
+        if !(0...100).contains(t.weekWarn) { t.weekWarn = Thresholds().weekWarn }
+        if !(0...100).contains(t.weekCritical) { t.weekCritical = Thresholds().weekCritical }
+        if !(0...100).contains(t.sessionWarn) { t.sessionWarn = Thresholds().sessionWarn }
+        if !(0...100).contains(t.sessionCritical) { t.sessionCritical = Thresholds().sessionCritical }
+        t.weekCritical = max(t.weekCritical, t.weekWarn)
+        t.sessionCritical = max(t.sessionCritical, t.sessionWarn)
+        return t
     }
 }
 
@@ -307,9 +341,7 @@ public struct Config: Codable, Sendable, Equatable {
         }
         c.workHours = c.workHours.validated()
         if c.weeklyBudget < 0 { c.weeklyBudget = 0 }
-        if c.thresholds.warn <= 0 { c.thresholds.warn = Thresholds().warn }
-        if !(0...100).contains(c.thresholds.warnFloor) { c.thresholds.warnFloor = Thresholds().warnFloor }
-        if !(0...1).contains(c.thresholds.critical) { c.thresholds.critical = Thresholds().critical }
+        c.thresholds = c.thresholds.validated()
         c.appearance = c.appearance.validated()
         return c
     }

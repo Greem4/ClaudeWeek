@@ -1,10 +1,11 @@
 import AppKit
 import ClaudeWeekCore
 
-/// Иконка в строке меню: кольцо, заполняющееся по часовой от 12 часов на
-/// недельный процент, с цифрой внутри. Тот же смысл, что у `MenuBarBar`,
-/// но в форме, привычной по системным значкам (заряд, сеть) — круглая
-/// подложка вместо полосы.
+/// Иконка в строке меню: кольцо — пятичасовая сессия, цифра внутри — неделя.
+/// Два независимых лимита в одном значке: дуга заполняется по часовой от
+/// 12 часов на процент сессии, число в центре говорит про неделю. Цвета у
+/// них тоже свои — сессия может гореть красным при спокойной неделе, и
+/// наоборот.
 enum MenuBarRing {
     /// Диаметр картинки. Чуть больше высоты полосы (16 pt): кольцу нужен
     /// запас под трёхзначный процент, а строка меню (24 pt) его ещё держит.
@@ -14,15 +15,29 @@ enum MenuBarRing {
     /// 12 часов — верх круга; в системе координат AppKit это 90°.
     private static let startAngle: CGFloat = 90
 
+    /// `sessionPercent` — процент пятичасового лимита. Его нет (локальная
+    /// оценка сессию не считает, окно истекло) — приходит 0, и кольцо стоит
+    /// пустым. Недельным процентом дуга не подменяется намеренно: кольцо,
+    /// означающее то одно то другое, читать невозможно.
     static func image(
-        usedPercent: Double,
-        state: LimitState,
+        sessionPercent: Double,
+        sessionState: LimitState,
+        weekPercent: Double,
+        weekState: LimitState,
         palette: Palette = .system
     ) -> NSImage {
         let image = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) { rect in
-            drawRing(in: rect, usedPercent: usedPercent, state: state, palette: palette)
+            drawRing(
+                in: rect,
+                usedPercent: sessionPercent,
+                color: color(for: sessionState, palette: palette),
+                palette: palette
+            )
 
-            let label = attributed(percentText(usedPercent), state: state, palette: palette)
+            let label = attributed(
+                percentText(weekPercent),
+                color: color(for: weekState, palette: palette)
+            )
             let size = label.size()
             label.draw(at: NSPoint(x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2))
             return true
@@ -33,13 +48,17 @@ enum MenuBarRing {
 
     /// Пустая иконка, пока данных нет.
     static func placeholder(palette: Palette = .system) -> NSImage {
-        image(usedPercent: 0, state: .onTrack, palette: palette)
+        image(
+            sessionPercent: 0, sessionState: .normal,
+            weekPercent: 0, weekState: .normal,
+            palette: palette
+        )
     }
 
     private static func drawRing(
         in rect: NSRect,
         usedPercent: Double,
-        state: LimitState,
+        color: NSColor,
         palette: Palette
     ) {
         let bounds = rect.insetBy(dx: strokeWidth / 2, dy: strokeWidth / 2)
@@ -66,18 +85,14 @@ enum MenuBarRing {
         )
         arc.lineWidth = strokeWidth
         arc.lineCapStyle = .round
-        ringColor(for: state, palette: palette).setStroke()
+        color.setStroke()
         arc.stroke()
     }
 
-    private static func attributed(
-        _ text: String,
-        state: LimitState,
-        palette: Palette
-    ) -> NSAttributedString {
+    private static func attributed(_ text: String, color: NSColor) -> NSAttributedString {
         NSAttributedString(
             string: text,
-            attributes: [.font: font(forDigits: text.count), .foregroundColor: ringColor(for: state, palette: palette)]
+            attributes: [.font: font(forDigits: text.count), .foregroundColor: color]
         )
     }
 
@@ -93,13 +108,12 @@ enum MenuBarRing {
         NSFont.monospacedDigitSystemFont(ofSize: count >= 3 ? 6.5 : 8, weight: .semibold)
     }
 
-    /// Тот же цвет и для дуги, и для цифры — одна подсказка вместо двух.
     /// `labelColor` динамический: белый на тёмной строке меню, тёмный на
     /// светлой — «белый круг» из задачи это как раз он на тёмной теме.
-    private static func ringColor(for state: LimitState, palette: Palette) -> NSColor {
+    static func color(for state: LimitState, palette: Palette) -> NSColor {
         switch state {
-        case .onTrack: .labelColor
-        case .overPlan: palette.warning.nsColor
+        case .normal: .labelColor
+        case .warning: palette.warning.nsColor
         case .critical, .exhausted: palette.critical.nsColor
         }
     }

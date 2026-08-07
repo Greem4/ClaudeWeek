@@ -60,8 +60,30 @@ final class PanelModel {
         snapshot?.metrics(at: now, thresholds: config.thresholds)
     }
 
+    /// Состояние недели — по потраченному проценту.
     var state: LimitState {
-        metrics?.state ?? .onTrack
+        metrics?.state ?? .normal
+    }
+
+    /// Состояние пятичасовой сессии по её собственным порогам.
+    var sessionState: LimitState {
+        session?.state(thresholds: config.thresholds) ?? .normal
+    }
+
+    /// Процент сессии для кольца в строке меню. Сессии нет — ноль, а не
+    /// недельное число: кольцо всегда про одно и то же, иначе его не читать.
+    var sessionPercent: Double {
+        session?.usedPercent ?? 0
+    }
+
+    /// Те же состояния, но с оглядкой на тумблер окраски: выключенный делает
+    /// строку меню нейтральной, оставляя заполнение и цифры на месте.
+    var menuBarWeekState: LimitState {
+        config.thresholds.colorizeMenuBar ? state : .normal
+    }
+
+    var menuBarSessionState: LimitState {
+        config.thresholds.colorizeMenuBar ? sessionState : .normal
     }
 
     /// Номер текущих суток окна — их строку подсвечиваем. Совпадает с
