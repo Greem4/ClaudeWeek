@@ -2,9 +2,9 @@
 # Собирает ClaudeWeek.app вручную: SwiftPM даёт только бинарь, бандл клеим сами.
 # Xcode не требуется — хватает Command Line Tools.
 #
-#   ./Scripts/make-app.sh              бандл под свою архитектуру
-#   ARCH=arm64 ./Scripts/make-app.sh   бандл под конкретную архитектуру (arm64|x86_64)
-#   UNIVERSAL=1 ./Scripts/make-app.sh  универсальный бандл (arm64 + x86_64)
+#   ./scripts/make-app.sh              бандл под свою архитектуру
+#   ARCH=arm64 ./scripts/make-app.sh   бандл под конкретную архитектуру (arm64|x86_64)
+#   UNIVERSAL=1 ./scripts/make-app.sh  универсальный бандл (arm64 + x86_64)
 #
 # Универсальный собирается двумя проходами и склейкой lipo, а не одним
 # `swift build --arch arm64 --arch x86_64`: тот требует полного Xcode, а

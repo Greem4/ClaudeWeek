@@ -33,7 +33,7 @@ jobs:
         run: swift run ClaudeWeekTests
 
       - name: Бандл ClaudeWeek.app
-        run: ./Scripts/make-app.sh
+        run: ./scripts/make-app.sh
 
       - name: Что получилось
         run: |

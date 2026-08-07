@@ -177,7 +177,7 @@ planAt(t) = progress(t)                       // непрерывный план
 **М2.1. Разведка эндпоинта. Сделано.** Живой сессии `claude --debug api` не
 потребовалось: путь и форма ответа нашлись строками в бинаре клиента (функция
 `fetchUtilization`), а живой ответ снят одним запросом —
-`Scripts/probe-usage.swift`. Итог:
+`scripts/probe-usage.swift`. Итог:
 `GET https://api.anthropic.com/api/oauth/usage`, авторизация голым `Bearer`,
 beta-заголовки не нужны (проверены три варианта). Недельный процент —
 `seven_day.utilization`, момент сброса — `seven_day.resets_at`.
@@ -306,10 +306,10 @@ ClaudeWeek/
 │   │   ├── Screenshot.swift       # --screenshot: панель в PNG, обе темы
 │   │   └── AppIcon.swift          # --icon: .iconset для сборки бандла
 │   └── ClaudeWeekTests/           # исполняемый таргет с проверками (см. §8)
-├── Scripts/
+├── scripts/
 │   ├── make-app.sh                # сборка .app вместе с иконкой
-│   ├── install-agent.sh           # LaunchAgent автозапуска
-│   └── uninstall-agent.sh         # снять агент и удалить приложение
+│   ├── install.sh           # LaunchAgent автозапуска
+│   └── uninstall.sh         # снять агент и удалить приложение
 ├── Resources/Info.plist
 └── docs/
     ├── PLAN.md                    # этот документ
@@ -363,7 +363,7 @@ SwiftUI и AppKit есть в SDK CLT, и тестовый файл с `NSStatus
 компилируется `swiftc` без ошибок. Значит, меню-бар приложение собирается так:
 
 ```bash
-# Scripts/make-app.sh делает всё сам:
+# scripts/make-app.sh делает всё сам:
 swift build -c release --product ClaudeWeekApp
 #   ClaudeWeek.app/Contents/MacOS/ClaudeWeek           ← бинарь
 #   ClaudeWeek.app/Contents/Info.plist
@@ -388,12 +388,12 @@ codesign --force --sign - ClaudeWeek.app     # ad-hoc подпись
 
 ### 4.4 Автозапуск
 
-`Scripts/install-agent.sh` кладёт
+`scripts/install.sh` кладёт
 `~/Library/LaunchAgents/com.greem4.claudeweek.plist` c `RunAtLoad = true` и
 `KeepAlive = false`, затем `launchctl bootstrap gui/$UID …`. Повторный запуск —
-полная переустановка: сборка свежего бандла, затем `uninstall-agent.sh --quiet`
+полная переустановка: сборка свежего бандла, затем `uninstall.sh --quiet`
 (агент, работающий процесс, прежнее приложение) и только потом установка новой
-версии. Копии не плодятся. Удаление — тот же парный `uninstall-agent.sh`.
+версии. Копии не плодятся. Удаление — тот же парный `uninstall.sh`.
 
 ---
 
@@ -598,7 +598,7 @@ codesign --force --sign - ClaudeWeek.app     # ad-hoc подпись
 `/usage`; отключение сети переводит на локальный источник с пометкой «оценка».
 *Как прошла разведка:* живой сессии `claude --debug api` не потребовалось —
 эндпоинт и схема нашлись в бинаре клиента (`fetchUtilization`), а форма ответа
-снята одним запросом через `Scripts/probe-usage.swift`. Эндпоинт —
+снята одним запросом через `scripts/probe-usage.swift`. Эндпоинт —
 `GET https://api.anthropic.com/api/oauth/usage`, авторизация голым `Bearer`,
 beta-заголовки не нужны.
 
@@ -614,7 +614,7 @@ beta-заголовки не нужны.
 пробуждения Mac данные обновляются в течение минуты.
 
 **M6. Полировка (0.5 дня). Сделано.**
-`install-agent.sh`, README с установкой, режим `compact`, калибровка локального
+`install.sh`, README с установкой, режим `compact`, калибровка локального
 бюджета, иконка приложения.
 *Готово, когда:* установка с нуля по README на чистой машине укладывается в две
 команды.
@@ -632,7 +632,7 @@ assert-хелперов, запускаемый `swift run ClaudeWeekTests`; н�
 = падение. Когда/если появится Xcode, таргет переносится на swift-testing без
 изменения самих проверок.
 
-Что покрыто (307 проверок, `swift run ClaudeWeekTests`):
+Что покрыто (331 проверка, `swift run ClaudeWeekTests`):
 
 1. **Окно недели.** Момент ровно на сбросе; за минуту до и после; полсекунды до;
    воскресный полдень; смена таймзоны между вызовами; другой день сброса.
@@ -673,7 +673,7 @@ assert-хелперов, запускаемый `swift run ClaudeWeekTests`; н�
     неделями; без него окно не выдумывается.
 
 Автоматизировано отдельно: `--screenshot` рисует панель в обеих темах в PNG,
-не запуская UI; `Scripts/probe-usage.swift` снимает живой ответ эндпоинта.
+не запуская UI; `scripts/probe-usage.swift` снимает живой ответ эндпоинта.
 
 **Ещё не проверено:** VoiceOver, поведение после пробуждения Mac и сутки работы
 без утечек — это ручные проверки из критериев M4 и M5, руки до них не дошли.

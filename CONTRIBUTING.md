@@ -21,7 +21,7 @@
 ```bash
 swift build                  # без предупреждений
 swift run ClaudeWeekTests    # все проверки проходят
-./Scripts/make-app.sh        # бандл собирается
+./scripts/make-app.sh        # бандл собирается
 ```
 
 Меняете расчёты в `ClaudeWeekCore` — добавьте проверку в

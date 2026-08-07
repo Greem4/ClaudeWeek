@@ -59,13 +59,22 @@ Developer ID, — потому Gatekeeper и просит подтвержден
 ```bash
 git clone https://github.com/Greem4/ClaudeWeek.git
 cd ClaudeWeek
-./Scripts/install-agent.sh   # соберёт, поставит в ~/Applications, включит автозапуск
+./scripts/install.sh   # соберёт, поставит в ~/Applications, включит автозапуск
 ```
 
-Приложение появится в строке меню. Снять — `./Scripts/uninstall-agent.sh`.
-Обновиться — тот же `install-agent.sh`: он пересобирает бандл, гасит работающую
-копию и удаляет прежнюю установку, и только потом ставит новую. Вторая иконка в
-строке меню не появится.
+Приложение появится в строке меню. Снять — `./scripts/uninstall.sh`.
+Обновиться — тот же `install.sh`: он пересобирает бандл, гасит работающую
+копию и удаляет прежнюю установку целиком (включая забытые launchd-агенты и
+копию в `/Applications`), и только потом ставит новую. Вторая иконка в строке
+меню не появится, настройки и калибровка останутся.
+
+Скрипт печатает, что именно собирает — ветку, коммит и дату, — и умеет ставить
+не только текущий каталог:
+
+```bash
+./scripts/install.sh --latest         # самую свежую ветку репозитория
+./scripts/install.sh --ref my-branch  # конкретную ветку, тег или коммит
+```
 
 Ничего вводить не нужно: приложение читает OAuth-токен уже авторизованного
 Claude Code из Keychain — только читает, наружу не отдаёт, на диск не пишет.
@@ -102,9 +111,9 @@ Claude Code из Keychain — только читает, наружу не от�
 
 ```bash
 swift build                  # обе цели, без предупреждений
-swift run ClaudeWeekTests    # 307 проверок: без сети, без UI, свой раннер
-./Scripts/make-app.sh        # dist/ClaudeWeek.app — бандл, ничего не устанавливая
-ARCH=arm64 ./Scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
+swift run ClaudeWeekTests    # 331 проверка: без сети, без UI, свой раннер
+./scripts/make-app.sh        # dist/ClaudeWeek.app — бандл, ничего не устанавливая
+ARCH=arm64 ./scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
 ```
 
 То же самое гоняет [CI](.github/workflows/ci.yml) на каждый push и pull request.
