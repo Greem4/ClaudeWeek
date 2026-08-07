@@ -19,9 +19,9 @@
 То же, что гоняет [CI](.github/workflows/ci.yml) — прогоните до отправки:
 
 ```bash
-swift build                  # без предупреждений
-swift run ClaudeWeekTests    # все проверки проходят
-./scripts/make-app.sh        # бандл собирается
+swift build -Xswiftc -warnings-as-errors   # так собирает CI: предупреждение = падение
+swift run ClaudeWeekTests                  # все проверки проходят
+./scripts/make-app.sh                      # бандл собирается
 ```
 
 Меняете расчёты в `ClaudeWeekCore` — добавьте проверку в

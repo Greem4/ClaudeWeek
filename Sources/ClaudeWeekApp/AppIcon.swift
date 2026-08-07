@@ -3,7 +3,13 @@ import AppKit
 /// Иконка приложения — та же метафора, что и в панели: три полосы недели,
 /// где зелёная упирается в янтарную. Рисуем кодом, потому что без Xcode
 /// собрать ассет-каталог нечем.
+///
+/// Цвета берутся из родной палитры, тёмной её половины: иконка на плитке
+/// Launchpad живёт своей жизнью и на тему системы не смотрит, но роли у полос
+/// те же, что в панели, — и расходиться их оттенки не должны.
 enum AppIcon {
+    private static let ink = Palette.system
+
     /// Пары «имя файла в .iconset — сторона в пикселях».
     static let variants: [(name: String, pixels: Int)] = [
         ("icon_16x16", 16), ("icon_16x16@2x", 32),
@@ -48,7 +54,7 @@ enum AppIcon {
             let plate = NSRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
             let corner = plate.width * 0.22
 
-            NSColor(hex: 0x1A1A19).setFill()
+            NSColor(hex: ink.panelBackground.dark).setFill()
             NSBezierPath(roundedRect: plate, xRadius: corner, yRadius: corner).fill()
 
             let barHeight = plate.height * 0.11
@@ -67,19 +73,19 @@ enum AppIcon {
             ]
 
             for row in rows {
-                NSColor(hex: 0x2C2C2A).setFill()
+                NSColor(hex: ink.track.dark).setFill()
                 NSBezierPath(
                     roundedRect: NSRect(x: left, y: y, width: usable, height: barHeight),
                     xRadius: radius, yRadius: radius
                 ).fill()
 
-                NSColor(hex: 0x3987E5).setFill()
+                NSColor(hex: ink.plan.dark).setFill()
                 NSBezierPath(
                     roundedRect: NSRect(x: left, y: y, width: usable * row.plan, height: barHeight),
                     xRadius: radius, yRadius: radius
                 ).fill()
 
-                NSColor(hex: 0x0CA30C).setFill()
+                NSColor(hex: ink.good.dark).setFill()
                 NSBezierPath(
                     roundedRect: NSRect(
                         x: left, y: y,
@@ -91,7 +97,7 @@ enum AppIcon {
                 if row.fill > row.plan {
                     let gap = max(side * 0.012, 1)
                     let start = left + usable * row.plan + gap
-                    NSColor(hex: 0xFAB219).setFill()
+                    NSColor(hex: ink.warning.dark).setFill()
                     NSBezierPath(
                         roundedRect: NSRect(
                             x: start, y: y,
