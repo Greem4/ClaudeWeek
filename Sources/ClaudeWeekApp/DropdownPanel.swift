@@ -37,29 +37,19 @@ final class DropdownPanel {
 
     /// Панель показана — и показана здесь, на текущем столе.
     ///
-    /// «Здесь» тут не вычисляется, а обеспечивается: панель закрывается на
-    /// смене стола (`handleSpaceChange`), поэтому видимая панель всегда на том
-    /// столе, где её открыли.
-    ///
-    /// Спрашивать это у системы не выходит — пробовали дважды, оба признака
-    /// врут. `isOnActiveSpace` у окна с `.canJoinAllSpaces` отвечает «да», пока
-    /// окно видимо, на каком бы столе оно ни висело. Список окон на экране
-    /// (`CGWindowListCopyWindowInfo` с `.optionOnScreenOnly`) отвечает с
-    /// опозданием: только что показанного окна в нём ещё нет, и панель гасла
-    /// сама — смена стола заставала её «не на экране» через секунду после
-    /// появления, — а клик по пункту меню читался как «показать» вместо
-    /// «закрыть» и лишь перемигивал её.
-    var isShown: Bool { panel.isVisible }
+    /// Спрашиваем это прямо у окна, и ответ честный, потому что панель живёт на
+    /// одном столе (`.moveToActiveSpace`, см. `MenuPanel`). У окна на всех
+    /// столах сразу (`.canJoinAllSpaces`) такого ответа не добиться: там
+    /// `isOnActiveSpace` говорит «да», пока окно видимо, на каком бы столе оно
+    /// ни висело, — а список окон на экране, которым это пробовали заменить,
+    /// отвечает с опозданием и не знает окна, показанного мгновение назад.
+    /// Из-за той подмены панель гасила сама себя на смене стола и не
+    /// закрывалась по щелчку.
+    var isShown: Bool { isOpen && panel.isOnActiveSpace }
 
-    /// Когда панель показали в последний раз. Нужно `handleSpaceChange`,
-    /// чтобы отличить запоздавшее уведомление от настоящего ухода на другой стол.
-    private var shownAt: Date?
-
-    /// Насколько свежий показ считается «только что». Уведомление о смене стола
-    /// приходит по концу перехода — к этому моменту человек уже видит новый стол
-    /// и успевает щёлкнуть по пункту меню, так что уведомление приходит вдогонку
-    /// за показом. Секунды хватает: переход занимает заметно меньше.
-    private static let freshShow: TimeInterval = 1
+    /// Окно не убрано с экрана. Отвечает на вопрос «есть ли что закрывать»,
+    /// а не «видит ли это человек» — для второго есть `isShown`.
+    private var isOpen: Bool { panel.isVisible }
 
     var frame: NSRect { panel.frame }
 
@@ -125,14 +115,10 @@ final class DropdownPanel {
 
         hosting.layoutSubtreeIfNeeded()
 
-        // Рабочий стол, на котором окно показали, WindowServer запоминает за
-        // ним, и полноэкранное пространство держит его особенно крепко:
-        // показанное поверх фильма, дальше оно так и остаётся там — на других
-        // столах панели нет, а попытка вывести её туда лишь перекидывает
-        // экран обратно к плееру. Снятие с экрана эту привязку отпускает,
-        // и следующий показ достаётся текущему столу. Отличить «свой» стол от
-        // чужого нельзя, поэтому снимаем с экрана перед каждым показом. Для
-        // скрытой панели это пустая операция, для своего стола — лишняя, но
+        // Панель живёт на одном столе, и переезжает она не по объявлению флага,
+        // а по показу: снятое с экрана окно достаётся текущему столу, оставшееся
+        // висеть — держится за прежний. Поэтому снимаем перед каждым показом.
+        // Для скрытой панели это пустая операция, для своего стола — лишняя, но
         // безвредная: анимации показа нет, мигнуть нечему.
         panel.orderOut(nil)
 
@@ -150,15 +136,13 @@ final class DropdownPanel {
         // Тень строится по непрозрачным пикселям контента, а он только что
         // сменил размер — иначе от прошлого показа останется старый контур.
         panel.invalidateShadow()
-        shownAt = Date()
         startMonitoring()
     }
 
     func close() {
         hiddenByDeactivation = false
-        guard isShown else { return }
+        guard isOpen else { return }
         stopMonitoring()
-        shownAt = nil
         panel.orderOut(nil)
     }
 
@@ -207,7 +191,7 @@ final class DropdownPanel {
     }
 
     private func hideWhilePinned() {
-        guard isPinned, isShown else { return }
+        guard isPinned, isOpen else { return }
         panel.orderOut(nil)
         hiddenByDeactivation = true
     }
@@ -226,11 +210,10 @@ final class DropdownPanel {
     /// не только висит невидимкой, но и тянет привязку к чужому пространству
     /// на следующий показ.
     ///
-    /// «А мы точно ушли с её стола?» у системы не спрашиваем — честного ответа
-    /// она не даёт (см. `isShown`). Вместо этого закрываем на каждой смене
-    /// стола, отсеивая по времени показа единственный случай, где это было бы
-    /// неверно: уведомление приходит по концу перехода и может обогнать клик,
-    /// которым панель только что открыли на новом столе.
+    /// «А мы точно ушли с её стола?» спрашиваем у самого окна: панель живёт на
+    /// одном столе, и `isOnActiveSpace` отвечает на это честно. Уведомление
+    /// приходит по концу перехода, но опоздание здесь уже безобидно — панель,
+    /// открытую на новом столе, оно застаёт на активном столе и не трогает.
     private func observeSpaceChange() {
         spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
@@ -240,7 +223,7 @@ final class DropdownPanel {
     }
 
     private func handleSpaceChange() {
-        guard isShown else { return }
+        guard isOpen else { return }
         // Закреплённую панель держим открытой — она предпросмотр к настройкам,
         // и закрыть её значило бы отобрать то, ради чего её закрепляли.
         // Переносим на текущий стол; если приложение при этом ушло в фон,
@@ -249,9 +232,10 @@ final class DropdownPanel {
             show(from: button)
             return
         }
-        // Панель, показанная мгновение назад, — это панель, открытая уже здесь:
-        // уведомление про переход, который случился до неё, и её не касается.
-        if let shownAt, Date().timeIntervalSince(shownAt) < Self.freshShow { return }
+        // Панель осталась на покинутом столе — закрываем, как системное меню.
+        // Ту, что уже показана здесь, не трогаем: уведомление про переход,
+        // случившийся до неё, её не касается.
+        guard !panel.isOnActiveSpace else { return }
         close()
     }
 
@@ -281,7 +265,7 @@ final class DropdownPanel {
     /// на разницу высот. Одна строка сессии смещала её незаметно, раскрытая
     /// неделя отрывала от строки меню на шесть строк.
     private func resize(to size: NSSize) {
-        guard isShown, let anchor else { return }
+        guard isOpen, let anchor else { return }
         panel.setFrame(frame(for: size, anchor: anchor), display: true)
         pinToAnchor()
     }
@@ -296,7 +280,7 @@ final class DropdownPanel {
     /// каждое изменение размера, от кого бы оно ни пришло, и по уже
     /// применённой высоте, а не по той, которую мы просили.
     private func pinToAnchor() {
-        guard isShown, let anchor else { return }
+        guard isOpen, let anchor else { return }
         let target = frame(for: panel.frame.size, anchor: anchor).origin
         guard target != panel.frame.origin else { return }
         panel.setFrameOrigin(target)
@@ -348,7 +332,9 @@ final class DropdownPanel {
             // Из MainActor.assumeIsolated возвращаем только Bool: NSEvent
             // не Sendable, и через границу изоляции его не отдать.
             let swallow = MainActor.assumeIsolated { () -> Bool in
-                guard let self, self.isShown else { return false }
+                // Здесь спрашиваем именно «есть ли что закрывать»: панель,
+                // забытую на покинутом столе, клик мимо тоже должен убирать.
+                guard let self, self.isOpen else { return false }
                 if event.type == .keyDown {
                     guard event.keyCode == 53 else { return false }  // Esc
                     self.close()
@@ -407,11 +393,15 @@ private final class MenuPanel: NSPanel {
         isReleasedWhenClosed = false
         // Появление и скрытие без анимации: панель нужна по клику сразу.
         animationBehavior = .none
-        // canJoinAllSpaces — чтобы панель приходила на текущий рабочий стол,
-        // fullScreenAuxiliary — чтобы её пускали поверх полноэкранного окна.
-        // Одних флагов мало: показанное окно всё равно остаётся привязанным
-        // к своему столу, и это разбирается в `show(from:)`.
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        // moveToActiveSpace — панель живёт на одном столе и переезжает на
+        // текущий, когда её показывают заново; fullScreenAuxiliary — чтобы её
+        // пускали поверх полноэкранного окна.
+        //
+        // Не canJoinAllSpaces: с ним панель висит на всех столах разом, а
+        // значит, едет вместе со свайпом и гаснет уже на новом столе, когда
+        // приходит уведомление о переходе. Заодно он лишает окно честного
+        // `isOnActiveSpace` — на нём держится весь разбор «панель здесь?».
+        collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .stationary, .ignoresCycle]
     }
 
     /// Без этого borderless-окно не принимает клавиатуру, и Esc до нас
