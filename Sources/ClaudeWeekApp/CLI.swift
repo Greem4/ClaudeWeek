@@ -137,8 +137,12 @@ enum CLI {
     /// наблюдению. Считает, сколько условных долларов уже потрачено, и делит
     /// на долю — получается бюджет недели.
     static func calibrate(percent: Double, config: Config, configURL: URL) async -> Int32 {
+        // Ноль здесь не «край шкалы», а отсутствие наблюдения: делить на него
+        // нечего, и бюджет из него не выйдет.
         guard percent > 0, percent <= 100 else {
-            FileHandle.standardError.write(Data("процент должен быть в диапазоне 0…100\n".utf8))
+            FileHandle.standardError.write(
+                Data("процент должен быть больше 0 и не больше 100\n".utf8)
+            )
             return 1
         }
 

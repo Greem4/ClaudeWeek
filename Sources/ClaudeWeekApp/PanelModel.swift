@@ -60,8 +60,42 @@ final class PanelModel {
         snapshot?.metrics(at: now, thresholds: config.thresholds)
     }
 
+    /// Состояние недели — по потраченному проценту.
     var state: LimitState {
-        metrics?.state ?? .onTrack
+        metrics?.state ?? .normal
+    }
+
+    /// Состояние пятичасовой сессии по её собственным порогам.
+    var sessionState: LimitState {
+        session?.state(thresholds: config.thresholds) ?? .normal
+    }
+
+    /// Процент сессии для кольца в строке меню. Сессии нет — ноль, а не
+    /// недельное число: кольцо всегда про одно и то же, иначе его не читать.
+    var sessionPercent: Double {
+        session?.usedPercent ?? 0
+    }
+
+    /// Процент и состояние того лимита, что назначен на место в кольце.
+    /// Дуга и цифра берут его одинаково, отличаясь только ролью из настройки:
+    /// так расклад меняется местами, а не двумя разными ветками кода.
+    ///
+    /// Недели без снимка не бывает 0 % — бывает «нечего показывать», но
+    /// кольцо всё равно рисуется, и ноль здесь честнее пустоты.
+    func ringLimit(_ arc: RingArc) -> (percent: Double, state: LimitState) {
+        switch arc {
+        case .session: (sessionPercent, sessionState)
+        case .week: (snapshot?.usedPercent ?? 0, state)
+        }
+    }
+
+    /// Красить ли значок в строке меню по порогам. Выключенный тумблер гасит
+    /// цвет в самой отрисовке, а не подменой состояния на `.normal`: у полосы
+    /// `.normal` — зелёный, и «нейтрально» подменой не получалось, выходило
+    /// «всегда зелёная». Состояния выше при этом остаются настоящими —
+    /// заполнение и цифры от тумблера не зависят.
+    var colorizesMenuBar: Bool {
+        config.thresholds.colorizeMenuBar
     }
 
     /// Номер текущих суток окна — их строку подсвечиваем. Совпадает с

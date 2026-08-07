@@ -13,6 +13,35 @@ public enum MenuBarStyle: String, Codable, Sendable, CaseIterable {
     case ring
 }
 
+/// Какой из двух лимитов заполняет дугу кольца. Второй достаётся цифре в
+/// центре: значок показывает оба разом, и вопрос только в том, какой из них
+/// читается заполнением, а какой числом.
+///
+/// Дуга — про «сколько осталось» с одного взгляда, цифра — про точное
+/// значение. Кому важнее не упереться в пятичасовой лимит, тот ставит на дугу
+/// сессию; кому важнее недельный бюджет — неделю.
+public enum RingArc: String, Codable, Sendable, CaseIterable {
+    /// Дуга — пятичасовая сессия, цифра — неделя.
+    case session
+    /// Дуга — неделя, цифра — пятичасовая сессия.
+    case week
+
+    public var title: String {
+        switch self {
+        case .session: "Пятичасовую сессию"
+        case .week: "Недельный лимит"
+        }
+    }
+
+    /// Что достаётся цифре в центре — всегда второй лимит.
+    public var label: RingArc {
+        switch self {
+        case .session: .week
+        case .week: .session
+        }
+    }
+}
+
 /// Палитра панели. `system` — исходная, прогнанная через валидатор на
 /// дальтонизм и контраст; остальные добавлены, чтобы было чем играть,
 /// и держат те же роли цветов.
@@ -160,16 +189,68 @@ public struct Calibration: Codable, Sendable, Equatable {
     }
 }
 
+/// Пороги окраски — проценты расхода, и ничего кроме. Ни план, ни прогноз
+/// в цвет не входят: план отвечает на вопрос «в графике ли я», а цвет — на
+/// «пора ли беспокоиться», и это разные вопросы. Смешивать их значит желтеть
+/// на трёх процентах в первый рабочий час недели, когда плана ещё нет.
 public struct Thresholds: Codable, Sendable, Equatable {
-    /// Во сколько раз факт может превышать план, прежде чем полоса станет
-    /// янтарной. 1.0 = сразу за плановой отметкой.
-    public var warn: Double
-    /// Доля лимита, после которой заголовок краснеет.
-    public var critical: Double
+    /// Процент недельного лимита, после которого цифра желтеет.
+    public var weekWarn: Double
+    /// …и краснеет.
+    public var weekCritical: Double
+    /// То же для пятичасовой сессии: она живёт своей жизнью, и её 95 %
+    /// упираются в потолок независимо от того, где неделя.
+    public var sessionWarn: Double
+    public var sessionCritical: Double
+    /// Красить ли иконку в строке меню по этим порогам. Выключенная —
+    /// иконка нейтральна в любом состоянии, а расход по-прежнему виден
+    /// заполнением кольца и цифрой.
+    public var colorizeMenuBar: Bool
 
-    public init(warn: Double = 1.0, critical: Double = 0.9) {
-        self.warn = warn
-        self.critical = critical
+    public init(
+        weekWarn: Double = 80,
+        weekCritical: Double = 95,
+        sessionWarn: Double = 80,
+        sessionCritical: Double = 95,
+        colorizeMenuBar: Bool = true
+    ) {
+        self.weekWarn = weekWarn
+        self.weekCritical = weekCritical
+        self.sessionWarn = sessionWarn
+        self.sessionCritical = sessionCritical
+        self.colorizeMenuBar = colorizeMenuBar
+    }
+
+    // Каждый ключ необязателен — как и во всём остальном конфиге. Пороги
+    // прошлой версии (`warn` кратностью плана, `warnFloor`, `critical` долей)
+    // сюда не переносятся: это другая величина в других единицах, и перенос
+    // дал бы 0.9 % вместо 90 %. Лишние ключи Codable молча игнорирует.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Thresholds()
+        self.init(
+            weekWarn: try c.decodeIfPresent(Double.self, forKey: .weekWarn) ?? d.weekWarn,
+            weekCritical: try c.decodeIfPresent(Double.self, forKey: .weekCritical) ?? d.weekCritical,
+            sessionWarn: try c.decodeIfPresent(Double.self, forKey: .sessionWarn) ?? d.sessionWarn,
+            sessionCritical: try c.decodeIfPresent(Double.self, forKey: .sessionCritical)
+                ?? d.sessionCritical,
+            colorizeMenuBar: try c.decodeIfPresent(Bool.self, forKey: .colorizeMenuBar)
+                ?? d.colorizeMenuBar
+        )
+    }
+
+    /// Пороги в порядке возрастания и внутри шкалы. Красный ниже жёлтого
+    /// не «неверная настройка», а неотличимое от жёлтого поведение — чиним
+    /// молча, как и всё остальное в конфиге.
+    public func validated() -> Thresholds {
+        var t = self
+        if !(0...100).contains(t.weekWarn) { t.weekWarn = Thresholds().weekWarn }
+        if !(0...100).contains(t.weekCritical) { t.weekCritical = Thresholds().weekCritical }
+        if !(0...100).contains(t.sessionWarn) { t.sessionWarn = Thresholds().sessionWarn }
+        if !(0...100).contains(t.sessionCritical) { t.sessionCritical = Thresholds().sessionCritical }
+        t.weekCritical = max(t.weekCritical, t.weekWarn)
+        t.sessionCritical = max(t.sessionCritical, t.sessionWarn)
+        return t
     }
 }
 
@@ -187,6 +268,8 @@ public struct Config: Codable, Sendable, Equatable {
     /// раскладывается по рабочему времени, а не по астрономическому.
     public var workHours: WorkHours
     public var menuBarStyle: MenuBarStyle
+    /// Что заполняет дугу кольца; на прочие стили значка не влияет.
+    public var ringArc: RingArc
     /// Условная стоимость недели для локального режима; 0 = не откалиброван.
     public var weeklyBudget: Double
     public var calibration: Calibration
@@ -209,6 +292,7 @@ public struct Config: Codable, Sendable, Equatable {
         provider: .auto,
         workHours: WorkHours.default,
         menuBarStyle: .percent,
+        ringArc: .session,
         weeklyBudget: 0,
         calibration: Calibration(),
         thresholds: Thresholds(),
@@ -224,6 +308,7 @@ public struct Config: Codable, Sendable, Equatable {
         provider: ProviderPreference,
         workHours: WorkHours = WorkHours.default,
         menuBarStyle: MenuBarStyle,
+        ringArc: RingArc = .session,
         weeklyBudget: Double,
         calibration: Calibration,
         thresholds: Thresholds,
@@ -237,6 +322,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.provider = provider
         self.workHours = workHours
         self.menuBarStyle = menuBarStyle
+        self.ringArc = ringArc
         self.weeklyBudget = weeklyBudget
         self.calibration = calibration
         self.thresholds = thresholds
@@ -257,6 +343,7 @@ public struct Config: Codable, Sendable, Equatable {
             provider: try c.decodeIfPresent(ProviderPreference.self, forKey: .provider) ?? d.provider,
             workHours: try c.decodeIfPresent(WorkHours.self, forKey: .workHours) ?? d.workHours,
             menuBarStyle: try c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle) ?? d.menuBarStyle,
+            ringArc: try c.decodeIfPresent(RingArc.self, forKey: .ringArc) ?? d.ringArc,
             weeklyBudget: try c.decodeIfPresent(Double.self, forKey: .weeklyBudget) ?? d.weeklyBudget,
             calibration: try c.decodeIfPresent(Calibration.self, forKey: .calibration) ?? d.calibration,
             thresholds: try c.decodeIfPresent(Thresholds.self, forKey: .thresholds) ?? d.thresholds,
@@ -289,8 +376,7 @@ public struct Config: Codable, Sendable, Equatable {
         }
         c.workHours = c.workHours.validated()
         if c.weeklyBudget < 0 { c.weeklyBudget = 0 }
-        if c.thresholds.warn <= 0 { c.thresholds.warn = Thresholds().warn }
-        if !(0...1).contains(c.thresholds.critical) { c.thresholds.critical = Thresholds().critical }
+        c.thresholds = c.thresholds.validated()
         c.appearance = c.appearance.validated()
         return c
     }

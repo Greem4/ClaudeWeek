@@ -2,11 +2,11 @@
 # Пакует ClaudeWeek.app в dist/ClaudeWeek-<версия>[-архитектура].dmg — тот
 # самый файл, который уезжает в GitHub Releases.
 #
-#   ./Scripts/make-dmg.sh              собрать бандл и упаковать
-#   ARCH=arm64 ./Scripts/make-dmg.sh   бандл под arm64 → ...-arm64.dmg
-#   ARCH=x86_64 ./Scripts/make-dmg.sh  бандл под x86_64 → ...-x86_64.dmg
-#   UNIVERSAL=1 ./Scripts/make-dmg.sh  универсальный бандл, суффикса нет
-#   SKIP_BUILD=1 ./Scripts/make-dmg.sh упаковать уже собранный dist/ClaudeWeek.app
+#   ./scripts/make-dmg.sh              собрать бандл и упаковать
+#   ARCH=arm64 ./scripts/make-dmg.sh   бандл под arm64 → ...-arm64.dmg
+#   ARCH=x86_64 ./scripts/make-dmg.sh  бандл под x86_64 → ...-x86_64.dmg
+#   UNIVERSAL=1 ./scripts/make-dmg.sh  универсальный бандл, суффикса нет
+#   SKIP_BUILD=1 ./scripts/make-dmg.sh упаковать уже собранный dist/ClaudeWeek.app
 #
 # Архитектуру для суффикса берём не из ARCH, а из готового бинаря (`lipo
 # -archs`): у SKIP_BUILD=1 своего ARCH может не быть, а образ всё равно
@@ -24,9 +24,9 @@ VOLNAME="ClaudeWeek"
 cd "$ROOT"
 
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
-    "$ROOT/Scripts/make-app.sh"
+    "$ROOT/scripts/make-app.sh"
 fi
-[ -d "$APP" ] || { echo "не нашёл бандл: $APP (сначала Scripts/make-app.sh)" >&2; exit 1; }
+[ -d "$APP" ] || { echo "не нашёл бандл: $APP (сначала scripts/make-app.sh)" >&2; exit 1; }
 
 # Версию берём из готового бандла, а не из исходников: в образ должно попасть
 # ровно то, что лежит в .app, даже если Version.swift успели поправить.

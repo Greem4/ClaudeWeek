@@ -1,7 +1,7 @@
 import Foundation
 
 /// Логи идут в stderr: приложение живёт под LaunchAgent, и его stderr
-/// перенаправляется в файл (см. Scripts/install-agent.sh).
+/// перенаправляется в файл (см. scripts/install.sh).
 public enum Log {
     public enum Level: Int, Sendable, Comparable {
         case debug = 0

@@ -197,7 +197,7 @@ Claude Code обновляет токен сам, и следующая попы
 ## Как перепроверить схему
 
 ```bash
-swift Scripts/probe-usage.swift
+swift scripts/probe-usage.swift
 ```
 
 Зонд читает токен из Keychain, делает один запрос и печатает ответ целиком.

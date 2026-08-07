@@ -115,25 +115,41 @@ final class StatusItemController: NSObject {
         case .percent:
             return MenuBarBar.image(
                 usedPercent: snapshot.usedPercent, planPercent: metrics.planNowPercent,
-                state: metrics.state, title: model.menuBarTitle, palette: palette
+                state: model.state, title: model.menuBarTitle,
+                colorize: model.colorizesMenuBar, palette: palette
             )
         case .compact:
             return MenuBarBar.image(
                 usedPercent: snapshot.usedPercent, planPercent: metrics.planNowPercent,
-                state: metrics.state, title: nil, palette: palette
+                state: model.state, title: nil,
+                colorize: model.colorizesMenuBar, palette: palette
             )
         case .ring:
-            return MenuBarRing.image(usedPercent: snapshot.usedPercent, state: metrics.state, palette: palette)
+            // Какой лимит заполняет дугу, а какой стоит цифрой — дело
+            // настройки; сюда они приходят уже разложенными по местам.
+            let arc = model.config.ringArc
+            let onArc = model.ringLimit(arc)
+            let inside = model.ringLimit(arc.label)
+            return MenuBarRing.image(
+                arcPercent: onArc.percent, arcState: onArc.state,
+                labelPercent: inside.percent, labelState: inside.state,
+                colorize: model.colorizesMenuBar,
+                palette: palette
+            )
         }
     }
 
+    /// Кольцо показывает два лимита сразу, и подсказка обязана назвать оба:
+    /// иначе непонятно, чей процент горит красным.
     private var tooltip: String {
         guard let metrics = model.metrics else { return "ClaudeWeek — данных пока нет" }
-        return """
-        Потрачено \(Formatting.percent(metrics.usedPercent)) из недельного лимита
-        План на сейчас — \(Formatting.percent(metrics.planNowPercent))
-        До сброса \(Formatting.duration(metrics.timeLeft))
-        """
+        var lines = ["Неделя — \(Formatting.percent(metrics.usedPercent)) из лимита"]
+        if let session = model.session {
+            lines.append("Сессия 5 ч — \(Formatting.percent(session.usedPercent)) из лимита")
+        }
+        lines.append("План на сейчас — \(Formatting.percent(metrics.planNowPercent))")
+        lines.append("До сброса недели \(Formatting.duration(metrics.timeLeft))")
+        return lines.joined(separator: "\n")
     }
 
     // MARK: Действия
@@ -166,13 +182,36 @@ final class StatusItemController: NSObject {
         model.expandsWeek = false
     }
 
+    /// Три группы: что сделать сейчас, как программа заведена, справка и
+    /// выход. Галочка автозапуска стоит рядом с настройками, потому что она и
+    /// есть настройка, просто живёт не в конфиге, а в launchd.
     private func showMenu() {
         // Меню встаёт на то же место, что и панель, — сначала убираем её.
         dropdown.close()
 
         let menu = NSMenu()
+        // Пункт автозапуска бывает выключенным, а AppKit сам гасит только те,
+        // у кого нет цели: без этого он включал бы его обратно.
+        menu.autoenablesItems = false
+
         menu.addItem(withTitle: "Обновить", action: #selector(refreshFromMenu), keyEquivalent: "r")
             .target = self
+        menu.addItem(.separator())
+
+        let launch = menu.addItem(
+            withTitle: "Запускать при входе в систему",
+            action: #selector(toggleLoginItem), keyEquivalent: ""
+        )
+        launch.target = self
+        launch.state = LoginItem.isEnabled ? .on : .off
+        launch.isEnabled = LoginItem.isAvailable
+        if !LoginItem.isAvailable {
+            // Запущено не из бандла — из .build, отладочным `swift run`.
+            // Прописывать такой путь в launchd бессмысленно, и молчаливо
+            // неактивный пункт выглядел бы поломкой.
+            launch.toolTip = "Доступно только у собранного приложения"
+        }
+
         menu.addItem(withTitle: "Настройки…", action: #selector(openConfig), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
@@ -187,6 +226,12 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func refreshFromMenu() { refresh() }
+
+    /// Галочку читаем заново при каждом показе меню, поэтому обновлять её
+    /// здесь нечего: следующий показ возьмёт состояние из самого агента.
+    @objc private func toggleLoginItem() {
+        LoginItem.setEnabled(!LoginItem.isEnabled)
+    }
 
     @objc private func openConfig() { openSettings() }
 

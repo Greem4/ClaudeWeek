@@ -19,14 +19,19 @@ enum MenuBarBar {
     }
 
     /// `title` = nil — режим `compact`: одна полоса, без числа.
+    ///
+    /// `colorize` — тумблер окраски по порогам. Выключенный гасит и цифру, и
+    /// саму заливку: раньше он подменял состояние на `.normal`, а `.normal`
+    /// у полосы зелёный — выходил не нейтральный значок, а всегда зелёный.
     static func image(
         usedPercent: Double,
         planPercent: Double,
         state: LimitState,
         title: String?,
+        colorize: Bool = true,
         palette: Palette = .system
     ) -> NSImage {
-        let label = title.map { attributed($0, state: state, palette: palette) }
+        let label = title.map { attributed($0, state: state, colorize: colorize, palette: palette) }
         let labelSize = label?.size() ?? .zero
         let width = max(minimumWidth, ceil(labelSize.width) + 2)
 
@@ -39,7 +44,7 @@ enum MenuBarBar {
             drawBar(
                 in: NSRect(x: 0, y: top - barHeight, width: rect.width, height: barHeight),
                 usedPercent: usedPercent, planPercent: planPercent,
-                state: state, palette: palette
+                state: state, colorize: colorize, palette: palette
             )
 
             if let label {
@@ -53,7 +58,7 @@ enum MenuBarBar {
 
     /// Пустая иконка, пока данных нет.
     static func placeholder(title: String?, palette: Palette = .system) -> NSImage {
-        image(usedPercent: 0, planPercent: 0, state: .onTrack, title: title, palette: palette)
+        image(usedPercent: 0, planPercent: 0, state: .normal, title: title, palette: palette)
     }
 
     private static func drawBar(
@@ -61,6 +66,7 @@ enum MenuBarBar {
         usedPercent: Double,
         planPercent: Double,
         state: LimitState,
+        colorize: Bool,
         palette: Palette
     ) {
         let radius = rect.height / 2
@@ -68,6 +74,8 @@ enum MenuBarBar {
         palette.track.nsColor.withAlphaComponent(0.65).setFill()
         NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
 
+        // План остаётся ориентиром «где я по графику», но цвет ему больше не
+        // подчиняется: перерасход в понедельник — это ещё не тревога.
         let planWidth = rect.width * clamp(planPercent)
         palette.plan.nsColor.withAlphaComponent(0.85).setFill()
         NSBezierPath(
@@ -76,48 +84,54 @@ enum MenuBarBar {
         ).fill()
 
         let usedWidth = rect.width * clamp(usedPercent)
-        palette.good.nsColor.setFill()
+        guard usedWidth > 0 else { return }
+        fillColor(for: state, colorize: colorize, palette: palette).setFill()
         NSBezierPath(
-            roundedRect: NSRect(
-                x: rect.minX, y: rect.minY,
-                width: min(usedWidth, planWidth), height: rect.height
-            ),
+            roundedRect: NSRect(x: rect.minX, y: rect.minY, width: usedWidth, height: rect.height),
             xRadius: radius, yRadius: radius
         ).fill()
+    }
 
-        if usedWidth > planWidth {
-            // Тот же двухпиксельный зазор, что и в панели.
-            let start = planWidth + 2
-            (state == .exhausted ? palette.critical : palette.warning).nsColor.setFill()
-            NSBezierPath(
-                roundedRect: NSRect(
-                    x: rect.minX + start, y: rect.minY,
-                    width: max(usedWidth - start, 1), height: rect.height
-                ),
-                xRadius: radius, yRadius: radius
-            ).fill()
+    /// Цвет заливки: те же пороги, что у цифр, но спокойное состояние —
+    /// зелёное, а не «цвет текста»: полоса в 3 pt нейтральным цветом сливается
+    /// с треком. Выключенная окраска — исключение: там нейтральный цвет и
+    /// нужен, а `labelColor` от трека отличается заметно.
+    private static func fillColor(
+        for state: LimitState,
+        colorize: Bool,
+        palette: Palette
+    ) -> NSColor {
+        guard colorize else { return .labelColor }
+        return switch state {
+        case .normal: palette.good.nsColor
+        case .warning: palette.warning.nsColor
+        case .critical, .exhausted: palette.critical.nsColor
         }
     }
 
     private static func attributed(
         _ title: String,
         state: LimitState,
+        colorize: Bool,
         palette: Palette
     ) -> NSAttributedString {
         NSAttributedString(
             string: title,
-            attributes: [.font: font, .foregroundColor: textColor(for: state, palette: palette)]
+            attributes: [
+                .font: font,
+                .foregroundColor: textColor(for: state, colorize: colorize, palette: palette),
+            ]
         )
     }
 
     /// Цвет цифр. `labelColor` динамический — он разрешается в момент
     /// отрисовки, поэтому подходит и к тёмной, и к светлой строке меню.
-    private static func textColor(for state: LimitState, palette: Palette) -> NSColor {
-        switch state {
-        case .onTrack: .labelColor
-        case .overPlan: palette.warning.nsColor
-        case .critical, .exhausted: palette.critical.nsColor
-        }
+    private static func textColor(
+        for state: LimitState,
+        colorize: Bool,
+        palette: Palette
+    ) -> NSColor {
+        MenuBarRing.color(for: state, colorize: colorize, palette: palette)
     }
 
     private static func clamp(_ percent: Double) -> CGFloat {

@@ -1,10 +1,15 @@
 import AppKit
 import ClaudeWeekCore
 
-/// Иконка в строке меню: кольцо, заполняющееся по часовой от 12 часов на
-/// недельный процент, с цифрой внутри. Тот же смысл, что у `MenuBarBar`,
-/// но в форме, привычной по системным значкам (заряд, сеть) — круглая
-/// подложка вместо полосы.
+/// Иконка в строке меню: дуга и цифра внутри неё — два независимых лимита.
+/// Кто из них где, решает настройка `ringArc`: по умолчанию дуга заполняется
+/// пятичасовой сессией, а число в центре говорит про неделю; обратный расклад
+/// столь же осмыслен и переключается в настройках. Цвета у дуги и цифры свои
+/// — сессия может гореть красным при спокойной неделе, и наоборот.
+///
+/// Сама рисовалка про лимиты ничего не знает: ей дают процент с состоянием на
+/// дугу и такую же пару на цифру. Что из этого неделя, а что сессия, решено
+/// уровнем выше — здесь это лишь два места на картинке.
 enum MenuBarRing {
     /// Диаметр картинки. Чуть больше высоты полосы (16 pt): кольцу нужен
     /// запас под трёхзначный процент, а строка меню (24 pt) его ещё держит.
@@ -14,15 +19,33 @@ enum MenuBarRing {
     /// 12 часов — верх круга; в системе координат AppKit это 90°.
     private static let startAngle: CGFloat = 90
 
+    /// `arcPercent` на дуге сессии может не быть вовсе — локальная оценка её
+    /// не считает, окно истекает, — тогда приходит 0 и дуга стоит пустой.
+    /// Вторым лимитом она при этом не подменяется: кольцо, означающее то одно
+    /// то другое, читать невозможно.
+    ///
+    /// `colorize` — тумблер окраски по порогам. Выключенный оставляет
+    /// заполнение дуги и цифру на месте, но гасит оба цвета до нейтрального.
     static func image(
-        usedPercent: Double,
-        state: LimitState,
+        arcPercent: Double,
+        arcState: LimitState,
+        labelPercent: Double,
+        labelState: LimitState,
+        colorize: Bool = true,
         palette: Palette = .system
     ) -> NSImage {
         let image = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) { rect in
-            drawRing(in: rect, usedPercent: usedPercent, state: state, palette: palette)
+            drawRing(
+                in: rect,
+                usedPercent: arcPercent,
+                color: color(for: arcState, colorize: colorize, palette: palette),
+                palette: palette
+            )
 
-            let label = attributed(percentText(usedPercent), state: state, palette: palette)
+            let label = attributed(
+                percentText(labelPercent),
+                color: color(for: labelState, colorize: colorize, palette: palette)
+            )
             let size = label.size()
             label.draw(at: NSPoint(x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2))
             return true
@@ -33,13 +56,17 @@ enum MenuBarRing {
 
     /// Пустая иконка, пока данных нет.
     static func placeholder(palette: Palette = .system) -> NSImage {
-        image(usedPercent: 0, state: .onTrack, palette: palette)
+        image(
+            arcPercent: 0, arcState: .normal,
+            labelPercent: 0, labelState: .normal,
+            palette: palette
+        )
     }
 
     private static func drawRing(
         in rect: NSRect,
         usedPercent: Double,
-        state: LimitState,
+        color: NSColor,
         palette: Palette
     ) {
         let bounds = rect.insetBy(dx: strokeWidth / 2, dy: strokeWidth / 2)
@@ -66,18 +93,14 @@ enum MenuBarRing {
         )
         arc.lineWidth = strokeWidth
         arc.lineCapStyle = .round
-        ringColor(for: state, palette: palette).setStroke()
+        color.setStroke()
         arc.stroke()
     }
 
-    private static func attributed(
-        _ text: String,
-        state: LimitState,
-        palette: Palette
-    ) -> NSAttributedString {
+    private static func attributed(_ text: String, color: NSColor) -> NSAttributedString {
         NSAttributedString(
             string: text,
-            attributes: [.font: font(forDigits: text.count), .foregroundColor: ringColor(for: state, palette: palette)]
+            attributes: [.font: font(forDigits: text.count), .foregroundColor: color]
         )
     }
 
@@ -93,13 +116,15 @@ enum MenuBarRing {
         NSFont.monospacedDigitSystemFont(ofSize: count >= 3 ? 6.5 : 8, weight: .semibold)
     }
 
-    /// Тот же цвет и для дуги, и для цифры — одна подсказка вместо двух.
     /// `labelColor` динамический: белый на тёмной строке меню, тёмный на
-    /// светлой — «белый круг» из задачи это как раз он на тёмной теме.
-    private static func ringColor(for state: LimitState, palette: Palette) -> NSColor {
-        switch state {
-        case .onTrack: .labelColor
-        case .overPlan: palette.warning.nsColor
+    /// светлой — «белый круг» из задачи это как раз он на тёмной теме. Он же
+    /// отвечает за выключенную окраску: нейтральный значок — это тот, что
+    /// покрашен цветом текста строки меню, а не спокойным зелёным.
+    static func color(for state: LimitState, colorize: Bool = true, palette: Palette) -> NSColor {
+        guard colorize else { return .labelColor }
+        return switch state {
+        case .normal: .labelColor
+        case .warning: palette.warning.nsColor
         case .critical, .exhausted: palette.critical.nsColor
         }
     }

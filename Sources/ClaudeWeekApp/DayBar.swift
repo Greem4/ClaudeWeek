@@ -77,10 +77,10 @@ struct DayRow: View {
 
     @Environment(\.palette) private var palette
 
-    private var isOverspent: Bool {
-        guard let used = day.usedPercent else { return false }
-        return used > day.planPercent
-    }
+    /// Правило перерасхода живёт в `DayUsage` и покрыто проверками — здесь его
+    /// только спрашивают. Своя копия «факт больше плана» разошлась бы с ядром
+    /// молча: у будущих суток факта нет вовсе, и сравнивать там нечего.
+    private var isOverspent: Bool { day.overspendPercent > 0 }
 
     var body: some View {
         let row = content

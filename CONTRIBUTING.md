@@ -19,9 +19,9 @@
 То же, что гоняет [CI](.github/workflows/ci.yml) — прогоните до отправки:
 
 ```bash
-swift build                  # без предупреждений
-swift run ClaudeWeekTests    # все проверки проходят
-./Scripts/make-app.sh        # бандл собирается
+swift build -Xswiftc -warnings-as-errors   # так собирает CI: предупреждение = падение
+swift run ClaudeWeekTests                  # все проверки проходят
+./scripts/make-app.sh                      # бандл собирается
 ```
 
 Меняете расчёты в `ClaudeWeekCore` — добавьте проверку в
@@ -47,6 +47,8 @@ swift run ClaudeWeekTests    # все проверки проходят
 
 Swift 6 со строгой изоляцией. Смотрите на соседний код и пишите так же:
 комментарии по-русски и о том, **почему** так сделано, а не что делает
-строка. Грабли, на которые уже наступали (изоляция акторов, `isOnActiveSpace`,
-арифметика с часами), собраны в разделе «Грабли»
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+строка. Грабли, на которые уже наступали (изоляция акторов, признаки рабочего
+стола, арифметика с часами), собраны в разделе «Грабли»
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Правите панель
+(`DropdownPanel`) — сначала [docs/SPACES.md](docs/SPACES.md): там измерения и
+пробы, без которых это место чинится наугад.

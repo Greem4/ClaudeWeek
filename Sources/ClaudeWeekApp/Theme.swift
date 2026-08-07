@@ -38,18 +38,18 @@ struct Ink: Sendable, Equatable {
     var color: Color { Color(nsColor: nsColor) }
 }
 
-/// Материал под панелью, когда включена прозрачность.
+/// Материал под панелью, когда включена прозрачность. Список ровно из того,
+/// что берут палитры: материал — часть темы, и незанятый case означал бы
+/// не «про запас», а «есть вариант, которого никто не видел».
 enum PanelMaterial: String, Sendable, Equatable {
     case menu
     case popover
-    case hud
     case sidebar
 
     var nsMaterial: NSVisualEffectView.Material {
         switch self {
         case .menu: .menu
         case .popover: .popover
-        case .hud: .hudWindow
         case .sidebar: .sidebar
         }
     }

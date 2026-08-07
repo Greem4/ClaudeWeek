@@ -8,7 +8,7 @@
 // Токен не логируется, не пишется на диск и не выводится: в отчёт попадают
 // только имена ключей записи Keychain, префикс токена и его длина.
 //
-// Запуск:  swift Scripts/probe-usage.swift
+// Запуск:  swift scripts/probe-usage.swift
 // macOS спросит доступ к записи Keychain — это ожидаемо.
 
 import Foundation
