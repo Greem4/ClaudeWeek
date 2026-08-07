@@ -13,6 +13,35 @@ public enum MenuBarStyle: String, Codable, Sendable, CaseIterable {
     case ring
 }
 
+/// Какой из двух лимитов заполняет дугу кольца. Второй достаётся цифре в
+/// центре: значок показывает оба разом, и вопрос только в том, какой из них
+/// читается заполнением, а какой числом.
+///
+/// Дуга — про «сколько осталось» с одного взгляда, цифра — про точное
+/// значение. Кому важнее не упереться в пятичасовой лимит, тот ставит на дугу
+/// сессию; кому важнее недельный бюджет — неделю.
+public enum RingArc: String, Codable, Sendable, CaseIterable {
+    /// Дуга — пятичасовая сессия, цифра — неделя.
+    case session
+    /// Дуга — неделя, цифра — пятичасовая сессия.
+    case week
+
+    public var title: String {
+        switch self {
+        case .session: "Пятичасовую сессию"
+        case .week: "Недельный лимит"
+        }
+    }
+
+    /// Что достаётся цифре в центре — всегда второй лимит.
+    public var label: RingArc {
+        switch self {
+        case .session: .week
+        case .week: .session
+        }
+    }
+}
+
 /// Палитра панели. `system` — исходная, прогнанная через валидатор на
 /// дальтонизм и контраст; остальные добавлены, чтобы было чем играть,
 /// и держат те же роли цветов.
@@ -239,6 +268,8 @@ public struct Config: Codable, Sendable, Equatable {
     /// раскладывается по рабочему времени, а не по астрономическому.
     public var workHours: WorkHours
     public var menuBarStyle: MenuBarStyle
+    /// Что заполняет дугу кольца; на прочие стили значка не влияет.
+    public var ringArc: RingArc
     /// Условная стоимость недели для локального режима; 0 = не откалиброван.
     public var weeklyBudget: Double
     public var calibration: Calibration
@@ -261,6 +292,7 @@ public struct Config: Codable, Sendable, Equatable {
         provider: .auto,
         workHours: WorkHours.default,
         menuBarStyle: .percent,
+        ringArc: .session,
         weeklyBudget: 0,
         calibration: Calibration(),
         thresholds: Thresholds(),
@@ -276,6 +308,7 @@ public struct Config: Codable, Sendable, Equatable {
         provider: ProviderPreference,
         workHours: WorkHours = WorkHours.default,
         menuBarStyle: MenuBarStyle,
+        ringArc: RingArc = .session,
         weeklyBudget: Double,
         calibration: Calibration,
         thresholds: Thresholds,
@@ -289,6 +322,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.provider = provider
         self.workHours = workHours
         self.menuBarStyle = menuBarStyle
+        self.ringArc = ringArc
         self.weeklyBudget = weeklyBudget
         self.calibration = calibration
         self.thresholds = thresholds
@@ -309,6 +343,7 @@ public struct Config: Codable, Sendable, Equatable {
             provider: try c.decodeIfPresent(ProviderPreference.self, forKey: .provider) ?? d.provider,
             workHours: try c.decodeIfPresent(WorkHours.self, forKey: .workHours) ?? d.workHours,
             menuBarStyle: try c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle) ?? d.menuBarStyle,
+            ringArc: try c.decodeIfPresent(RingArc.self, forKey: .ringArc) ?? d.ringArc,
             weeklyBudget: try c.decodeIfPresent(Double.self, forKey: .weeklyBudget) ?? d.weeklyBudget,
             calibration: try c.decodeIfPresent(Calibration.self, forKey: .calibration) ?? d.calibration,
             thresholds: try c.decodeIfPresent(Thresholds.self, forKey: .thresholds) ?? d.thresholds,

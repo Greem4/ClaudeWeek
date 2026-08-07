@@ -117,18 +117,21 @@ enum Screenshot {
         let scale: CGFloat = 4
         var data: Data?
         appearance.performAsCurrentDrawingAppearance {
+            let arc = model.config.ringArc
+            let onArc = model.ringLimit(arc)
+            let inside = model.ringLimit(arc.label)
             let icon = ring
                 ? MenuBarRing.image(
-                    sessionPercent: model.sessionPercent,
-                    sessionState: model.menuBarSessionState,
-                    weekPercent: snapshot.usedPercent,
-                    weekState: model.menuBarWeekState
+                    arcPercent: onArc.percent, arcState: onArc.state,
+                    labelPercent: inside.percent, labelState: inside.state,
+                    colorize: model.colorizesMenuBar
                 )
                 : MenuBarBar.image(
                     usedPercent: snapshot.usedPercent,
                     planPercent: metrics.planNowPercent,
-                    state: model.menuBarWeekState,
-                    title: model.menuBarTitle
+                    state: model.state,
+                    title: model.menuBarTitle,
+                    colorize: model.colorizesMenuBar
                 )
             // Высота полосы меню macOS — 24 pt, поля по 6 pt как у соседей.
             let size = NSSize(width: icon.size.width + 12, height: 24)

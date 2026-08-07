@@ -197,6 +197,19 @@ private struct MenuBarSettings: View {
                 Text(styleHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                // Расклад кольца спрашиваем только когда оно выбрано: у полосы
+                // второго лимита нет, и пункт стоял бы там без смысла.
+                if model.config.menuBarStyle == .ring {
+                    Picker("Заполнять дугой", selection: $model.config.ringArc) {
+                        ForEach(RingArc.allCases, id: \.self) { arc in
+                            Text(arc.title).tag(arc)
+                        }
+                    }
+                    Text(ringHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Цвет") {
@@ -210,20 +223,20 @@ private struct MenuBarSettings: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section("Недельный лимит — цифра") {
+            Section("Недельный лимит") {
                 percentRow("Жёлтый после", value: weekWarn)
                 percentRow("Красный после", value: weekCritical)
             }
 
-            Section("Пятичасовая сессия — кольцо") {
+            Section("Пятичасовая сессия") {
                 percentRow("Жёлтый после", value: sessionWarn)
                 percentRow("Красный после", value: sessionCritical)
                 Text("""
                 Считается по факту: сколько потрачено прямо сейчас. План и \
                 прогноз на цвет больше не влияют — они отвечают на вопрос \
                 «в графике ли я», а цвет на «пора ли беспокоиться». Сессию \
-                сообщает только официальный источник: на локальной оценке \
-                кольцо стоит на нуле.
+                сообщает только официальный источник: на локальной оценке её \
+                процент стоит на нуле.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -247,10 +260,25 @@ private struct MenuBarSettings: View {
         switch model.config.menuBarStyle {
         case .percent: "Полоса недели с планом, под ней недельный процент."
         case .compact: "Одна полоса недели, без числа — самый узкий значок."
-        case .ring:
+        case .ring: "Два лимита в одном значке: один на дуге, второй цифрой внутри."
+        }
+    }
+
+    /// Расклад кольца словами: какой лимит куда попал при нынешнем выборе.
+    /// Цвета остаются раздельными в обе стороны — дуга и цифра горят каждая
+    /// по своим порогам, и красная дуга при спокойной цифре это норма, а не
+    /// сбой.
+    private var ringHint: String {
+        switch model.config.ringArc {
+        case .session:
             """
-            Кольцо заполняется пятичасовой сессией, цифра внутри — недельный \
-            процент. Два лимита в одном значке, у каждого свой цвет.
+            Дуга — пятичасовая сессия, цифра внутри — недельный процент. \
+            Цвет у каждого свой, по своим порогам ниже.
+            """
+        case .week:
+            """
+            Дуга — недельный лимит, цифра внутри — процент пятичасовой сессии. \
+            Цвет у каждого свой, по своим порогам ниже.
             """
         }
     }

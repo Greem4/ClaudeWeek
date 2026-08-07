@@ -180,6 +180,24 @@ func runConfigTests(_ t: Harness) {
         t.equal(legacy.resetWeekday, Config.default.resetWeekday, "остальной конфиг цел")
     }
 
+    t.suite("конфиг: расклад кольца") {
+        t.equal(Config.default.ringArc, .session, "по умолчанию дуга — сессия")
+        t.equal(RingArc.session.label, .week, "тогда цифра внутри — неделя")
+        t.equal(RingArc.week.label, .session, "и наоборот при обратном раскладе")
+
+        let url = tempFile(#"{ "ringArc": "week" }"#)
+        defer { try? FileManager.default.removeItem(at: url) }
+        t.equal(ConfigStore.load(from: url).ringArc, .week, "обратный расклад прочитался")
+
+        // Конфиг прошлой версии про кольцо ничего не знал — там, где ключа
+        // нет, расклад обязан остаться прежним, иначе обновление молча
+        // переставит людям значок.
+        let old = tempFile(#"{ "menuBarStyle": "ring" }"#)
+        defer { try? FileManager.default.removeItem(at: old) }
+        t.equal(ConfigStore.load(from: old).ringArc, .session,
+                "без ключа расклад прежний")
+    }
+
     t.suite("конфиг: вид панели") {
         t.equal(Config.default.appearance.panelLayout, .week, "по умолчанию — вся неделя")
 

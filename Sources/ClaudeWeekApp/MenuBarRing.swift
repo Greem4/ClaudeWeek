@@ -1,11 +1,15 @@
 import AppKit
 import ClaudeWeekCore
 
-/// Иконка в строке меню: кольцо — пятичасовая сессия, цифра внутри — неделя.
-/// Два независимых лимита в одном значке: дуга заполняется по часовой от
-/// 12 часов на процент сессии, число в центре говорит про неделю. Цвета у
-/// них тоже свои — сессия может гореть красным при спокойной неделе, и
-/// наоборот.
+/// Иконка в строке меню: дуга и цифра внутри неё — два независимых лимита.
+/// Кто из них где, решает настройка `ringArc`: по умолчанию дуга заполняется
+/// пятичасовой сессией, а число в центре говорит про неделю; обратный расклад
+/// столь же осмыслен и переключается в настройках. Цвета у дуги и цифры свои
+/// — сессия может гореть красным при спокойной неделе, и наоборот.
+///
+/// Сама рисовалка про лимиты ничего не знает: ей дают процент с состоянием на
+/// дугу и такую же пару на цифру. Что из этого неделя, а что сессия, решено
+/// уровнем выше — здесь это лишь два места на картинке.
 enum MenuBarRing {
     /// Диаметр картинки. Чуть больше высоты полосы (16 pt): кольцу нужен
     /// запас под трёхзначный процент, а строка меню (24 pt) его ещё держит.
@@ -15,28 +19,32 @@ enum MenuBarRing {
     /// 12 часов — верх круга; в системе координат AppKit это 90°.
     private static let startAngle: CGFloat = 90
 
-    /// `sessionPercent` — процент пятичасового лимита. Его нет (локальная
-    /// оценка сессию не считает, окно истекло) — приходит 0, и кольцо стоит
-    /// пустым. Недельным процентом дуга не подменяется намеренно: кольцо,
-    /// означающее то одно то другое, читать невозможно.
+    /// `arcPercent` на дуге сессии может не быть вовсе — локальная оценка её
+    /// не считает, окно истекает, — тогда приходит 0 и дуга стоит пустой.
+    /// Вторым лимитом она при этом не подменяется: кольцо, означающее то одно
+    /// то другое, читать невозможно.
+    ///
+    /// `colorize` — тумблер окраски по порогам. Выключенный оставляет
+    /// заполнение дуги и цифру на месте, но гасит оба цвета до нейтрального.
     static func image(
-        sessionPercent: Double,
-        sessionState: LimitState,
-        weekPercent: Double,
-        weekState: LimitState,
+        arcPercent: Double,
+        arcState: LimitState,
+        labelPercent: Double,
+        labelState: LimitState,
+        colorize: Bool = true,
         palette: Palette = .system
     ) -> NSImage {
         let image = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) { rect in
             drawRing(
                 in: rect,
-                usedPercent: sessionPercent,
-                color: color(for: sessionState, palette: palette),
+                usedPercent: arcPercent,
+                color: color(for: arcState, colorize: colorize, palette: palette),
                 palette: palette
             )
 
             let label = attributed(
-                percentText(weekPercent),
-                color: color(for: weekState, palette: palette)
+                percentText(labelPercent),
+                color: color(for: labelState, colorize: colorize, palette: palette)
             )
             let size = label.size()
             label.draw(at: NSPoint(x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2))
@@ -49,8 +57,8 @@ enum MenuBarRing {
     /// Пустая иконка, пока данных нет.
     static func placeholder(palette: Palette = .system) -> NSImage {
         image(
-            sessionPercent: 0, sessionState: .normal,
-            weekPercent: 0, weekState: .normal,
+            arcPercent: 0, arcState: .normal,
+            labelPercent: 0, labelState: .normal,
             palette: palette
         )
     }
@@ -109,9 +117,12 @@ enum MenuBarRing {
     }
 
     /// `labelColor` динамический: белый на тёмной строке меню, тёмный на
-    /// светлой — «белый круг» из задачи это как раз он на тёмной теме.
-    static func color(for state: LimitState, palette: Palette) -> NSColor {
-        switch state {
+    /// светлой — «белый круг» из задачи это как раз он на тёмной теме. Он же
+    /// отвечает за выключенную окраску: нейтральный значок — это тот, что
+    /// покрашен цветом текста строки меню, а не спокойным зелёным.
+    static func color(for state: LimitState, colorize: Bool = true, palette: Palette) -> NSColor {
+        guard colorize else { return .labelColor }
+        return switch state {
         case .normal: .labelColor
         case .warning: palette.warning.nsColor
         case .critical, .exhausted: palette.critical.nsColor
