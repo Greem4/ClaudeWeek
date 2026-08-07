@@ -12,9 +12,14 @@ name: Release
 # Версия в теге и в Sources/ClaudeWeekCore/Version.swift должны совпадать —
 # иначе сборка останавливается: релиз, чья цифра расходится с той, что
 # программа показывает в «О программе», хуже отсутствующего.
+#
+# Кроме тега есть запуск руками — Actions → Release → Run workflow, в поле
+# ref выбрать тег. Он нужен на случай, когда push тега прошёл мимо Actions:
+# событие потерялось, а тег уже занят, и перевыпустить релиз нечем.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -31,6 +36,15 @@ jobs:
 
       - name: Сверяю тег с Version.swift
         run: |
+          # При запуске руками ref может оказаться веткой — из неё релиз не
+          # соберётся: имя тега идёт и в версию, и в заметки, и в имя релиза.
+          case "$GITHUB_REF" in
+            refs/tags/*) ;;
+            *)
+              echo "::error::запускать нужно по тегу (Run workflow → ref → vX.Y.Z), а не по $GITHUB_REF_NAME"
+              exit 1
+              ;;
+          esac
           TAG="${GITHUB_REF_NAME#v}"
           SRC="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' \
             Sources/ClaudeWeekCore/Version.swift)"
@@ -93,8 +107,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "ClaudeWeek $VERSION" \
-            --notes-file dist/NOTES.md \
-            "dist/ClaudeWeek-$VERSION-arm64.dmg" \
-            dist/SHA256SUMS.txt
+          # Повторный запуск по тому же тегу дособирает уже созданный релиз,
+          # а не падает на «release already exists»: ради этого ручной запуск
+          # и заводился — чинить надо неудавшийся выпуск, а не заводить новый.
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "ClaudeWeek $VERSION" \
+              --notes-file dist/NOTES.md
+            gh release upload "$GITHUB_REF_NAME" --clobber \
+              "dist/ClaudeWeek-$VERSION-arm64.dmg" \
+              dist/SHA256SUMS.txt
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "ClaudeWeek $VERSION" \
+              --notes-file dist/NOTES.md \
+              "dist/ClaudeWeek-$VERSION-arm64.dmg" \
+              dist/SHA256SUMS.txt
+          fi
