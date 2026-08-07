@@ -111,7 +111,7 @@ struct DayRow: View {
 
             DayBar(planPercent: day.planPercent, usedPercent: day.usedPercent, animated: animated)
 
-            HStack(spacing: 3) {
+            HStack(spacing: Theme.valueGap) {
                 if isOverspent {
                     Text("⚠")
                         .font(Theme.dayFont)
@@ -119,6 +119,11 @@ struct DayRow: View {
                 }
                 Text(values)
                     .font(Theme.dayFont)
+                    // Колонка размечена под самое длинное значение, но перенос
+                    // запрещаем и здесь: не влезь оно однажды (крупный шрифт
+                    // системы, трёхзначный факт) — строка расползётся на два
+                    // ряда, а за ней и вся панель. Пусть лучше выйдет за край.
+                    .fixedSize()
                     .foregroundStyle(
                         day.usedPercent == nil
                             ? palette.secondaryText.color
