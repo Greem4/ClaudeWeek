@@ -164,12 +164,30 @@ public struct Thresholds: Codable, Sendable, Equatable {
     /// Во сколько раз факт может превышать план, прежде чем полоса станет
     /// янтарной. 1.0 = сразу за плановой отметкой.
     public var warn: Double
+    /// Процент недельного лимита, ниже которого об обгоне плана не
+    /// предупреждаем. Сразу после сброса план околонулевой, и любые
+    /// потраченные проценты обгоняют его в разы — без этого пола строка
+    /// меню желтела бы на трёх процентах в первый же рабочий час.
+    public var warnFloor: Double
     /// Доля лимита, после которой заголовок краснеет.
     public var critical: Double
 
-    public init(warn: Double = 1.0, critical: Double = 0.9) {
+    public init(warn: Double = 1.0, warnFloor: Double = 80, critical: Double = 0.9) {
         self.warn = warn
+        self.warnFloor = warnFloor
         self.critical = critical
+    }
+
+    // Конфиг прошлой версии не знает про `warnFloor`, и падать на этом нельзя:
+    // иначе один новый ключ сбрасывает человеку все остальные пороги.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Thresholds()
+        self.init(
+            warn: try c.decodeIfPresent(Double.self, forKey: .warn) ?? d.warn,
+            warnFloor: try c.decodeIfPresent(Double.self, forKey: .warnFloor) ?? d.warnFloor,
+            critical: try c.decodeIfPresent(Double.self, forKey: .critical) ?? d.critical
+        )
     }
 }
 
@@ -290,6 +308,7 @@ public struct Config: Codable, Sendable, Equatable {
         c.workHours = c.workHours.validated()
         if c.weeklyBudget < 0 { c.weeklyBudget = 0 }
         if c.thresholds.warn <= 0 { c.thresholds.warn = Thresholds().warn }
+        if !(0...100).contains(c.thresholds.warnFloor) { c.thresholds.warnFloor = Thresholds().warnFloor }
         if !(0...1).contains(c.thresholds.critical) { c.thresholds.critical = Thresholds().critical }
         c.appearance = c.appearance.validated()
         return c

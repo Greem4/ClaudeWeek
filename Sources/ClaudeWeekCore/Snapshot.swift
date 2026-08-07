@@ -219,11 +219,19 @@ public struct UsageSnapshot: Sendable {
         )
     }
 
+    /// Жёлтое состояние требует двух условий сразу: факт обгоняет план И уже
+    /// израсходован ощутимый кусок недели (`warnFloor`). Одного обгона мало —
+    /// в первые часы после сброса план околонулевой, и три процента обгоняют
+    /// его в разы, хотя тревожиться не о чем.
     public func state(at now: Date, thresholds: Thresholds = Thresholds()) -> LimitState {
         if usedPercent >= 100 { return .exhausted }
         if usedPercent >= thresholds.critical * 100 { return .critical }
         let planNow = window.planPercent(at: now)
-        if planNow > 0 && usedPercent > planNow * thresholds.warn { return .overPlan }
+        if usedPercent >= thresholds.warnFloor,
+           planNow > 0,
+           usedPercent > planNow * thresholds.warn {
+            return .overPlan
+        }
         return .onTrack
     }
 }

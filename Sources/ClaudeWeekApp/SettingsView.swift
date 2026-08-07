@@ -124,6 +124,14 @@ private struct GeneralSettings: View {
                             .frame(width: 50, alignment: .trailing)
                     }
                 }
+                LabeledContent("…но не раньше, чем израсходовано") {
+                    HStack {
+                        Slider(value: config.thresholds.warnFloor, in: 0...100, step: 5)
+                        Text(Formatting.percent(model.config.thresholds.warnFloor))
+                            .font(.caption.monospacedDigit())
+                            .frame(width: 50, alignment: .trailing)
+                    }
+                }
                 LabeledContent("Заголовок и сессия тревожатся после") {
                     HStack {
                         Slider(value: config.thresholds.critical, in: 0.5...1, step: 0.01)
@@ -135,7 +143,9 @@ private struct GeneralSettings: View {
                 Text("""
                 Суточные полосы желтеют на любом перерасходе — это сам график, \
                 а не тревога. Пороги красят цифру в строке меню, заголовок \
-                панели и полосу пятичасовой сессии.
+                панели и полосу пятичасовой сессии. Нижняя граница держит \
+                строку меню белой в первые дни недели, когда план ещё \
+                околонулевой и обгоняется любым расходом.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)

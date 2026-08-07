@@ -85,7 +85,9 @@ func runPlanTests(_ t: Harness) {
         t.close(m.burnRate ?? 0, 1.4, "темп 1.4× плана", tolerance: 0.002)
         t.close(m.projectedPercent ?? 0, 140, "к сбросу натечёт 140 %", tolerance: 0.2)
         t.close(m.timeLeft, window.end.timeIntervalSince(now), "до сброса — остаток окна")
-        t.equal(m.state, .overPlan, "состояние: обгоняем план")
+        t.equal(m.state, .onTrack, "70 % при плане 50 % — обгон есть, но нижний порог не взят")
+        t.equal(snapshot.state(at: now, thresholds: Thresholds(warnFloor: 0)), .overPlan,
+                "без нижнего порога тот же обгон желтеет")
 
         // Лимит кончится там, где прогноз пересечёт 100 %: план в этот момент
         // равен доле уже потраченного — 100/1.4 от недели.
@@ -104,6 +106,23 @@ func runPlanTests(_ t: Harness) {
         )
         t.equal(onTrack.state(at: now), .onTrack, "45 % при плане 50 % — в графике")
         t.check(onTrack.metrics(at: now).exhaustionDate == nil, "в графике лимит не кончится")
+
+        // Обгон плана выше нижнего порога — вот теперь жёлтое.
+        let overPlan = UsageSnapshot.make(
+            usedPercent: 85, cumulativeByDay: [], window: window,
+            source: .official, fetchedAt: now, isEstimate: false
+        )
+        t.equal(overPlan.state(at: now), .overPlan, "85 % при плане 50 % — обгоняем план")
+
+        // Первый рабочий час новой недели: план околонулевой, и три процента
+        // обгоняют его в разы. Строка меню при этом обязана остаться белой.
+        let justAfterReset = window.date(atProgress: 0.01)
+        let earlyBurst = UsageSnapshot.make(
+            usedPercent: 3, cumulativeByDay: [], window: window,
+            source: .official, fetchedAt: justAfterReset, isEstimate: false
+        )
+        t.equal(earlyBurst.state(at: justAfterReset), .onTrack,
+                "3 % сразу после сброса — в графике, а не тревога")
 
         // Пороговые состояния.
         let critical = UsageSnapshot.make(

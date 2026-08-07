@@ -57,7 +57,7 @@ func runConfigTests(_ t: Harness) {
         c.refreshInterval = 5
         c.timeZone = "Europe/Тьмутаракань"
         c.weeklyBudget = -10
-        c.thresholds = Thresholds(warn: 0, critical: 5)
+        c.thresholds = Thresholds(warn: 0, warnFloor: 500, critical: 5)
         let v = c.validated()
         t.equal(v.resetWeekday, 6, "день недели вне 1…7 чинится")
         t.equal(v.resetHour, 16, "час вне 0…23 чинится")
@@ -67,6 +67,7 @@ func runConfigTests(_ t: Harness) {
         t.equal(v.resolvedTimeZone, TimeZone.current, "пустая таймзона разворачивается в системную")
         t.equal(v.weeklyBudget, 0, "отрицательный бюджет обнуляется")
         t.equal(v.thresholds.warn, 1.0, "нулевой порог предупреждения чинится")
+        t.equal(v.thresholds.warnFloor, 80, "нижний порог вне 0…100 чинится")
         t.equal(v.thresholds.critical, 0.9, "порог критичности вне 0…1 чинится")
     }
 
@@ -149,6 +150,23 @@ func runConfigTests(_ t: Harness) {
         t.equal(c.appearance.theme, .midnight, "старый внешний вид уцелел")
         t.equal(c.appearance.cornerRadius, 4, "и второе его поле тоже")
         t.equal(c.appearance.sessionReset, .relative, "новый ключ взялся из дефолтов")
+    }
+
+    t.suite("конфиг: нижний порог жёлтого") {
+        t.equal(Config.default.thresholds.warnFloor, 80, "по умолчанию — 80 % недели")
+
+        let url = tempFile(#"{ "thresholds": { "warnFloor": 50 } }"#)
+        defer { try? FileManager.default.removeItem(at: url) }
+        t.equal(ConfigStore.load(from: url).thresholds.warnFloor, 50, "своё значение прочиталось")
+
+        // Пороги, записанные прошлой версией: ключа warnFloor в них нет,
+        // и он должен взяться из дефолтов, не тронув соседние.
+        let old = tempFile(#"{ "thresholds": { "warn": 1.3, "critical": 0.85 } }"#)
+        defer { try? FileManager.default.removeItem(at: old) }
+        let c = ConfigStore.load(from: old)
+        t.equal(c.thresholds.warn, 1.3, "старый порог обгона уцелел")
+        t.equal(c.thresholds.critical, 0.85, "и порог критичности тоже")
+        t.equal(c.thresholds.warnFloor, 80, "новый ключ взялся из дефолтов")
     }
 
     t.suite("конфиг: вид панели") {
