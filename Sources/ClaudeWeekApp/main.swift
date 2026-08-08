@@ -39,6 +39,10 @@ if let raw = arguments.first(where: { $0.hasPrefix("--calibrate=") })?
     exit(await CLI.calibrate(percent: percent, config: config, configURL: configURL))
 }
 
+if arguments.contains("--update") {
+    exit(await CLI.update(bundle: UpdateController.runningBundle))
+}
+
 if arguments.contains("--json") {
     exit(await CLI.run(config: config))
 }

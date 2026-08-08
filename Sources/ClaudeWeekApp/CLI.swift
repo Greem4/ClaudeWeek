@@ -17,13 +17,14 @@ enum CLI {
                                  (число берётся из /usage внутри Claude Code)
       ClaudeWeek --screenshot КАТ отрисовать панель и иконку в PNG (обе темы)
       ClaudeWeek --icon КАТ      сгенерировать .iconset для сборки бандла
+      ClaudeWeek --update        поставить свежий выпуск с GitHub, если он вышел
       ClaudeWeek --verbose       подробный лог в stderr
       ClaudeWeek --help          эта справка
     """
 
     /// Флаги без значения и префиксы флагов со значением. По ним же отличаем
     /// опечатку от каталога у `--icon` и `--screenshot`: те не начинаются с «-».
-    static let flags = ["--help", "-h", "--verbose", "--json", "--icon", "--screenshot"]
+    static let flags = ["--help", "-h", "--verbose", "--json", "--icon", "--screenshot", "--update"]
     static let flagPrefixes = ["--config=", "--provider=", "--calibrate="]
 
     static func isKnown(_ argument: String) -> Bool {
@@ -136,6 +137,58 @@ enum CLI {
     /// `--calibrate=64`: привязывает локальную оценку к одному официальному
     /// наблюдению. Считает, сколько условных долларов уже потрачено, и делит
     /// на долю — получается бюджет недели.
+    /// Обновление из терминала: тот же путь, что у кнопки в панели, только без
+    /// перезапуска — процесс тут и так один, и завершается он сам. Нужен и для
+    /// проверки всей цепочки разом, и тем, кто держит приложение под launchd:
+    /// после установки достаточно выйти и войти.
+    ///
+    /// `bundle` — что подменяем. У `swift run` бандла нет, поэтому явный путь
+    /// к установленной копии допустим: `--update` из отладочной сборки чинит
+    /// ту, что в ~/Applications.
+    static func update(bundle: URL?) async -> Int32 {
+        guard let bundle else {
+            FileHandle.standardError.write(Data("""
+            обновлять нечего: запущено не из ClaudeWeek.app.
+            Соберите бандл (./scripts/make-app.sh) или обновите установленную копию:
+              ~/Applications/ClaudeWeek.app/Contents/MacOS/ClaudeWeek --update
+
+            """.utf8))
+            return 1
+        }
+
+        let release: Release
+        do {
+            switch try await Updater().check() {
+            case .upToDate:
+                print("у вас последняя версия — \(ClaudeWeek.version)")
+                return 0
+            case .available(let found):
+                release = found
+            }
+        } catch {
+            let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription
+            FileHandle.standardError.write(Data("\(text)\n".utf8))
+            return 1
+        }
+
+        print("вышла версия \(release.version), у вас \(ClaudeWeek.version)")
+        do {
+            try await UpdateInstaller(bundle: bundle).install(release) { stage in
+                print("  \(stage.title)")
+            }
+        } catch {
+            let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription
+            FileHandle.standardError.write(Data("\(text)\n".utf8))
+            return 1
+        }
+
+        print("""
+        готово: \(bundle.path) теперь версии \(release.version)
+        работающую копию перезапустите сами — она всё ещё старая
+        """)
+        return 0
+    }
+
     static func calibrate(percent: Double, config: Config, configURL: URL) async -> Int32 {
         // Ноль здесь не «край шкалы», а отсутствие наблюдения: делить на него
         // нечего, и бюджет из него не выйдет.

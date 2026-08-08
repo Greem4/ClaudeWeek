@@ -8,6 +8,7 @@ final class StatusItemController: NSObject {
     private let dropdown = DropdownPanel()
     private let model: PanelModel
     private var provider: any UsageProvider
+    private let update = UpdateController()
 
     private var settings: SettingsWindowController?
     private var saveTask: Task<Void, Never>?
@@ -41,6 +42,7 @@ final class StatusItemController: NSObject {
         configurePanel()
         observeSystemEvents()
         startTimers()
+        update.start()
         restoreFromCache()
         render()
         refresh()
@@ -77,6 +79,7 @@ final class StatusItemController: NSObject {
         dropdown.setContent(
             PopoverView(
                 model: model,
+                update: update,
                 onRefresh: { [weak self] in self?.refresh() },
                 onSettings: { [weak self] in self?.openSettings() },
                 onQuit: { NSApp.terminate(nil) }
@@ -183,34 +186,19 @@ final class StatusItemController: NSObject {
     }
 
     /// Три группы: что сделать сейчас, как программа заведена, справка и
-    /// выход. Галочка автозапуска стоит рядом с настройками, потому что она и
-    /// есть настройка, просто живёт не в конфиге, а в launchd.
+    /// выход. Автозапуск сюда не вынесен: он такая же настройка, как остальные,
+    /// и живёт строкой в окне настроек — искать её начинают там. Обновление —
+    /// по той же причине: одна кнопка на вкладке «О программе», а не второе
+    /// место, где то же самое состояние показывается своими словами.
     private func showMenu() {
         // Меню встаёт на то же место, что и панель, — сначала убираем её.
         dropdown.close()
 
         let menu = NSMenu()
-        // Пункт автозапуска бывает выключенным, а AppKit сам гасит только те,
-        // у кого нет цели: без этого он включал бы его обратно.
-        menu.autoenablesItems = false
 
         menu.addItem(withTitle: "Обновить", action: #selector(refreshFromMenu), keyEquivalent: "r")
             .target = self
         menu.addItem(.separator())
-
-        let launch = menu.addItem(
-            withTitle: "Запускать при входе в систему",
-            action: #selector(toggleLoginItem), keyEquivalent: ""
-        )
-        launch.target = self
-        launch.state = LoginItem.isEnabled ? .on : .off
-        launch.isEnabled = LoginItem.isAvailable
-        if !LoginItem.isAvailable {
-            // Запущено не из бандла — из .build, отладочным `swift run`.
-            // Прописывать такой путь в launchd бессмысленно, и молчаливо
-            // неактивный пункт выглядел бы поломкой.
-            launch.toolTip = "Доступно только у собранного приложения"
-        }
 
         menu.addItem(withTitle: "Настройки…", action: #selector(openConfig), keyEquivalent: ",")
             .target = self
@@ -227,12 +215,6 @@ final class StatusItemController: NSObject {
 
     @objc private func refreshFromMenu() { refresh() }
 
-    /// Галочку читаем заново при каждом показе меню, поэтому обновлять её
-    /// здесь нечего: следующий показ возьмёт состояние из самого агента.
-    @objc private func toggleLoginItem() {
-        LoginItem.setEnabled(!LoginItem.isEnabled)
-    }
-
     @objc private func openConfig() { openSettings() }
 
     /// Окно настроек. Правки применяются сразу и тут же ложатся в файл —
@@ -245,6 +227,7 @@ final class StatusItemController: NSObject {
         if settings == nil {
             let model = SettingsModel(
                 config: model.config,
+                update: update,
                 apply: { [weak self] config in self?.applyFromSettings(config) },
                 check: { config in await Self.check(config: config) }
             )
@@ -442,6 +425,9 @@ final class StatusItemController: NSObject {
         startTimers()
         tick()
         refresh()
+        // Суточный таймер проспал вместе с машиной: её закрывают на ночь, и
+        // без этого «раз в сутки» означало бы «раз в сутки работы».
+        update.checkIfDue()
     }
 
     /// Окно недели считается в локальной таймзоне, поэтому её смена меняет

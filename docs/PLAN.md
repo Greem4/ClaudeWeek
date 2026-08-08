@@ -286,10 +286,12 @@ ClaudeWeek/
 │   │   ├── ISO8601.swift          # разбор меток времени обоих видов
 │   │   ├── Formatting.swift       # «3 дн 6 ч», проценты, дни недели
 │   │   ├── Log.swift              # уровни лога в stderr
-│   │   └── Version.swift          # версия и идентификатор бандла
+│   │   ├── Version.swift          # версия, идентификатор бандла, репозиторий
+│   │   ├── Updater.swift          # сравнение версий, последний релиз GitHub
+│   │   └── UpdateInstaller.swift  # образ: скачать, сверить SHA256, подменить бандл
 │   ├── ClaudeWeekApp/             # исполняемый таргет (AppKit + SwiftUI)
 │   │   ├── main.swift             # разбор аргументов, NSApplication
-│   │   ├── CLI.swift              # --json и --calibrate
+│   │   ├── CLI.swift              # --json, --calibrate и --update
 │   │   ├── StatusItemController.swift  # строка меню, таймеры, системные события
 │   │   ├── PanelModel.swift       # состояние панели для SwiftUI
 │   │   ├── PopoverView.swift      # панель недели
@@ -301,6 +303,7 @@ ClaudeWeek/
 │   │   ├── MenuBarRing.swift      # иконка строки меню: кольцо с процентом
 │   │   ├── Theme.swift            # палитры тем, шрифты, отступы
 │   │   ├── LoginItem.swift        # галочка автозапуска: тот же launchd-агент
+│   │   ├── UpdateController.swift # расписание проверок, диалоги, перезапуск
 │   │   ├── SettingsWindow.swift   # окно настроек: модель и применение
 │   │   ├── SettingsView.swift     # пять вкладок настроек
 │   │   ├── ConfigStamp.swift      # отпечаток конфига для перечитывания
@@ -401,8 +404,8 @@ codesign --force --sign - ClaudeWeek.app     # ad-hoc подпись
 и `/Applications`) и только потом установка новой версии. Копии не плодятся.
 Удаление — `uninstall.sh`, он сносит ровно то же самое.
 
-Тот же агент правит галочка «Запускать при входе в систему» в меню
-(`LoginItem.swift`): label, путь плиста и файл лога совпадают до буквы, а
+Тот же агент правит галочка «Запускать при входе в систему» на вкладке
+«Общие» (`LoginItem.swift`): label, путь плиста и файл лога совпадают до буквы, а
 `bootstrap`/`bootout` она не зовёт — файла довольно, чтобы launchd поднял
 приложение со следующего входа.
 

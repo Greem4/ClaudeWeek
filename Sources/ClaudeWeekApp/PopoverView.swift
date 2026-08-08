@@ -5,6 +5,9 @@ import ClaudeWeekCore
 /// Полос всегда семь — по дням недели, день сброса одной строкой.
 struct PopoverView: View {
     @Bindable var model: PanelModel
+    /// Новая версия — новость, а не настройка: строка о ней появляется в
+    /// панели и исчезает вместе с поводом.
+    @Bindable var update: UpdateController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Кружок источника нажали: там, где он стоит, панель на несколько секунд
@@ -52,6 +55,11 @@ struct PopoverView: View {
 
             Divider().overlay(palette.separator.color)
             footer
+
+            if let banner = update.banner {
+                Divider().overlay(palette.separator.color)
+                updateRow(banner)
+            }
         }
         .padding(Theme.panelPadding)
         .frame(width: Theme.panelWidth)
@@ -249,6 +257,11 @@ struct PopoverView: View {
                         .foregroundStyle(palette.secondaryText.color)
                 }
                 .buttonStyle(.plain)
+                // Та же рамка фокуса, что портила кружок источника: AppKit
+                // обводит нажатую кнопку синим прямоугольником, и на панели
+                // размером с меню он читается как ошибка вёрстки. Обе кнопки
+                // футера дублируются пунктами меню — клавиатуре они не нужны.
+                .focusEffectDisabled()
                 .accessibilityLabel("настройки")
 
                 Button(action: onRefresh) {
@@ -257,9 +270,42 @@ struct PopoverView: View {
                         .foregroundStyle(palette.secondaryText.color)
                 }
                 .buttonStyle(.plain)
+                .focusEffectDisabled()
                 .accessibilityLabel("обновить")
             }
         }
+    }
+
+    /// Строка обновления. Стоит под футером и живёт ровно столько, сколько
+    /// есть повод: вышел выпуск, идёт установка, поставленное ждёт
+    /// перезапуска. Тихие состояния — «проверяю», «у вас последняя» — сюда не
+    /// доходят: панель открывают ради недельного лимита.
+    ///
+    /// Это уведомление, а не вторая кнопка обновления: сама установка живёт
+    /// одной кнопкой на вкладке «О программе», и щелчок по строке ведёт
+    /// туда же. Одно и то же действие в двух местах разошлось бы состояниями —
+    /// ровно та причина, по которой из меню убрали автозапуск.
+    private func updateRow(_ text: String) -> some View {
+        Button(action: onSettings) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("↑ \(text)")
+                    .font(Theme.footerFont)
+                    // Тем же цветом, что и плановая полоса: это подсказка
+                    // «так надо», а не тревога.
+                    .foregroundStyle(palette.plan.color)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 8)
+
+                Text("в настройках →")
+                    .font(Theme.footerFont)
+                    .foregroundStyle(palette.secondaryText.color)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .accessibilityLabel("\(text). Открыть настройки")
     }
 
     private var summary: String {
