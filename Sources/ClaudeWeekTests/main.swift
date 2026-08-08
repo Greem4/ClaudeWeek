@@ -9,5 +9,6 @@ runPlanTests(t)
 runFormattingTests(t)
 await runLocalProviderTests(t)
 await runOfficialProviderTests(t)
+await runUpdaterTests(t)
 
 t.report()
