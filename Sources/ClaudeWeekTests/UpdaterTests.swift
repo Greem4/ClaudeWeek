@@ -171,6 +171,35 @@ func runUpdaterTests(_ t: Harness) async {
         }
     }
 
+    await t.suite("установка: запущено не из бандла") {
+        // Отладочный `swift run` подменять нечем — и сказать это надо до
+        // скачивания, а не после.
+        let release = try Updater.release(from: Data(latestResponse.utf8), architecture: "arm64")
+        let installer = UpdateInstaller(
+            bundle: URL(fileURLWithPath: "/tmp/ClaudeWeekApp"),
+            transport: FakeGitHub()
+        )
+        do {
+            _ = try await installer.install(release)
+            t.fail("установка в не-бандл не остановилась")
+        } catch let error as UpdateError {
+            t.equal(error, UpdateError.notBundled, "отказ назван своим именем")
+        }
+    }
+
+    await t.suite("установка: некуда писать") {
+        let release = try Updater.release(from: Data(latestResponse.utf8), architecture: "arm64")
+        // Каталог под защитой системы: прав на запись там нет ни у кого.
+        let app = URL(fileURLWithPath: "/System/Library/ClaudeWeek.app")
+        let installer = UpdateInstaller(bundle: app, transport: FakeGitHub())
+        do {
+            _ = try await installer.install(release)
+            t.fail("установка без прав на запись не остановилась")
+        } catch let error as UpdateError {
+            t.equal(error, UpdateError.notWritable(app.path), "в ошибке назван путь")
+        }
+    }
+
     await t.suite("проверка: сети нет") {
         let updater = Updater(
             transport: FakeGitHub(failure: URLError(.notConnectedToInternet)),
