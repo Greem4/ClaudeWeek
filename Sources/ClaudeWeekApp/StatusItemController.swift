@@ -187,7 +187,9 @@ final class StatusItemController: NSObject {
 
     /// Три группы: что сделать сейчас, как программа заведена, справка и
     /// выход. Автозапуск сюда не вынесен: он такая же настройка, как остальные,
-    /// и живёт строкой в окне настроек — искать её начинают там.
+    /// и живёт строкой в окне настроек — искать её начинают там. Обновление —
+    /// по той же причине: одна кнопка на вкладке «О программе», а не второе
+    /// место, где то же самое состояние показывается своими словами.
     private func showMenu() {
         // Меню встаёт на то же место, что и панель, — сначала убираем её.
         dropdown.close()
@@ -201,15 +203,6 @@ final class StatusItemController: NSObject {
         menu.addItem(withTitle: "Настройки…", action: #selector(openConfig), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
-        // У отладочного `swift run` подменять нечего — и пункта нет вовсе,
-        // чтобы он не обещал того, чего не будет.
-        if update.isAvailable {
-            let item = menu.addItem(
-                withTitle: updateMenuTitle, action: #selector(updateFromMenu), keyEquivalent: ""
-            )
-            item.target = self
-            item.isEnabled = !update.isWorking
-        }
         menu.addItem(withTitle: "О программе", action: #selector(showAbout), keyEquivalent: "")
             .target = self
         menu.addItem(withTitle: "Выйти", action: #selector(quit), keyEquivalent: "q")
@@ -221,21 +214,6 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func refreshFromMenu() { refresh() }
-
-    /// Один пункт на все состояния: он же спрашивает GitHub, он же ставит
-    /// найденное, он же перезапускает поставленное — что именно, видно по
-    /// его названию.
-    private var updateMenuTitle: String {
-        switch update.state {
-        case .available(let release): "Обновить до \(release.version)…"
-        case .installed(let release): "Перезапустить с \(release.version)"
-        case .checking: "Проверяю обновления…"
-        case .installing(_, let stage): "Обновление: \(stage.title)"
-        case .idle, .upToDate, .failed: "Проверить обновления"
-        }
-    }
-
-    @objc private func updateFromMenu() { update.act() }
 
     @objc private func openConfig() { openSettings() }
 

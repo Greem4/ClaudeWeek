@@ -86,9 +86,23 @@ final class UpdateController {
 
     // MARK: Действия
 
-    /// `manually` — проверку запросили из меню или настроек. Разница только в
-    /// том, о чём молчать: самостоятельная проверка без сети не должна
-    /// зажигать в панели красную строку, а нажатая кнопка обязана ответить.
+    /// Единственная кнопка обновления живёт на вкладке «О программе» и делает
+    /// следующий шаг, какой бы он ни был: спросить GitHub, показать найденное,
+    /// поставить, перезапустить. Отдельных «проверить» и «установить» не
+    /// заводим — человек всё равно нажимает их подряд.
+    func run() {
+        switch state {
+        case .idle, .upToDate, .failed(_, nil): check(manually: true)
+        case .available(let release), .failed(_, .some(let release)): offer(release)
+        case .installed(let release): askRelaunch(release)
+        case .checking, .installing: break
+        }
+    }
+
+    /// `manually` — проверку запросили кнопкой. Разница в том, о чём молчать:
+    /// самостоятельная проверка не должна ни выскакивать окном посреди
+    /// работы, ни зажигать в панели строку из-за пропавшей сети, а нажатая
+    /// кнопка обязана ответить в любом случае.
     func check(manually: Bool = false) {
         guard isAvailable, !isBusy else { return }
         state = .checking
@@ -100,14 +114,17 @@ final class UpdateController {
                 switch check {
                 case .upToDate:
                     state = .upToDate(Date())
+                    if manually { sayUpToDate() }
                 case .available(let release):
                     Log.info("вышла версия \(release.version), у нас \(ClaudeWeek.version)")
                     state = .available(release)
+                    if manually { offer(release) }
                 }
             } catch {
                 let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription
                 Log.warn("проверка обновлений не удалась: \(text)")
                 state = manually ? .failed(text, nil) : .idle
+                if manually { report(text) }
             }
         }
     }
@@ -129,10 +146,12 @@ final class UpdateController {
                     }
                 }
                 state = .installed(release)
+                askRelaunch(release)
             } catch {
                 let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription
                 Log.warn("не поставил обновление: \(text)")
                 state = .failed(text, release)
+                report(text)
             }
         }
     }
@@ -157,16 +176,87 @@ final class UpdateController {
         NSApp.terminate(nil)
     }
 
-    /// Кнопка рядом со строкой об обновлении делает то, что напрашивается
-    /// в этом состоянии, — отдельных «повторить» и «поставить» не заводим.
-    func act() {
-        switch state {
-        case .available(let release): install(release)
-        case .installed: relaunch()
-        case .failed(_, let release?): install(release)
-        case .failed(_, nil), .upToDate, .idle: check(manually: true)
-        case .checking, .installing: break
+    // MARK: Разговор с человеком
+
+    /// Что изменилось — до того, как качать. Заметки пишет release.yml: там и
+    /// установка, и контрольная сумма, и список коммитов, поэтому берём начало
+    /// и отправляем за подробностями на страницу релиза.
+    private func offer(_ release: Release) {
+        let alert = NSAlert()
+        alert.messageText = "Вышла версия \(release.version)"
+        alert.informativeText = Self.digest(of: release)
+        alert.addButton(withTitle: "Обновить")
+        alert.addButton(withTitle: "Что нового")
+        alert.addButton(withTitle: "Отмена")
+
+        switch present(alert) {
+        case .alertFirstButtonReturn:
+            install(release)
+        case .alertSecondButtonReturn:
+            // Страница вместо установки: прочитает и нажмёт кнопку снова —
+            // найденный выпуск никуда из состояния не денется.
+            NSWorkspace.shared.open(release.page)
+        default:
+            break
         }
+    }
+
+    /// Перезапуск — отдельный вопрос, а не продолжение установки: на диске уже
+    /// новая версия, но в строке меню работает прежняя, и выбрать момент
+    /// человек должен сам.
+    private func askRelaunch(_ release: Release) {
+        let alert = NSAlert()
+        alert.messageText = "ClaudeWeek \(release.version) установлена"
+        alert.informativeText = """
+        В строке меню пока работает \(ClaudeWeek.version) — новая версия \
+        начнётся с перезапуска. Настройки, кеш и калибровка остались на месте.
+        """
+        alert.addButton(withTitle: "Перезапустить")
+        alert.addButton(withTitle: "Позже")
+        if present(alert) == .alertFirstButtonReturn { relaunch() }
+    }
+
+    private func sayUpToDate() {
+        let alert = NSAlert()
+        alert.messageText = "У вас последняя версия"
+        alert.informativeText = "ClaudeWeek \(ClaudeWeek.version) — свежее на GitHub ничего нет."
+        alert.addButton(withTitle: "Хорошо")
+        _ = present(alert)
+    }
+
+    private func report(_ text: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Обновиться не вышло"
+        alert.informativeText = text
+        alert.addButton(withTitle: "Понятно")
+        _ = present(alert)
+    }
+
+    /// Приложение живёт без Dock (`LSUIElement`), и без явной активации окно
+    /// откроется за спиной у той программы, в которой человек сейчас работает.
+    private func present(_ alert: NSAlert) -> NSApplication.ModalResponse {
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal()
+    }
+
+    /// Начало заметок без разметки: NSAlert растёт вместе с текстом, а полный
+    /// список коммитов в модальном окне никому не нужен.
+    private static func digest(of release: Release) -> String {
+        var lines: [String] = []
+        for raw in release.notes.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            // Заголовки секций, ограждения блоков кода и команды карантина —
+            // это про установку руками, которой здесь как раз не будет.
+            guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("```") else { continue }
+            lines.append(line)
+            if lines.count == 6 { break }
+        }
+        let notes = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n\n"
+        return """
+        \(notes)У вас \(ClaudeWeek.version). Образ скачается со страницы релиза, \
+        сверится по контрольной сумме и заменит работающее приложение.
+        """
     }
 
     private var isBusy: Bool {
@@ -193,14 +283,16 @@ final class UpdateController {
         }
     }
 
-    /// Подпись кнопки рядом со строкой; nil — кнопки нет.
-    var actionTitle: String? {
+    /// Подпись единственной кнопки обновления — она же говорит, что случится
+    /// по нажатию.
+    var actionTitle: String {
         switch state {
-        case .available: "Обновить"
+        case .idle, .upToDate, .failed(_, .none): "Проверить обновления"
+        case .available(let release): "Обновить до \(release.version)…"
+        case .failed(_, .some): "Попробовать ещё раз"
         case .installed: "Перезапустить"
-        case .failed(_, .some): "Ещё раз"
-        case .failed(_, .none): nil
-        case .idle, .checking, .upToDate, .installing: nil
+        case .checking: "Проверяю…"
+        case .installing(_, let stage): stage.title
         }
     }
 

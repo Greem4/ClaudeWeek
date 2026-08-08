@@ -602,7 +602,7 @@ private struct AboutSettings: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 8) {
-                    Button(updateAction) { model.update.act() }
+                    Button(model.update.actionTitle) { model.update.run() }
                         .disabled(model.update.isWorking || !model.update.isAvailable)
                     if let release = model.update.release {
                         Button("Что нового") { NSWorkspace.shared.open(release.page) }
@@ -642,13 +642,6 @@ private struct AboutSettings: View {
         }
     }
 
-    /// Кнопка одна на все состояния — как и пункт меню. Пока новостей нет,
-    /// она спрашивает GitHub; появилась версия — ставит; поставленная ждёт
-    /// перезапуска — перезапускает.
-    private var updateAction: String {
-        model.update.actionTitle ?? "Проверить обновления"
-    }
-
     private var updateHint: String {
         guard model.update.isAvailable else {
             // Ровно как с автозапуском: у отладочного `swift run` подменять
@@ -659,10 +652,11 @@ private struct AboutSettings: View {
             """
         }
         return """
-        Программа сама спрашивает GitHub при запуске и раз в сутки. Скачанный \
-        образ сверяется по SHA256 из релиза и встаёт на место работающего \
-        приложения — настройки, кеш и калибровка при этом не трогаются. \
-        Обновление начинается только по этой кнопке.
+        Программа сама спрашивает GitHub при запуске и раз в сутки, о найденном \
+        сообщает строкой внизу панели. Скачивание и установка — только по этой \
+        кнопке: она покажет, что изменилось, сверит образ по SHA256 из релиза, \
+        заменит приложение и спросит про перезапуск. Настройки, кеш и \
+        калибровка остаются на месте.
         """
     }
 
