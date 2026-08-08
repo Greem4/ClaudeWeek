@@ -27,6 +27,9 @@ final class SettingsModel {
     /// в кеше, а не в конфиге, поэтому вкладка «О программе» читает его
     /// отдельно — иначе она показывала бы «не подобран» даже после калибровки.
     private(set) var pickedBudget: Double?
+    /// Автозапуск тоже мимо конфига: он и есть launchd-агент, и правда о нём
+    /// одна — лежит плист или нет.
+    private(set) var launchAtLogin = LoginItem.isEnabled
 
     private let apply: (Config) -> Void
     private let check: (Config) async -> (String, Bool)
@@ -42,11 +45,21 @@ final class SettingsModel {
         refreshDiagnostics()
     }
 
-    /// Перечитывает то, что живёт вне конфига: подобранный бюджет из кеша.
-    /// Зовётся при каждом показе окна — читать файл на каждую перерисовку
-    /// вкладки незачем.
+    /// Перечитывает то, что живёт вне конфига: подобранный бюджет из кеша и
+    /// автозапуск. Зовётся при каждом показе окна — читать файлы на каждую
+    /// перерисовку вкладки незачем, а между показами плист мог снести
+    /// `uninstall.sh` или рука.
     func refreshDiagnostics() {
         pickedBudget = Store.loadCache()?.weeklyBudget
+        launchAtLogin = LoginItem.isEnabled
+    }
+
+    /// Состояние возвращаем не из галочки, а из самого агента: включить его
+    /// удаётся не всегда, и переключатель, оставшийся стоять после неудачи,
+    /// обещал бы автозапуск, которого нет.
+    func setLaunchAtLogin(_ enabled: Bool) {
+        LoginItem.setEnabled(enabled)
+        launchAtLogin = LoginItem.isEnabled
     }
 
     /// Принять конфиг, изменившийся мимо этого окна: файл правили руками.

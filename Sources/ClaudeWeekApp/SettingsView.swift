@@ -39,6 +39,14 @@ private struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            Section("Запуск") {
+                Toggle("Запускать при входе в систему", isOn: launchAtLogin)
+                    .disabled(!LoginItem.isAvailable)
+                Text(launchHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Источник данных") {
                 Picker("Откуда брать цифры", selection: config.provider) {
                     Text("Официальный, с падением на локальный").tag(ProviderPreference.auto)
@@ -122,6 +130,33 @@ private struct GeneralSettings: View {
 
         }
         .formStyle(.grouped)
+    }
+
+    /// Галочка ходит не в конфиг, а в launchd, поэтому и биндинг свой:
+    /// состояние после щелчка модель перечитывает из самого агента.
+    private var launchAtLogin: Binding<Bool> {
+        Binding(
+            get: { model.launchAtLogin },
+            set: { model.setLaunchAtLogin($0) }
+        )
+    }
+
+    private var launchHint: String {
+        guard LoginItem.isAvailable else {
+            // Запущено не из бандла — из .build, отладочным `swift run`.
+            // Прописывать такой путь в launchd бессмысленно, и молчаливо
+            // погашенная галочка выглядела бы поломкой.
+            return """
+            Доступно только у собранного приложения: у отладочного swift run \
+            исполняемый файл лежит в .build и живёт до следующей сборки.
+            """
+        }
+        return """
+        Правит того же launchd-агента, что ставит install.sh, — файл \
+        ~/Library/LaunchAgents/\(LoginItem.label).plist. Включение и выключение \
+        начинают действовать со следующего входа в систему: запущенное \
+        приложение галочка не гасит и второй копии не поднимает.
+        """
     }
 
     /// Полночь показываем как «0:00 следующих суток», а не как «24:00»:

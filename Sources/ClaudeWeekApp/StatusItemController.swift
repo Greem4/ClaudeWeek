@@ -183,34 +183,17 @@ final class StatusItemController: NSObject {
     }
 
     /// Три группы: что сделать сейчас, как программа заведена, справка и
-    /// выход. Галочка автозапуска стоит рядом с настройками, потому что она и
-    /// есть настройка, просто живёт не в конфиге, а в launchd.
+    /// выход. Автозапуск сюда не вынесен: он такая же настройка, как остальные,
+    /// и живёт строкой в окне настроек — искать её начинают там.
     private func showMenu() {
         // Меню встаёт на то же место, что и панель, — сначала убираем её.
         dropdown.close()
 
         let menu = NSMenu()
-        // Пункт автозапуска бывает выключенным, а AppKit сам гасит только те,
-        // у кого нет цели: без этого он включал бы его обратно.
-        menu.autoenablesItems = false
 
         menu.addItem(withTitle: "Обновить", action: #selector(refreshFromMenu), keyEquivalent: "r")
             .target = self
         menu.addItem(.separator())
-
-        let launch = menu.addItem(
-            withTitle: "Запускать при входе в систему",
-            action: #selector(toggleLoginItem), keyEquivalent: ""
-        )
-        launch.target = self
-        launch.state = LoginItem.isEnabled ? .on : .off
-        launch.isEnabled = LoginItem.isAvailable
-        if !LoginItem.isAvailable {
-            // Запущено не из бандла — из .build, отладочным `swift run`.
-            // Прописывать такой путь в launchd бессмысленно, и молчаливо
-            // неактивный пункт выглядел бы поломкой.
-            launch.toolTip = "Доступно только у собранного приложения"
-        }
 
         menu.addItem(withTitle: "Настройки…", action: #selector(openConfig), keyEquivalent: ",")
             .target = self
@@ -226,12 +209,6 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func refreshFromMenu() { refresh() }
-
-    /// Галочку читаем заново при каждом показе меню, поэтому обновлять её
-    /// здесь нечего: следующий показ возьмёт состояние из самого агента.
-    @objc private func toggleLoginItem() {
-        LoginItem.setEnabled(!LoginItem.isEnabled)
-    }
 
     @objc private func openConfig() { openSettings() }
 
