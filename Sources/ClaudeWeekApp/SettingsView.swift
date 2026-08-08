@@ -595,6 +595,24 @@ private struct AboutSettings: View {
                 }
             }
 
+            Section("Обновление") {
+                LabeledContent("Состояние") {
+                    Text(model.update.summary)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    Button(updateAction) { model.update.act() }
+                        .disabled(model.update.isWorking || !model.update.isAvailable)
+                    if let release = model.update.release {
+                        Button("Что нового") { NSWorkspace.shared.open(release.page) }
+                    }
+                }
+                Text(updateHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Файлы") {
                 fileRow("Конфигурация", url: ConfigStore.fileURL)
                 fileRow("Кеш", url: Store.cacheURL)
@@ -622,6 +640,30 @@ private struct AboutSettings: View {
         } message: {
             Text("Тема, прозрачность, пороги и недельное окно вернутся к значениям по умолчанию. Бюджет недели и калибровка останутся.")
         }
+    }
+
+    /// Кнопка одна на все состояния — как и пункт меню. Пока новостей нет,
+    /// она спрашивает GitHub; появилась версия — ставит; поставленная ждёт
+    /// перезапуска — перезапускает.
+    private var updateAction: String {
+        model.update.actionTitle ?? "Проверить обновления"
+    }
+
+    private var updateHint: String {
+        guard model.update.isAvailable else {
+            // Ровно как с автозапуском: у отладочного `swift run` подменять
+            // нечего, и молчаливо погашенная кнопка выглядела бы поломкой.
+            return """
+            Доступно только у собранного приложения: у отладочного swift run \
+            исполняемый файл лежит в .build и живёт до следующей сборки.
+            """
+        }
+        return """
+        Программа сама спрашивает GitHub при запуске и раз в сутки. Скачанный \
+        образ сверяется по SHA256 из релиза и встаёт на место работающего \
+        приложения — настройки, кеш и калибровка при этом не трогаются. \
+        Обновление начинается только по этой кнопке.
+        """
     }
 
     private func fileRow(_ title: String, url: URL) -> some View {

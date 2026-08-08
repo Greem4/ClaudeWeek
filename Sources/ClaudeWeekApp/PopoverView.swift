@@ -5,6 +5,9 @@ import ClaudeWeekCore
 /// Полос всегда семь — по дням недели, день сброса одной строкой.
 struct PopoverView: View {
     @Bindable var model: PanelModel
+    /// Новая версия — новость, а не настройка: строка о ней появляется в
+    /// панели и исчезает вместе с поводом.
+    @Bindable var update: UpdateController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Кружок источника нажали: там, где он стоит, панель на несколько секунд
@@ -52,6 +55,11 @@ struct PopoverView: View {
 
             Divider().overlay(palette.separator.color)
             footer
+
+            if let banner = update.banner {
+                Divider().overlay(palette.separator.color)
+                updateRow(banner)
+            }
         }
         .padding(Theme.panelPadding)
         .frame(width: Theme.panelWidth)
@@ -258,6 +266,30 @@ struct PopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("обновить")
+            }
+        }
+    }
+
+    /// Строка обновления. Стоит под футером и живёт ровно столько, сколько
+    /// есть повод: вышел выпуск, идёт установка, поставленное ждёт
+    /// перезапуска. Тихие состояния — «проверяю», «у вас последняя» — сюда не
+    /// доходят: панель открывают ради недельного лимита.
+    private func updateRow(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("↑ \(text)")
+                .font(Theme.footerFont)
+                .foregroundStyle(palette.secondaryText.color)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            if let title = update.actionTitle {
+                Button(title) { update.act() }
+                    .buttonStyle(.plain)
+                    .font(Theme.footerFont)
+                    // Тем же цветом, что и плановая полоса: это подсказка
+                    // «так надо», а не тревога.
+                    .foregroundStyle(palette.plan.color)
             }
         }
     }

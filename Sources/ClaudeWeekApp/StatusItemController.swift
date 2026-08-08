@@ -8,6 +8,7 @@ final class StatusItemController: NSObject {
     private let dropdown = DropdownPanel()
     private let model: PanelModel
     private var provider: any UsageProvider
+    private let update = UpdateController()
 
     private var settings: SettingsWindowController?
     private var saveTask: Task<Void, Never>?
@@ -41,6 +42,7 @@ final class StatusItemController: NSObject {
         configurePanel()
         observeSystemEvents()
         startTimers()
+        update.start()
         restoreFromCache()
         render()
         refresh()
@@ -77,6 +79,7 @@ final class StatusItemController: NSObject {
         dropdown.setContent(
             PopoverView(
                 model: model,
+                update: update,
                 onRefresh: { [weak self] in self?.refresh() },
                 onSettings: { [weak self] in self?.openSettings() },
                 onQuit: { NSApp.terminate(nil) }
@@ -198,6 +201,15 @@ final class StatusItemController: NSObject {
         menu.addItem(withTitle: "Настройки…", action: #selector(openConfig), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
+        // У отладочного `swift run` подменять нечего — и пункта нет вовсе,
+        // чтобы он не обещал того, чего не будет.
+        if update.isAvailable {
+            let item = menu.addItem(
+                withTitle: updateMenuTitle, action: #selector(updateFromMenu), keyEquivalent: ""
+            )
+            item.target = self
+            item.isEnabled = !update.isWorking
+        }
         menu.addItem(withTitle: "О программе", action: #selector(showAbout), keyEquivalent: "")
             .target = self
         menu.addItem(withTitle: "Выйти", action: #selector(quit), keyEquivalent: "q")
@@ -209,6 +221,21 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func refreshFromMenu() { refresh() }
+
+    /// Один пункт на все состояния: он же спрашивает GitHub, он же ставит
+    /// найденное, он же перезапускает поставленное — что именно, видно по
+    /// его названию.
+    private var updateMenuTitle: String {
+        switch update.state {
+        case .available(let release): "Обновить до \(release.version)…"
+        case .installed(let release): "Перезапустить с \(release.version)"
+        case .checking: "Проверяю обновления…"
+        case .installing(_, let stage): "Обновление: \(stage.title)"
+        case .idle, .upToDate, .failed: "Проверить обновления"
+        }
+    }
+
+    @objc private func updateFromMenu() { update.act() }
 
     @objc private func openConfig() { openSettings() }
 
@@ -222,6 +249,7 @@ final class StatusItemController: NSObject {
         if settings == nil {
             let model = SettingsModel(
                 config: model.config,
+                update: update,
                 apply: { [weak self] config in self?.applyFromSettings(config) },
                 check: { config in await Self.check(config: config) }
             )
@@ -419,6 +447,9 @@ final class StatusItemController: NSObject {
         startTimers()
         tick()
         refresh()
+        // Суточный таймер проспал вместе с машиной: её закрывают на ночь, и
+        // без этого «раз в сутки» означало бы «раз в сутки работы».
+        update.checkIfDue()
     }
 
     /// Окно недели считается в локальной таймзоне, поэтому её смена меняет

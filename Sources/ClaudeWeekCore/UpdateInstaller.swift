@@ -13,7 +13,7 @@ import CryptoKit
 /// последним движением подменили бандл.
 public actor UpdateInstaller {
     /// Что происходит прямо сейчас — для подписи под кнопкой.
-    public enum Stage: Sendable {
+    public enum Stage: Sendable, Equatable {
         case downloading
         case verifying
         case installing

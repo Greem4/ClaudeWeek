@@ -168,8 +168,11 @@ enum Screenshot {
             // прозрачность — фон рисуется сплошным цветом палитры. Форму
             // сохраняем: те же скруглённые углы и тень, что видит человек.
             let radius = model.config.appearance.cornerRadius
+            // Контроллер обновления — пустой и без бандла: картинкам в
+            // документации незачем показывать новость, которая была свежей
+            // в день съёмки.
             let renderer = ImageRenderer(
-                content: PopoverView(model: model)
+                content: PopoverView(model: model, update: UpdateController(bundle: nil))
                     .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                     .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
                     .padding(16)

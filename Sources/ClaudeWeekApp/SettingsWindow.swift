@@ -31,15 +31,21 @@ final class SettingsModel {
     /// одна — лежит плист или нет.
     private(set) var launchAtLogin = LoginItem.isEnabled
 
+    /// Обновление идёт мимо конфига, и состояние у него общее с панелью и
+    /// меню — сюда приходит тот же контроллер, а не его копия.
+    let update: UpdateController
+
     private let apply: (Config) -> Void
     private let check: (Config) async -> (String, Bool)
 
     init(
         config: Config,
+        update: UpdateController,
         apply: @escaping (Config) -> Void,
         check: @escaping (Config) async -> (String, Bool)
     ) {
         self.config = config
+        self.update = update
         self.apply = apply
         self.check = check
         refreshDiagnostics()
