@@ -549,6 +549,20 @@ private struct AccessSettings: View {
                 .foregroundStyle(.secondary)
             }
 
+            Section("Если macOS снова спросила доступ") {
+                Text("""
+                Разрешение привязано к подписи приложения, а не к его пути: у \
+                сборки без постоянного сертификата подпись меняется при каждой \
+                пересборке, и «Всегда разрешать» перестаёт действовать. \
+                Лечится один раз — ./scripts/signing-cert.sh в каталоге \
+                исходников, затем ./scripts/install.sh. Дальше подпись не \
+                меняется, и вопрос больше не возвращается: обновления \
+                переподписываются тем же сертификатом.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
             Section("Проверка") {
                 HStack {
                     Button(model.isChecking ? "Проверяю…" : "Проверить сейчас", action: model.checkNow)

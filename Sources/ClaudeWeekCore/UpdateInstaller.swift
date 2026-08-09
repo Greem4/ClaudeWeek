@@ -161,6 +161,7 @@ public actor UpdateInstaller {
         let staged = staging.appendingPathComponent(source.lastPathComponent)
         try manager.copyItem(at: source, to: staged)
         try accept(staged, expecting: release.version)
+        resign(staged)
 
         // Единственное необратимое движение за всю установку — и оно
         // атомарное: либо на месте старый бандл, либо целиком новый.
@@ -223,6 +224,65 @@ public actor UpdateInstaller {
         guard inside == version else {
             throw UpdateError.install("в образе версия \(inside), а релиз обещал \(version)")
         }
+    }
+
+    /// Имя постоянного сертификата подписи — того, что заводит
+    /// `scripts/signing-cert.sh`.
+    public static let signingIdentityName = "ClaudeWeek Signing"
+
+    /// Переподписывает новый бандл тем же сертификатом, что стоит на машине.
+    ///
+    /// Разрешение читать запись Keychain «Claude Code-credentials» macOS
+    /// привязывает к designated requirement приложения, а образ из релиза
+    /// подписан ad-hoc — requirement там cdhash, свой у каждой сборки. Не
+    /// переподписав, мы получили бы после каждого обновления вопрос про доступ
+    /// к токену заново; с постоянным сертификатом requirement сходится с тем,
+    /// на который разрешение уже выдано.
+    ///
+    /// Неудача обновление не роняет: хуже вернувшегося диалога только
+    /// не поставленная версия. В лог она попадает — иначе вопрос «почему опять
+    /// спрашивает» разбирать будет нечем.
+    private func resign(_ app: URL) {
+        guard let identity = Self.signingIdentity() else {
+            Log.debug("постоянного сертификата нет — оставляю подпись образа")
+            return
+        }
+        let result = Self.run("/usr/bin/codesign", [
+            "--force", "--sign", identity, app.path,
+        ])
+        guard result.code == 0 else {
+            Log.warn("""
+            не переподписал обновление (\(result.output)) — macOS спросит доступ \
+            к записи Keychain заново
+            """)
+            return
+        }
+        Log.info("переподписал обновление сертификатом \(identity)")
+    }
+
+    /// Хеш identity, которой подписываемся, или nil — сертификата в связке нет.
+    private static func signingIdentity() -> String? {
+        let listing = Self.run("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"])
+        guard listing.code == 0 else { return nil }
+        return identity(named: signingIdentityName, in: listing.output)
+    }
+
+    /// Разбирает вывод `security find-identity`: строки вида
+    /// `  1) 8F19…0724 "ClaudeWeek Signing"`. Берём хеш, а не имя: тёзок в
+    /// связке может оказаться два (старый сертификат забыли удалить), и тогда
+    /// подпись по имени падает на неоднозначности.
+    public static func identity(named name: String, in listing: String) -> String? {
+        for line in listing.split(separator: "\n") {
+            guard line.contains("\"\(name)\"") else { continue }
+            let fields = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard fields.count >= 2 else { continue }
+            let hash = String(fields[1])
+            // SHA-1 в hex — ровно 40 знаков; всё прочее значит, что формат
+            // вывода изменился, и угадывать по позиции больше нельзя.
+            guard hash.count == 40, hash.allSatisfy(\.isHexDigit) else { continue }
+            return hash
+        }
+        return nil
     }
 
     /// Запускает утилиту и отдаёт код возврата с выводом. Вывод нужен целиком:

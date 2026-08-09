@@ -95,6 +95,19 @@ cd ClaudeWeek
 Claude Code из Keychain — только читает, наружу не отдаёт, на диск не пишет.
 Разбор — [docs/USAGE.md](docs/USAGE.md#авторизация-и-доступ).
 
+Один раз стоит сделать вот что:
+
+```bash
+./scripts/signing-cert.sh   # постоянный сертификат подписи
+```
+
+Без него macOS спрашивает доступ к записи Keychain с токеном после каждой
+пересборки: разрешение привязано к подписи, а ad-hoc подпись — это хеш бинаря,
+свой у каждой сборки. С сертификатом подпись перестаёт меняться, и «Всегда
+разрешать» нажимается в последний раз. Apple ID и Developer ID для этого не
+нужны; Gatekeeper он не отменяет. Подробности —
+[docs/USAGE.md](docs/USAGE.md#чтобы-разрешение-спросили-один-раз).
+
 ---
 
 ## Что показывает
@@ -126,7 +139,7 @@ Claude Code из Keychain — только читает, наружу не от�
 
 ```bash
 swift build                  # обе цели
-swift run ClaudeWeekTests    # 336 проверок: без сети, без UI, свой раннер
+swift run ClaudeWeekTests    # 371 проверка: без сети, без UI, свой раннер
 ./scripts/make-app.sh        # dist/ClaudeWeek.app — бандл, ничего не устанавливая
 ARCH=arm64 ./scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
 ```
