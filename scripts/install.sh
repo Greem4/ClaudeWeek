@@ -195,6 +195,16 @@ launchctl kickstart -k "gui/$UID/$LABEL"
 
 VERSION="$(defaults read "$APP_DEST/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "?")"
 echo
+# Ad-hoc подпись означает, что разрешение на чтение токена Claude Code не
+# переживёт следующую пересборку: macOS привязывает его к designated
+# requirement, а у ad-hoc это хеш бинаря. Сказать об этом надо здесь — вопрос
+# про доступ к Keychain человек увидит через несколько секунд.
+if ! codesign -d -r- "$APP_DEST" 2>&1 | grep -q "certificate leaf"; then
+    echo "подпись ad-hoc: доступ к токену Claude Code macOS спросит снова после"
+    echo "каждой пересборки. Чтобы спросила последний раз — постоянный сертификат:"
+    echo "  ./scripts/signing-cert.sh && ./scripts/install.sh"
+    echo
+fi
 echo "готово: ClaudeWeek $VERSION в строке меню"
 echo "        собрано из: $SOURCE_NOTE"
 echo "        лог — $LOG"

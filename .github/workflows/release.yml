@@ -58,6 +58,41 @@ jobs:
       - name: Проверки
         run: swift run ClaudeWeekTests
 
+      # Постоянный сертификат подписи: без него образ подписывается ad-hoc, а
+      # разрешение на чтение токена Claude Code macOS привязывает к designated
+      # requirement — у ad-hoc это хеш бинаря, свой у каждой сборки, и человек
+      # получает вопрос про доступ к Keychain после каждого обновления.
+      # Секретов нет — шаг пропускается, и всё идёт как прежде.
+      #
+      # Ключ здесь только за стабильность requirement: сертификат
+      # самоподписанный, подлинности сборки он не доказывает (для этого нужен
+      # Developer ID и нотаризация) и Gatekeeper им не обмануть.
+      # Как получить пару: ./scripts/signing-cert.sh --export cert.p12,
+      # затем base64 -i cert.p12 → секрет SIGNING_CERT_P12, пароль →
+      # SIGNING_CERT_PASSWORD.
+      - name: Сертификат подписи
+        if: ${{ secrets.SIGNING_CERT_P12 != '' }}
+        env:
+          P12_BASE64: ${{ secrets.SIGNING_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Связка должна попасть в список поиска, иначе codesign её не увидит;
+          # прежние оставляем на месте — из них раннер берёт всё остальное.
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | tr -d '"')
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          # На раннере sudo без пароля, поэтому доверие ставим на всю машину:
+          # самоподписанную identity codesign иначе не берёт.
+          KEYCHAIN_PASSWORD="$KEYCHAIN_PASSWORD" P12_PASSWORD="$P12_PASSWORD" \
+            ./scripts/signing-cert.sh --import "$RUNNER_TEMP/cert.p12" \
+              --keychain "$KEYCHAIN" --trust system
+          rm -f "$RUNNER_TEMP/cert.p12"
+
       - name: Образ — Apple Silicon (arm64)
         run: ARCH=arm64 ./scripts/make-dmg.sh
 
@@ -78,9 +113,17 @@ jobs:
             echo 'xattr -dr com.apple.quarantine /Applications/ClaudeWeek.app'
             echo '```'
             echo
-            echo 'Сборка подписана ad-hoc, без Apple Developer ID, поэтому Gatekeeper'
-            echo 'просит подтверждения. Кому это не нравится — собирайте из исходников:'
-            echo '`./scripts/install.sh`.'
+            if codesign -d -r- dist/ClaudeWeek.app 2>&1 | grep -q 'certificate leaf'; then
+              echo 'Сборка подписана постоянным сертификатом проекта. Apple Developer ID'
+              echo 'у неё всё равно нет, поэтому Gatekeeper просит подтверждения — зато'
+              echo 'доступ к токену Claude Code macOS спросит один раз: requirement'
+              echo 'подписи от версии к версии не меняется, и разрешение переживает'
+              echo 'обновление.'
+            else
+              echo 'Сборка подписана ad-hoc, без Apple Developer ID, поэтому Gatekeeper'
+              echo 'просит подтверждения. Кому это не нравится — собирайте из исходников:'
+              echo '`./scripts/install.sh`.'
+            fi
             echo
             echo 'Требуется macOS 14+ на Apple Silicon (M1 и новее). Готового образа'
             echo 'под Intel нет — там сборка из исходников тем же `install.sh`.'

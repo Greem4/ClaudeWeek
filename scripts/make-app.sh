@@ -86,7 +86,26 @@ else
     echo "   иконку сделать не вышло — бандл без иконки" >&2
 fi
 
-echo "==> ad-hoc подпись"
-codesign --force --sign - "$APP"
+echo "==> подпись"
+# Разрешение Keychain на запись «Claude Code-credentials» macOS привязывает к
+# designated requirement бандла. У ad-hoc подписи requirement — cdhash, свой у
+# каждой сборки, и разрешение слетает при каждой пересборке. Постоянный
+# сертификат даёт requirement по identifier и сертификату: один и тот же всегда.
+IDENTITY="${CLAUDEWEEK_SIGN_IDENTITY:-ClaudeWeek Signing}"
+HASH="$(security find-identity -v -p codesigning 2>/dev/null \
+    | awk -v name="\"$IDENTITY\"" 'index($0, name) { print $2; exit }')"
+if [ -n "$HASH" ]; then
+    codesign --force --sign "$HASH" "$APP"
+    echo "    сертификатом «${IDENTITY}»"
+else
+    codesign --force --sign - "$APP"
+    echo "    ad-hoc: постоянного сертификата «${IDENTITY}» в связке нет"
+    echo "    из-за этого macOS снова спросит доступ к токену Claude Code —"
+    echo "    заводится один раз: ./scripts/signing-cert.sh"
+fi
+
+# Requirement печатаем всегда: это ровно то, к чему привязано разрешение на
+# токен, и заметить его смену на сборке дешевле, чем по вернувшемуся диалогу.
+codesign -d -r- "$APP" 2>&1 | sed -n 's/^# designated => /    requirement: /p'
 
 echo "готово: $APP"

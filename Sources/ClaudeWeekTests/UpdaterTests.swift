@@ -200,6 +200,33 @@ func runUpdaterTests(_ t: Harness) async {
         }
     }
 
+    t.suite("подпись: разбор find-identity") {
+        // Вывод `security find-identity -v -p codesigning` в том виде, в каком
+        // он приходит: отступы, нумерация, кавычки вокруг имени.
+        let listing = """
+          1) 8F19A7106BFAC7B25F11654C2E3994901C3A0724 "ClaudeWeek Signing"
+          2) 1AF3C2D4E5B6978012345678901234567890ABCD "Apple Development: кто-то (TEAMID)"
+             2 valid identities found
+        """
+        t.equal(
+            UpdateInstaller.identity(named: "ClaudeWeek Signing", in: listing),
+            "8F19A7106BFAC7B25F11654C2E3994901C3A0724",
+            "хеш взят у нужного сертификата, а не у первой строки"
+        )
+        t.equal(
+            UpdateInstaller.identity(named: "ClaudeWeek Signing", in: "     0 valid identities found"),
+            nil,
+            "пустая связка — nil, а не пустая строка"
+        )
+        // Формат вывода — не контракт: сместится колонка, и подписывать надо
+        // не тем, что оказалось вторым словом, а ничем.
+        t.equal(
+            UpdateInstaller.identity(named: "ClaudeWeek Signing", in: "  1) короткий \"ClaudeWeek Signing\""),
+            nil,
+            "на месте хеша не хеш — не подписываем"
+        )
+    }
+
     await t.suite("проверка: сети нет") {
         let updater = Updater(
             transport: FakeGitHub(failure: URLError(.notConnectedToInternet)),
