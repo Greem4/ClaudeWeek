@@ -70,8 +70,23 @@ jobs:
       # Как получить пару: ./scripts/signing-cert.sh --export cert.p12,
       # затем base64 -i cert.p12 → секрет SIGNING_CERT_P12, пароль →
       # SIGNING_CERT_PASSWORD.
+      # Наличие секрета проверяется отдельным шагом, а не прямо в `if`:
+      # контекст `secrets` в условиях шага недоступен, и GitHub отвергает такой
+      # файл целиком — падает не шаг, а весь workflow, ещё до первой команды.
+      - name: Есть ли сертификат подписи
+        id: signing
+        env:
+          P12_BASE64: ${{ secrets.SIGNING_CERT_P12 }}
+        run: |
+          if [ -n "$P12_BASE64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "секрета SIGNING_CERT_P12 нет — образ будет подписан ad-hoc"
+          fi
+
       - name: Сертификат подписи
-        if: ${{ secrets.SIGNING_CERT_P12 != '' }}
+        if: steps.signing.outputs.available == 'true'
         env:
           P12_BASE64: ${{ secrets.SIGNING_CERT_P12 }}
           P12_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
