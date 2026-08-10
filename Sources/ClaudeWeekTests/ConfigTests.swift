@@ -69,8 +69,8 @@ func runConfigTests(_ t: Harness) {
         t.equal(v.timeZone, "", "неизвестная таймзона — системная")
         t.equal(v.resolvedTimeZone, TimeZone.current, "пустая таймзона разворачивается в системную")
         t.equal(v.weeklyBudget, 0, "отрицательный бюджет обнуляется")
-        t.equal(v.thresholds.weekWarn, 80, "жёлтый порог вне 0…100 чинится")
-        t.equal(v.thresholds.weekCritical, 95, "красный порог вне 0…100 чинится")
+        t.equal(v.thresholds.weekWarn, 81, "жёлтый порог вне 0…100 чинится")
+        t.equal(v.thresholds.weekCritical, 93, "красный порог вне 0…100 чинится")
         t.equal(v.thresholds.sessionCritical, 90, "красный ниже жёлтого подтягивается к нему")
         t.equal(v.thresholds.sessionWarn, 90, "…а сам жёлтый остаётся как задан")
     }
@@ -96,7 +96,7 @@ func runConfigTests(_ t: Harness) {
 
     t.suite("конфиг: внешний вид") {
         let d = Config.default
-        t.equal(d.appearance.theme, .system, "тема по умолчанию — системная")
+        t.equal(d.appearance.theme, .contrast, "тема по умолчанию — контрастная")
         t.equal(d.appearance.transparentPanel, true, "панель по умолчанию прозрачная")
 
         var c = Config.default
@@ -138,12 +138,13 @@ func runConfigTests(_ t: Harness) {
     }
 
     t.suite("конфиг: подпись сброса сессии") {
-        t.equal(Config.default.appearance.sessionReset, .relative,
-                "по умолчанию — сколько осталось")
+        t.equal(Config.default.appearance.sessionReset, .both,
+                "по умолчанию — и остаток, и время")
 
-        let url = tempFile(#"{ "appearance": { "sessionReset": "both" } }"#)
+        let url = tempFile(#"{ "appearance": { "sessionReset": "absolute" } }"#)
         defer { try? FileManager.default.removeItem(at: url) }
-        t.equal(ConfigStore.load(from: url).appearance.sessionReset, .both, "своё значение прочиталось")
+        t.equal(ConfigStore.load(from: url).appearance.sessionReset, .absolute,
+                "своё значение прочиталось")
 
         // Внешний вид, записанный прошлой версией: ключа sessionReset в нём
         // нет. Раньше это ронять не могло — теперь может, и не должно:
@@ -153,15 +154,15 @@ func runConfigTests(_ t: Harness) {
         let c = ConfigStore.load(from: old)
         t.equal(c.appearance.theme, .midnight, "старый внешний вид уцелел")
         t.equal(c.appearance.cornerRadius, 4, "и второе его поле тоже")
-        t.equal(c.appearance.sessionReset, .relative, "новый ключ взялся из дефолтов")
+        t.equal(c.appearance.sessionReset, .both, "новый ключ взялся из дефолтов")
     }
 
     t.suite("конфиг: пороги окраски") {
         let d = Config.default.thresholds
-        t.equal(d.weekWarn, 80, "неделя желтеет с 80 %")
-        t.equal(d.weekCritical, 95, "и краснеет с 95 %")
-        t.equal(d.sessionWarn, 80, "у сессии те же 80 %")
-        t.equal(d.sessionCritical, 95, "и те же 95 %")
+        t.equal(d.weekWarn, 81, "неделя желтеет с 81 %")
+        t.equal(d.weekCritical, 93, "и краснеет с 93 %")
+        t.equal(d.sessionWarn, 81, "у сессии тот же жёлтый порог")
+        t.equal(d.sessionCritical, 95, "а красный у неё выше: сессия сбросится сама")
         t.check(d.colorizeMenuBar, "строка меню красится по умолчанию")
 
         let url = tempFile(#"{ "thresholds": { "weekWarn": 50, "colorizeMenuBar": false } }"#)
@@ -169,7 +170,7 @@ func runConfigTests(_ t: Harness) {
         let mine = ConfigStore.load(from: url).thresholds
         t.equal(mine.weekWarn, 50, "своё значение прочиталось")
         t.check(!mine.colorizeMenuBar, "выключенная окраска прочиталась")
-        t.equal(mine.sessionWarn, 80, "нетронутый порог взялся из дефолтов")
+        t.equal(mine.sessionWarn, 81, "нетронутый порог взялся из дефолтов")
 
         // Пороги прошлой версии считались от плана и в долях. Переносить их
         // нельзя — 0.9 доли превратились бы в 0.9 %, — и падать на них тоже.
@@ -199,19 +200,19 @@ func runConfigTests(_ t: Harness) {
     }
 
     t.suite("конфиг: вид панели") {
-        t.equal(Config.default.appearance.panelLayout, .week, "по умолчанию — вся неделя")
+        t.equal(Config.default.appearance.panelLayout, .compact, "по умолчанию — только сегодня")
 
-        let url = tempFile(#"{ "appearance": { "panelLayout": "compact" } }"#)
+        let url = tempFile(#"{ "appearance": { "panelLayout": "week" } }"#)
         defer { try? FileManager.default.removeItem(at: url) }
-        t.equal(ConfigStore.load(from: url).appearance.panelLayout, .compact,
-                "компактный вид прочитался")
+        t.equal(ConfigStore.load(from: url).appearance.panelLayout, .week,
+                "вся неделя прочиталась")
 
         // Ключа panelLayout в конфиге прошлой версии нет, и появиться он должен
         // дефолтным — не тронув остальной внешний вид.
         let old = tempFile(#"{ "appearance": { "theme": "paper", "showSession": false } }"#)
         defer { try? FileManager.default.removeItem(at: old) }
         let c = ConfigStore.load(from: old)
-        t.equal(c.appearance.panelLayout, .week, "новый ключ взялся из дефолтов")
+        t.equal(c.appearance.panelLayout, .compact, "новый ключ взялся из дефолтов")
         t.equal(c.appearance.theme, .paper, "прежний внешний вид уцелел")
         t.equal(c.appearance.showSession, false, "и второе его поле тоже")
 

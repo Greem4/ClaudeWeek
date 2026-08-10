@@ -105,12 +105,12 @@ func runPlanTests(_ t: Harness) {
         t.equal(calm.state(), .normal, "45 % — спокойно")
         t.check(calm.metrics(at: now).exhaustionDate == nil, "в графике лимит не кончится")
 
-        // Пороги берутся включительно: настроенные 80 % загораются ровно на 80.
+        // Пороги берутся включительно: настроенные 81 % загораются ровно на 81.
         let warning = UsageSnapshot.make(
-            usedPercent: 80, cumulativeByDay: [], window: window,
+            usedPercent: 81, cumulativeByDay: [], window: window,
             source: .official, fetchedAt: now, isEstimate: false
         )
-        t.equal(warning.state(), .warning, "80 % — жёлтый ровно на пороге")
+        t.equal(warning.state(), .warning, "81 % — жёлтый ровно на пороге")
 
         // Первый рабочий час новой недели: план околонулевой, и три процента
         // обгоняют его в разы. Цвет при этом обязан остаться спокойным.

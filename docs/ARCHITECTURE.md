@@ -323,7 +323,10 @@ swift scripts/probe-panel.swift --behaviors   # прежде чем менять
 
 ```bash
 swift build                     # оба таргета
-swift build -Xswiftc -warnings-as-errors   # так же, как в CI: предупреждение = падение
+# так же, как в CI: предупреждение = падение. Исключение — устаревшие
+# объявления: ключи kSecUseAuthenticationUI в Keychain.swift оставлены
+# намеренно, замены им нет, и группа понижена обратно до предупреждения.
+swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
 swift run ClaudeWeekTests       # 371 проверка, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/signing-cert.sh       # один раз: постоянный сертификат подписи
@@ -371,6 +374,15 @@ Command Line Tools. Суффикс в имени образа `make-dmg.sh` бе
 [`release.yml`](../.github/workflows/release.yml) по тегу `vX.Y.Z`: сверяет тег
 с `Version.swift`, прогоняет проверки, кладёт в Releases `.dmg` под Apple
 Silicon и его контрольную сумму.
+
+Оба гоняются на раннере `macos-26`, и это не про свежесть ради свежести:
+оформление на macOS 26 система выдаёт по SDK, которым слинкован бинарь, а не
+по коду. Собранное с SDK 15 приложение Tahoe рисует прежним плоским видом —
+именно так релиз 0.1.5 оказался внешне старее сборки с той же машины
+разработчика. Минимальная версия системы к этому не привязана: она задана в
+`Package.swift` (`.macOS(.v14)`), поэтому образ с SDK 26 по-прежнему
+запускается на macOS 14 и 15. Оба workflow после сборки бандла сверяют SDK
+(`vtool -show-build`) и падают, если раннер принёс что-то старее 26.
 
 Оба файла релиза — вход для автообновления: по имени `*-arm64.dmg`
 `Updater` находит образ, а `SHA256SUMS.txt` даёт ту единственную проверку

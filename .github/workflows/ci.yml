@@ -16,7 +16,9 @@ concurrency:
 jobs:
   build:
     name: Сборка и проверки
-    runs-on: macos-15
+    # Тот же раннер, что и у релиза, — иначе CI проверяет не то, что
+    # выкладывается. Про выбор macos-26 см. release.yml.
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v7
@@ -29,14 +31,37 @@ jobs:
       # -warnings-as-errors: «сборка без предупреждений» — обещание README, и
       # проверять его должен CI, а не честное слово. Предупреждение здесь
       # ломает сборку, поэтому чинится оно в той же правке, что и завело.
+      #
+      # Исключение одно, и оно осознанное: kSecUseAuthenticationUI в
+      # Keychain.swift устарел с macOS 11, а замены, которая так же гасит
+      # диалог доступа, у него нет (проверено, см. комментарий у вызова).
+      # -Wwarning возвращает этой группе статус предупреждения: она остаётся
+      # на виду в логе, но сборку не роняет.
       - name: Сборка
-        run: swift build -Xswiftc -warnings-as-errors
+        run: >-
+          swift build -Xswiftc -warnings-as-errors
+          -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
 
       - name: Проверки
         run: swift run ClaudeWeekTests
 
       - name: Бандл ClaudeWeek.app
         run: ./scripts/make-app.sh
+
+      # Тот же смысл, что и в release.yml: с SDK старее 26 приложение на
+      # Tahoe получает прежнее плоское оформление. Ловим здесь, а не на теге.
+      - name: Сверяю SDK сборки
+        run: |
+          SDK="$(vtool -show-build dist/ClaudeWeek.app/Contents/MacOS/ClaudeWeek \
+            | awk '/^ *sdk /{print $2}')"
+          echo "бинарь слинкован с SDK $SDK"
+          case "$SDK" in
+            2[6-9].*|[3-9][0-9].*) ;;
+            *)
+              echo "::error::нужен SDK 26 или новее, а взят $SDK — на macOS 26 сборка будет выглядеть по-старому"
+              exit 1
+              ;;
+          esac
 
       - name: Что получилось
         run: |

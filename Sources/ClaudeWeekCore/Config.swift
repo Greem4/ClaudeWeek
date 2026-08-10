@@ -128,15 +128,19 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     /// Весь недельный ряд или только текущие сутки.
     public var panelLayout: PanelLayout
 
+    // Значения по умолчанию — тот вид, к которому пришла обкатка: плотная
+    // вуаль поверх материала, контрастная тема, компактная панель. Прогноз
+    // выключен намеренно: он занимает вторую строку футера и на глаз спорит
+    // с планом, а включается одной галкой в настройках.
     public init(
-        theme: ThemeKind = .system,
+        theme: ThemeKind = .contrast,
         transparentPanel: Bool = true,
-        panelTintOpacity: Double = 0.18,
-        cornerRadius: Double = 12,
+        panelTintOpacity: Double = 0.6,
+        cornerRadius: Double = 16,
         showSession: Bool = true,
-        showForecast: Bool = true,
-        sessionReset: SessionResetDisplay = .relative,
-        panelLayout: PanelLayout = .week
+        showForecast: Bool = false,
+        sessionReset: SessionResetDisplay = .both,
+        panelLayout: PanelLayout = .compact
     ) {
         self.theme = theme
         self.transparentPanel = transparentPanel
@@ -207,10 +211,14 @@ public struct Thresholds: Codable, Sendable, Equatable {
     /// заполнением кольца и цифрой.
     public var colorizeMenuBar: Bool
 
+    // Пороги сдвинуты с круглых чисел не для красоты: 81 — та отметка, после
+    // которой недельного остатка перестаёт хватать на полный рабочий день, а
+    // 93 у недели ниже сессионных 95, потому что недельный лимит не сбросится
+    // до конца недели и предупреждать о нём надо раньше.
     public init(
-        weekWarn: Double = 80,
-        weekCritical: Double = 95,
-        sessionWarn: Double = 80,
+        weekWarn: Double = 81,
+        weekCritical: Double = 93,
+        sessionWarn: Double = 81,
         sessionCritical: Double = 95,
         colorizeMenuBar: Bool = true
     ) {
@@ -291,7 +299,7 @@ public struct Config: Codable, Sendable, Equatable {
         refreshInterval: 300,
         provider: .auto,
         workHours: WorkHours.default,
-        menuBarStyle: .percent,
+        menuBarStyle: .ring,
         ringArc: .session,
         weeklyBudget: 0,
         calibration: Calibration(),
