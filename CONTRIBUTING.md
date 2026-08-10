@@ -19,7 +19,9 @@
 То же, что гоняет [CI](.github/workflows/ci.yml) — прогоните до отправки:
 
 ```bash
-swift build -Xswiftc -warnings-as-errors   # так собирает CI: предупреждение = падение
+# так собирает CI: предупреждение = падение, кроме устаревших объявлений —
+# по ним в Keychain.swift есть осознанное исключение, см. комментарий там
+swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
 swift run ClaudeWeekTests                  # все проверки проходят
 ./scripts/make-app.sh                      # бандл собирается
 ```

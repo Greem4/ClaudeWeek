@@ -111,6 +111,12 @@ public struct KeychainCredentials: CredentialsSource {
             // interactionNotAllowed — диалог доступа к записи файловой связки
             // не подавляет (проверено: запрос с ней встаёт на диалоге
             // насмерть, а с этими ключами возвращает ошибку и уходит).
+            //
+            // Строгая сборка о него больше не спотыкается: группу
+            // DeprecatedDeclaration CI понижает до предупреждения флагом
+            // -Wwarning. Понижение общее на весь пакет, так что новое
+            // устаревшее место здесь никто не поймает за руку — проверяйте
+            // такие вызовы глазами.
             kSecUseAuthenticationUI: kSecUseAuthenticationUIFail,
         ] as CFDictionary, &item)
 

@@ -323,7 +323,10 @@ swift scripts/probe-panel.swift --behaviors   # прежде чем менять
 
 ```bash
 swift build                     # оба таргета
-swift build -Xswiftc -warnings-as-errors   # так же, как в CI: предупреждение = падение
+# так же, как в CI: предупреждение = падение. Исключение — устаревшие
+# объявления: ключи kSecUseAuthenticationUI в Keychain.swift оставлены
+# намеренно, замены им нет, и группа понижена обратно до предупреждения.
+swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
 swift run ClaudeWeekTests       # 371 проверка, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/signing-cert.sh       # один раз: постоянный сертификат подписи
