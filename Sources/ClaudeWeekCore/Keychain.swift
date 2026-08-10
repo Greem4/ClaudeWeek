@@ -74,13 +74,44 @@ public struct KeychainCredentials: CredentialsSource {
         )
     }
 
+    /// Сначала `/usr/bin/security`, и только потом свой запрос к Keychain —
+    /// порядок выбран по тому, кто из них не приводит к диалогу.
+    ///
+    /// Доступ к записи macOS проверяет дважды: по списку доверенных приложений
+    /// и по partition list. В первом ClaudeWeek держится по сертификату подписи
+    /// и стоит прочно, а во втором — только по cdhash сборки: у
+    /// самоподписанного сертификата нет Team ID, и пинить приложение больше не
+    /// по чему. Вдобавок partition list обнуляется при каждой перезаписи
+    /// записи, а Claude Code переписывает её на каждом обновлении токена —
+    /// примерно раз в сутки. Отсюда и дневной диалог: «Всегда разрешать» живёт
+    /// ровно до следующего обновления.
+    ///
+    /// Спасает то, чем Claude Code пишет токен: `/usr/bin/security` остаётся и
+    /// в списке доверенных, и в partition list (`apple-tool:`) — их
+    /// восстанавливает сама же запись токена. Читая запись этой утилитой, мы
+    /// проходим обе проверки всегда, а не до ближайшего обновления.
     private func rawData() throws -> Data {
+        if let data = KeychainCredentials.readViaSecurityTool(service: service) {
+            return data
+        }
+
         var item: CFTypeRef?
         let status = SecItemCopyMatching([
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne,
+            // Диалог не показываем ни при каких обстоятельствах: панель
+            // обновляется в фоне раз в минуту, и модальное окно посреди чужой
+            // работы — худший исход неудачного чтения. Нет доступа без
+            // вопроса — уходим на локальную оценку.
+            //
+            // Ключи помечены устаревшими с macOS 11, и предупреждение сборки
+            // остаётся намеренно: предложенная замена — LAContext с
+            // interactionNotAllowed — диалог доступа к записи файловой связки
+            // не подавляет (проверено: запрос с ней встаёт на диалоге
+            // насмерть, а с этими ключами возвращает ошибку и уходит).
+            kSecUseAuthenticationUI: kSecUseAuthenticationUIFail,
         ] as CFDictionary, &item)
 
         if status == errSecSuccess, let data = item as? Data {
@@ -91,13 +122,53 @@ public struct KeychainCredentials: CredentialsSource {
             return data
         }
 
-        // errSecUserCanceled — пользователь закрыл системный диалог доступа:
-        // отдельный текст, чтобы не выглядело как «вы не авторизованы».
-        if status == errSecUserCanceled {
-            throw UsageError.unavailable("доступ к Keychain отклонён")
+        // errSecInteractionNotAllowed — доступ есть только через диалог,
+        // который мы запретили; errSecUserCanceled — пользователь закрыл
+        // диалог сам. Оба случая не про «вы не авторизованы», и текст у них
+        // отдельный.
+        if status == errSecInteractionNotAllowed || status == errSecUserCanceled {
+            throw UsageError.unavailable("доступ к записи Keychain не разрешён")
         }
         Log.warn("не нашёл креды: Keychain «\(service)» → \(status), файла \(fileURL.path) тоже нет")
         throw UsageError.unauthorized
+    }
+
+    /// Читает запись утилитой `security`. nil — записи нет, доступа нет или
+    /// утилита не запустилась; разбираться, что именно, будет вызывающий по
+    /// своим запасным путям.
+    static func readViaSecurityTool(service: String) -> Data? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", service, "-w"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        // Ошибки утилиты нам не нужны, а смешавшись с паролем в одном потоке,
+        // они попали бы на разбор как токен.
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+        } catch {
+            Log.debug("security не запустился: \(error.localizedDescription)")
+            return nil
+        }
+
+        // Если доступ всё-таки спросят диалогом, утилита встанет на нём
+        // насмерть, а с ней и обновление панели. Ждём не дольше пяти секунд:
+        // непрочитанный токен переживём, повисший виджет — нет.
+        let timeout = DispatchWorkItem {
+            if process.isRunning { process.terminate() }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeout)
+        let output = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        timeout.cancel()
+
+        guard process.terminationStatus == 0 else { return nil }
+        // Пароль печатается строкой с переводом в конце.
+        let text = String(decoding: output, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : Data(text.utf8)
     }
 
     /// Ищем по обоим написаниям и на пару уровней вглубь: форма записи —
