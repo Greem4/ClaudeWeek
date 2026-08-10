@@ -30,10 +30,10 @@
 значке.
 
 <p align="center">
-  <img src="docs/images/menubar-dark.png" width="130" alt="Иконка в тёмной строке меню">
-  <img src="docs/images/menubar-light.png" width="130" alt="Иконка в светлой строке меню">
   <img src="docs/images/menubar-ring-dark.png" width="80" alt="Кольцо в тёмной строке меню">
   <img src="docs/images/menubar-ring-light.png" width="80" alt="Кольцо в светлой строке меню">
+  <img src="docs/images/menubar-dark.png" width="130" alt="Полоса в тёмной строке меню">
+  <img src="docs/images/menubar-light.png" width="130" alt="Полоса в светлой строке меню">
 </p>
 
 ---
