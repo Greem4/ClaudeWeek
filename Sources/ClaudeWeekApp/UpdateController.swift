@@ -305,7 +305,7 @@ final class UpdateController {
         case .checking:
             "спрашиваю GitHub…"
         case .upToDate(let at):
-            "у вас последняя, проверено в \(Formatting.clock(at, calendar: .current))"
+            "у вас последняя — \(ClaudeWeek.version), проверено \(Self.checkedAt(at))"
         case .available(let release):
             "доступна \(release.version) — у вас \(ClaudeWeek.version)"
         case .installing(_, let stage):
@@ -315,6 +315,16 @@ final class UpdateController {
         case .failed(let text, _):
             text
         }
+    }
+
+    /// «в 14:23», а проверенное вчера — «ВТ в 14:23». День нужен потому, что
+    /// программа живёт в строке меню сутками, а проверка идёт раз в сутки:
+    /// голый час у позавчерашней проверки читается как сегодняшний.
+    static func checkedAt(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let day = calendar.isDate(date, inSameDayAs: now)
+            ? ""
+            : "\(Formatting.weekdayShort(date, calendar: calendar)) "
+        return "\(day)в \(Formatting.clock(date, calendar: calendar))"
     }
 
     var isWorking: Bool {

@@ -282,4 +282,83 @@ func runLocalProviderTests(_ t: Harness) async {
         let byCalibration = try await provider(sandbox, config: calibrated).fetch()
         t.close(byCalibration.usedPercent, 40, "процент по калибровке", tolerance: 1e-9)
     }
+
+    await t.suite("разбивка по моделям") {
+        let sandbox = Sandbox()
+        defer { sandbox.cleanup() }
+        sandbox.write("проект/сессия.jsonl", lines: [
+            // Opus: 1 Mtok входа — $5.
+            line(uuid: "o1", at: "2026-08-01T10:00:00.000Z", input: 1_000_000),
+            // Opus ещё раз, выходом: 100 ktok × $25 — $2.5.
+            line(uuid: "o2", at: "2026-08-01T11:00:00.000Z", output: 100_000),
+            // Sonnet: 500 ktok входа — $1.5.
+            line(uuid: "s1", at: "2026-08-02T10:00:00.000Z",
+                 model: "claude-sonnet-5", input: 500_000),
+            // Haiku: 1 Mtok чтения кеша — $0.1.
+            line(uuid: "h1", at: "2026-08-02T11:00:00.000Z",
+                 model: "claude-haiku-4-5-20251001", read: 1_000_000),
+        ])
+
+        let window = WeekWindow(containing: testNow, config: config())
+        let usage = try await provider(sandbox).scan(window: window, now: testNow)
+        t.equal(usage.byModel.count, 3, "три модели — три строки")
+
+        let opus = usage.byModel[0]
+        t.equal(opus.family, ModelFamily.opus, "самая дорогая модель — первой")
+        t.close(opus.cost, 7.5, "стоимость Opus сложена по обеим записям", tolerance: 1e-12)
+        t.equal(opus.messages, 2, "два ответа Opus")
+        t.equal(opus.tokens.input, 1_000_000, "вход Opus")
+        t.equal(opus.tokens.output, 100_000, "выход Opus")
+        // Всего $9.1: доля Opus 7.5/9.1.
+        t.close(opus.sharePercent, 7.5 / 9.1 * 100, "доля Opus в стоимости недели", tolerance: 1e-9)
+
+        t.equal(usage.byModel[1].family, ModelFamily.sonnet, "Sonnet вторым")
+        t.equal(usage.byModel[2].family, ModelFamily.haiku, "Haiku последним")
+        t.equal(usage.byModel[2].tokens.cacheRead, 1_000_000, "чтение кеша Haiku")
+        t.close(usage.byModel.reduce(0) { $0 + $1.sharePercent }, 100,
+                "доли складываются в сотню", tolerance: 1e-9)
+
+        // Разбивка доезжает до снимка и переводится в проценты лимита: при
+        // бюджете $91 неделя стоит 10 %, из которых на Opus ≈8.24 %.
+        var withBudget = config()
+        withBudget.weeklyBudget = 91
+        let snapshot = try await provider(sandbox, config: withBudget).fetch()
+        t.equal(snapshot.byModel.count, 3, "снимок несёт разбивку")
+        t.close(snapshot.limitPercent(of: snapshot.byModel[0]), 7.5 / 91 * 100,
+                "доля Opus в недельном лимите", tolerance: 1e-9)
+    }
+
+    await t.suite("незнакомая модель в разбивке") {
+        let sandbox = Sandbox()
+        defer { sandbox.cleanup() }
+        sandbox.write("проект/сессия.jsonl", lines: [
+            line(uuid: "x1", at: "2026-08-01T10:00:00.000Z",
+                 model: "claude-неизвестно-9", input: 1_000_000),
+        ])
+
+        let usage = try await provider(sandbox).scan(
+            window: WeekWindow(containing: testNow, config: config()), now: testNow
+        )
+        t.equal(usage.byModel.count, 1, "незнакомая модель тоже строка разбивки")
+        t.equal(usage.byModel[0].family, "claude-неизвестно-9",
+                "зовётся своим именем, а не «прочим»")
+        t.equal(usage.byModel[0].title, "claude-неизвестно-9",
+                "подпись у неё та же — придумывать семейство нечем")
+    }
+
+    t.suite("смена схемы индекса") {
+        let sandbox = Sandbox()
+        defer { sandbox.cleanup() }
+        // Индекс версии 1: записи без модели и токенов. Целиком он не
+        // разбирается, и загрузка обязана вернуть пустой, а не упасть.
+        let old = """
+        {"version":1,"files":{"/x.jsonl":{"inode":1,"size":10,"mtime":"2026-08-01T10:00:00Z",\
+        "offset":10,"records":[{"uuid":"a","timestamp":"2026-08-01T10:00:00Z","cost":1.5}]}}}
+        """
+        try? old.write(to: sandbox.indexURL, atomically: true, encoding: .utf8)
+
+        let index = Store.loadIndex(from: sandbox.indexURL)
+        t.equal(index.version, UsageIndex.currentVersion, "индекс прошлой схемы заменён пустым")
+        t.equal(index.files.count, 0, "старые записи не подхватываются")
+    }
 }

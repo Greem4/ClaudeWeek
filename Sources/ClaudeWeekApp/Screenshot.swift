@@ -20,8 +20,32 @@ enum Screenshot {
             source: .official,
             fetchedAt: now,
             isEstimate: false,
-            session: SessionUsage(usedPercent: 41, resetsAt: now.addingTimeInterval(84 * 60))
+            session: SessionUsage(usedPercent: 41, resetsAt: now.addingTimeInterval(84 * 60)),
+            byModel: demoModels()
         )
+    }
+
+    /// Разбивка макета: Opus дороже всех при вчетверо меньшем числе токенов —
+    /// ровно то расхождение, ради которого окно и открывают.
+    private static func demoModels() -> [ModelUsage] {
+        let rows: [(String, Double, TokenCounts, Int)] = [
+            (ModelFamily.opus, 7.5,
+             TokenCounts(input: 1_240_000, output: 186_000, cacheWrite: 3_400_000, cacheRead: 41_800_000), 342),
+            (ModelFamily.sonnet, 2.2,
+             TokenCounts(input: 860_000, output: 124_000, cacheWrite: 2_100_000, cacheRead: 28_400_000), 268),
+            (ModelFamily.haiku, 0.7,
+             TokenCounts(input: 410_000, output: 52_000, cacheWrite: 640_000, cacheRead: 9_300_000), 96),
+        ]
+        let total = rows.reduce(0) { $0 + $1.1 }
+        return rows.map { family, cost, tokens, messages in
+            ModelUsage(
+                family: family,
+                cost: cost,
+                tokens: tokens,
+                messages: messages,
+                sharePercent: cost / total * 100
+            )
+        }
     }
 
     static func render(into directory: URL, config: Config) -> Int32 {
@@ -90,6 +114,31 @@ enum Screenshot {
         }
 
         model.config.appearance.theme = config.appearance.theme
+
+        // Та же панель в разбивке по моделям: строки дней сменились строками
+        // моделей. Снимок нужен ровно затем же, зачем остальные, — проверить
+        // вёрстку глазами, не открывая панель руками.
+        model.showsModels = true
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            guard let image = image(model: model, appearance: appearance),
+                  let tiff = image.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiff),
+                  let png = bitmap.representation(using: .png, properties: [:])
+            else {
+                FileHandle.standardError.write(Data("не отрисовал разбивку \(name)\n".utf8))
+                return 1
+            }
+            let url = directory.appendingPathComponent("panel-models-\(name).png")
+            do {
+                try png.write(to: url)
+                print(url.path)
+            } catch {
+                FileHandle.standardError.write(Data("не сохранил \(url.path): \(error)\n".utf8))
+                return 1
+            }
+        }
+        model.showsModels = false
+
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             guard let strip = menuBarPNG(model: model, appearance: appearance, ring: false) else {
                 FileHandle.standardError.write(Data("не отрисовал иконку \(name)\n".utf8))

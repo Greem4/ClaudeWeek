@@ -40,6 +40,7 @@ struct PopoverView: View {
                     sourceHint: model.sourceHint,
                     showsSourceText: showsSourceText,
                     onSourceTap: { showsSourceText.toggle() },
+                    onValueTap: toggleModels,
                     calendar: model.config.calendar,
                     animated: !reduceMotion
                 )
@@ -48,7 +49,14 @@ struct PopoverView: View {
             Divider().overlay(palette.separator.color)
 
             if let snapshot = model.snapshot {
-                days(snapshot)
+                // Разбивка встаёт ровно на место дней, в ту же сетку: щелчок
+                // по цифрам меняет содержание строк, а не открывает второе
+                // место, где те же проценты сказаны по-своему.
+                if model.showsModels {
+                    models(snapshot)
+                } else {
+                    days(snapshot)
+                }
             } else {
                 placeholders
             }
@@ -113,7 +121,9 @@ struct PopoverView: View {
                         .font(Theme.titleFont)
                         .foregroundStyle(palette.critical.color)
                 }
-                Text("ЛИМИТ НЕДЕЛИ")
+                // Заголовок называет то, что сейчас в строках: иначе разбивка
+                // читалась бы как недельный ряд со странными подписями.
+                Text(model.showsModels ? "МОДЕЛИ" : "ЛИМИТ НЕДЕЛИ")
                     .font(Theme.titleFont)
                     .tracking(0.4)
                     .fixedSize()
@@ -192,10 +202,55 @@ struct PopoverView: View {
                     interval: day.isPartial ? Formatting.interval(day.start, day.end, calendar: calendar) : nil,
                     isToday: day.index == model.todayIndex,
                     animated: !reduceMotion,
-                    tap: dayTap
+                    tap: dayTap,
+                    valueTap: toggleModels
                 )
             }
         }
+    }
+
+    // MARK: Модели
+
+    /// Разбивка на месте дней. Возвращает обратно тот же клик по цифрам —
+    /// другого выхода отсюда искать не приходится: где нажал, там и вернул.
+    private func models(_ snapshot: UsageSnapshot) -> some View {
+        VStack(spacing: Theme.rowSpacing) {
+            if snapshot.byModel.isEmpty {
+                Text("разбивки нет: транскриптов за это окно не нашлось")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(palette.secondaryText.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Нажимаемо и в пустом виде: иначе панель, открытая до
+                    // первого ответа, застревала бы в разбивке без строк.
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: toggleModels)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("нажмите — назад к неделе")
+            } else {
+                ForEach(snapshot.byModel, id: \.family) { usage in
+                    ModelRow(
+                        usage: usage,
+                        limitPercent: snapshot.limitPercent(of: usage),
+                        animated: !reduceMotion,
+                        valueTap: toggleModels
+                    )
+                }
+
+                // Откуда эти числа — сразу под ними, а не в футере: футер
+                // говорит про неделю, и оговорка про разбивку, стоящая там,
+                // читалась бы как оговорка про весь лимит.
+                Text("≈ примерный локальный подсчёт")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(palette.secondaryText.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    private func toggleModels() {
+        model.showsModels.toggle()
     }
 
     /// В компактном виде клик по любой строке дня переключает ряд: свёрнутый

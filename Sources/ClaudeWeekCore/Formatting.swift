@@ -48,6 +48,24 @@ public enum Formatting {
         return sign ? "\(rounded) %" : "\(rounded)"
     }
 
+    /// «12,4 млн», «812 тыс», «431». Токенов за неделю набегают миллионы, и
+    /// точное их число не значит ничего — читается порядок.
+    public static func tokens(_ count: Int) -> String {
+        let value = Double(count)
+        if value >= 1_000_000 {
+            let millions = String(format: "%.1f", value / 1_000_000)
+            return "\(millions.replacingOccurrences(of: ".", with: ",")) млн"
+        }
+        if value >= 1_000 { return "\(Int((value / 1_000).rounded())) тыс" }
+        return "\(count)"
+    }
+
+    /// Условная стоимость: те же доллары, которыми меряется недельный бюджет.
+    /// Настоящих денег это не значит — подписка списывает своё независимо.
+    public static func cost(_ value: Double) -> String {
+        String(format: "%.2f $", value).replacingOccurrences(of: ".", with: ",")
+    }
+
     /// «сброс ПТ 16:00» — час сброса в зоне окна, той же, по которой панель
     /// считает сутки. Московского хвоста для сверки здесь больше нет: два часа
     /// подряд читались как спорящие, а нужен всегда только свой.
