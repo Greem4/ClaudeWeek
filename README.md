@@ -153,10 +153,14 @@ ARCH=arm64 ./scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
 
 То же самое гоняет [CI](.github/workflows/ci.yml) на каждый push и pull request —
 и собирает строже, с `-warnings-as-errors`: предупреждение роняет сборку.
-Релиз выпускается тегом: `git tag v0.2.0 && git push origin v0.2.0` —
-[workflow](.github/workflows/release.yml) сверит тег с `Version.swift`, прогонит
-проверки, соберёт образ под Apple Silicon и выложит его в Releases вместе с
-контрольной суммой.
+Релиз выходит сам при слиянии pull request в `main`:
+[workflow](.github/workflows/release-on-merge.yml) поднимает версию в
+`Version.swift`, ставит тег и запускает
+[сборку](.github/workflows/release.yml) — она сверит тег с `Version.swift`,
+прогонит проверки, соберёт образ под Apple Silicon и выложит его в Releases
+вместе с контрольной суммой. Разряд версии выбирается меткой на PR
+(`версия:минор`, `версия:мажор`, без метки — патч), метка `без-релиза` выпуск
+отменяет; подробности — в [CONTRIBUTING.md](CONTRIBUTING.md#как-выходит-релиз).
 
 Библиотека и два исполняемых таргета: `ClaudeWeekCore` — расчёты без единого
 импорта UI, `ClaudeWeekApp` — строка меню, панель и настройки, `ClaudeWeekTests` —

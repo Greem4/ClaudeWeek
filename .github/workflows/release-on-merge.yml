@@ -1,0 +1,163 @@
+name: Релиз по слиянию PR
+
+# Слили PR в main — версия поднимается, тег ставится, релиз выходит сам.
+# Помнить не нужно ничего: забыть можно метку, но не сам релиз.
+#
+# Разряд версии берётся из меток PR:
+#   версия:мажор  → 1.0.0
+#   версия:минор  → 0.2.0
+#   без метки     → патч (0.1.7)
+#   без-релиза    → ничего не выпускается
+#
+# Релиз не выходит и тогда, когда PR не тронул ни строчки кода (только *.md
+# и docs/) — выпускать сборку ради правки документации незачем.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write        # коммит версии и пуш тега
+  actions: write         # запуск Release на поставленном теге
+  pull-requests: read    # метки и список файлов PR
+
+# Два PR, слитых подряд, обязаны считать версию по очереди: параллельно оба
+# прочитали бы 0.1.6 и оба выпустили бы 0.1.7.
+concurrency:
+  group: release-on-merge
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    name: Поднять версию и выпустить
+    # Здесь только счёт версии, коммит и тег — Swift не нужен, а ubuntu
+    # стартует в разы быстрее macOS-раннера. Сборку делает release.yml, и она
+    # идёт уже на macos-26, как и положено (см. комментарий там).
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0   # нужны все теги: проверяем, что версия не занята
+
+      - name: Решить, что выпускаем
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+
+          if echo "$LABELS" | grep -qF 'без-релиза'; then
+            echo "Метка «без-релиза» — выпуск пропущен"
+            echo "release=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Правки только документации сборку не меняют: выпускать нечего.
+          FILES="$(gh pr view "$PR" --json files --jq '.files[].path')"
+          if [ -z "$(printf '%s\n' "$FILES" | grep -vE '(^docs/|\.md$)' || true)" ]; then
+            echo "PR тронул только документацию — выпуск пропущен"
+            echo "release=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if echo "$LABELS" | grep -qF 'версия:мажор'; then
+            KIND=major
+          elif echo "$LABELS" | grep -qF 'версия:минор'; then
+            KIND=minor
+          else
+            KIND=patch
+          fi
+
+          # Версию подняли прямо в PR — уважаем её и не поднимаем второй раз.
+          if printf '%s\n' "$FILES" | grep -qx 'Sources/ClaudeWeekCore/Version.swift'; then
+            echo "Version.swift поднят в самом PR — беру его версию как есть"
+            KIND=keep
+          fi
+
+          echo "разряд: $KIND"
+          echo "release=yes" >> "$GITHUB_OUTPUT"
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+
+      - name: Поднять версию
+        if: steps.plan.outputs.release == 'yes'
+        id: bump
+        run: |
+          set -euo pipefail
+          VERSION="$(./scripts/bump-version.sh '${{ steps.plan.outputs.kind }}' | tail -1)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Проверить, что тега ещё нет
+        if: steps.plan.outputs.release == 'yes'
+        env:
+          TAG: v${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::тег $TAG уже существует — версия сгорела, нужна следующая"
+            exit 1
+          fi
+
+      - name: Коммит, тег и пуш
+        if: steps.plan.outputs.release == 'yes'
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git add Sources/ClaudeWeekCore/Version.swift
+          if git diff --cached --quiet; then
+            echo "Version.swift не изменился — коммит не нужен, тег ставлю на текущий main"
+          else
+            git commit -m "Поднял версию до $VERSION"
+            git push origin HEAD:main
+          fi
+
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+      # Тег, поставленный этим workflow, сам по себе Release не запускает:
+      # GitHub намеренно не даёт GITHUB_TOKEN запускать другие workflow, иначе
+      # они гоняли бы друг друга по кругу. Поэтому запускаем явно — release.yml
+      # умеет workflow_dispatch, а на теге его проверка «запущен по тегу»
+      # проходит: GITHUB_REF там refs/tags/vX.Y.Z.
+      - name: Запустить сборку релиза
+        if: steps.plan.outputs.release == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if gh workflow run release.yml --ref "$TAG"; then
+              echo "Release запущен на $TAG"
+              exit 0
+            fi
+            echo "Попытка $attempt не прошла — тег ещё не виден API, жду"
+            sleep 10
+          done
+          echo "::error::не удалось запустить Release на $TAG — запустите вручную: gh workflow run release.yml --ref $TAG"
+          exit 1
+
+      - name: Итог
+        if: steps.plan.outputs.release == 'yes'
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          {
+            echo "## Выпущено: $VERSION"
+            echo
+            echo "Разряд: \`${{ steps.plan.outputs.kind }}\`"
+            echo
+            echo "Сборка идёт в workflow **Release**, релиз появится на"
+            echo "[странице релизов](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/v$VERSION)."
+            echo
+            echo "Локально не забыть: \`git pull\` — в main уехал коммит с версией."
+          } >> "$GITHUB_STEP_SUMMARY"
