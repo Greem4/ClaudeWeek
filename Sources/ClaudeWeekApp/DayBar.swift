@@ -74,6 +74,10 @@ struct DayRow: View {
     let animated: Bool
     /// Клик по строке; nil — панель показывает весь ряд, и щёлкать незачем.
     var tap: DayRowTap?
+    /// Клик по самим цифрам — открыть разбивку по моделям. Живёт отдельно от
+    /// `tap`: в компактном виде строка раскрывает неделю, и оба действия
+    /// делят одну строку, разойдясь по разным её местам.
+    var valueTap: (() -> Void)?
 
     @Environment(\.palette) private var palette
 
@@ -86,6 +90,10 @@ struct DayRow: View {
         let row = content
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(voiceOverLabel)
+            // Жест на цифрах VoiceOver не видит — строка объявлена одним
+            // элементом. Поэтому разбивка достаётся ему отдельным действием:
+            // мышью в колонку, с клавиатуры — из списка действий строки.
+            .accessibilityAction(named: "Расход по моделям") { valueTap?() }
             .help(tooltip)
 
         // Нажимаемой строка становится целиком, вместе с прозрачными зазорами
@@ -111,28 +119,50 @@ struct DayRow: View {
 
             DayBar(planPercent: day.planPercent, usedPercent: day.usedPercent, animated: animated)
 
-            HStack(spacing: Theme.valueGap) {
-                if isOverspent {
-                    Text("⚠")
-                        .font(Theme.dayFont)
-                        .foregroundStyle(palette.warning.color)
-                }
-                Text(values)
-                    .font(Theme.dayFont)
-                    // Колонка размечена под самое длинное значение, но перенос
-                    // запрещаем и здесь: не влезь оно однажды (крупный шрифт
-                    // системы, трёхзначный факт) — строка расползётся на два
-                    // ряда, а за ней и вся панель. Пусть лучше выйдет за край.
-                    .fixedSize()
-                    .foregroundStyle(
-                        day.usedPercent == nil
-                            ? palette.secondaryText.color
-                            : palette.primaryText.color
-                    )
-            }
-            .frame(width: Theme.valueWidth, alignment: .trailing)
+            numbers
         }
     }
+
+    /// Цифры строки — они же кнопка разбивки по моделям. Жест висит на
+    /// колонке, а не на строке: у строки в компактном виде уже есть свой,
+    /// и вложенный выигрывает у внешнего — щёлкнув по числам, человек
+    /// получает окно, а не свёрнутую неделю.
+    @ViewBuilder
+    private var numbers: some View {
+        let column = HStack(spacing: Theme.valueGap) {
+            if isOverspent {
+                Text("⚠")
+                    .font(Theme.dayFont)
+                    .foregroundStyle(palette.warning.color)
+            }
+            Text(values)
+                .font(Theme.dayFont)
+                // Колонка размечена под самое длинное значение, но перенос
+                // запрещаем и здесь: не влезь оно однажды (крупный шрифт
+                // системы, трёхзначный факт) — строка расползётся на два
+                // ряда, а за ней и вся панель. Пусть лучше выйдет за край.
+                .fixedSize()
+                .foregroundStyle(
+                    day.usedPercent == nil
+                        ? palette.secondaryText.color
+                        : palette.primaryText.color
+                )
+        }
+        .frame(width: Theme.valueWidth, alignment: .trailing)
+
+        if let valueTap {
+            column
+                .contentShape(Rectangle())
+                .onTapGesture(perform: valueTap)
+                .help(DayRow.valueHint)
+        } else {
+            column
+        }
+    }
+
+    /// Что случится по клику на цифрах — словами. Одно на строку дня и строку
+    /// сессии: место разное, действие одно.
+    static let valueHint = "нажмите — расход по моделям"
 
     /// Наведение поясняет, какие именно часы стоят за строкой: у крайних
     /// суток недели подпись дня повторяется, и различает их только время.

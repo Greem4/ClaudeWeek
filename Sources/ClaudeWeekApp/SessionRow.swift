@@ -55,6 +55,9 @@ struct SessionRow: View {
     let showsSourceText: Bool
     /// Нажатие на кружок — показать текст или убрать его досрочно.
     let onSourceTap: () -> Void
+    /// Нажатие на процент — открыть разбивку по моделям. Та же цифра, тот же
+    /// смысл, что в строках дней: щёлкнули по числу — спрашивают, из чего оно.
+    var onValueTap: (() -> Void)?
     /// Календарь конфига — час сброса показываем в той же зоне, что и всё
     /// остальное в панели, а не в системной.
     let calendar: Calendar
@@ -98,18 +101,7 @@ struct SessionRow: View {
 
                 SourceDot(state: source, hint: sourceHint, onTap: onSourceTap)
 
-                HStack(spacing: Theme.valueGap) {
-                    if session.isExhausted {
-                        Text("⚠")
-                            .font(Theme.dayFont)
-                            .foregroundStyle(palette.critical.color)
-                    }
-                    Text(Formatting.percent(session.usedPercent))
-                        .font(Theme.dayFont)
-                        .fixedSize()
-                        .foregroundStyle(session.isExhausted ? palette.critical.color : palette.primaryText.color)
-                }
-                .frame(width: Theme.valueWidth, alignment: .trailing)
+                percent
             }
 
             // Процент сессии без часа сброса — половина сведения: 90 % за
@@ -121,6 +113,35 @@ struct SessionRow: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(voiceOverLabel)
+        // Тем же отдельным действием, что и в строках дней: жест на цифрах
+        // VoiceOver не достаётся — строка объявлена одним элементом.
+        .accessibilityAction(named: "Расход по моделям") { onValueTap?() }
+    }
+
+    /// Процент сессии — он же кнопка разбивки по моделям.
+    @ViewBuilder
+    private var percent: some View {
+        let column = HStack(spacing: Theme.valueGap) {
+            if session.isExhausted {
+                Text("⚠")
+                    .font(Theme.dayFont)
+                    .foregroundStyle(palette.critical.color)
+            }
+            Text(Formatting.percent(session.usedPercent))
+                .font(Theme.dayFont)
+                .fixedSize()
+                .foregroundStyle(session.isExhausted ? palette.critical.color : palette.primaryText.color)
+        }
+        .frame(width: Theme.valueWidth, alignment: .trailing)
+
+        if let onValueTap {
+            column
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onValueTap)
+                .help(DayRow.valueHint)
+        } else {
+            column
+        }
     }
 
     private var reset: String {

@@ -19,6 +19,8 @@ struct PopoverView: View {
     var onRefresh: () -> Void = {}
     var onSettings: () -> Void = {}
     var onQuit: () -> Void = {}
+    /// Щёлкнули по цифрам процента — показать, из чего они набраны.
+    var onModels: () -> Void = {}
 
     private var appearance: AppearanceConfig { model.config.appearance }
     private var palette: Palette { appearance.theme.palette }
@@ -40,6 +42,7 @@ struct PopoverView: View {
                     sourceHint: model.sourceHint,
                     showsSourceText: showsSourceText,
                     onSourceTap: { showsSourceText.toggle() },
+                    onValueTap: onModels,
                     calendar: model.config.calendar,
                     animated: !reduceMotion
                 )
@@ -192,7 +195,8 @@ struct PopoverView: View {
                     interval: day.isPartial ? Formatting.interval(day.start, day.end, calendar: calendar) : nil,
                     isToday: day.index == model.todayIndex,
                     animated: !reduceMotion,
-                    tap: dayTap
+                    tap: dayTap,
+                    valueTap: onModels
                 )
             }
         }
