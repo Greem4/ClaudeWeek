@@ -20,6 +20,36 @@ public struct ModelWeights: Sendable, Equatable {
     }
 }
 
+/// Семейство модели — то, чем меряется разбивка расхода. Полное имя из
+/// транскрипта (`claude-opus-5`, `claude-haiku-4-5-20251001`) для этого не
+/// годится: цены заданы на семейство, лимиты Anthropic считаются по нему же,
+/// и человек спрашивает «сколько ушло на Opus», а не про конкретную сборку.
+public enum ModelFamily {
+    public static let opus = "opus"
+    public static let sonnet = "sonnet"
+    public static let haiku = "haiku"
+    public static let fable = "fable"
+    public static let mythos = "mythos"
+    /// Записи индекса, у которых семейство неизвестно.
+    public static let unknown = "unknown"
+
+    private static let titles: [String: String] = [
+        opus: "Opus",
+        sonnet: "Sonnet",
+        haiku: "Haiku",
+        fable: "Fable",
+        mythos: "Mythos",
+        unknown: "Неизвестно",
+    ]
+
+    /// Подпись для окна разбивки. Незнакомая модель зовётся своим полным
+    /// именем: придумывать ей семейство мы не вправе, а спрятать под
+    /// «прочее» — потерять единственную подсказку о том, что считалось.
+    public static func title(_ family: String) -> String {
+        titles[family] ?? family
+    }
+}
+
 public enum ModelPricing {
     public static let opus = ModelWeights(input: 5, output: 25)
     public static let sonnet = ModelWeights(input: 3, output: 15)
@@ -27,12 +57,12 @@ public enum ModelPricing {
 
     /// Сопоставление по префиксу: в транскриптах встречаются и голые имена
     /// (`claude-opus-5`), и с датой (`claude-haiku-4-5-20251001`).
-    private static let table: [(prefix: String, weights: ModelWeights)] = [
-        ("claude-opus", opus),
-        ("claude-sonnet", sonnet),
-        ("claude-haiku", haiku),
-        ("claude-fable", ModelWeights(input: 10, output: 50)),
-        ("claude-mythos", ModelWeights(input: 10, output: 50)),
+    private static let table: [(prefix: String, family: String, weights: ModelWeights)] = [
+        ("claude-opus", ModelFamily.opus, opus),
+        ("claude-sonnet", ModelFamily.sonnet, sonnet),
+        ("claude-haiku", ModelFamily.haiku, haiku),
+        ("claude-fable", ModelFamily.fable, ModelWeights(input: 10, output: 50)),
+        ("claude-mythos", ModelFamily.mythos, ModelWeights(input: 10, output: 50)),
     ]
 
     /// Локально сгенерированные сообщения — не вызовы API, в расход не идут.
@@ -47,9 +77,16 @@ public enum ModelPricing {
     private static let reportedUnknownLock = NSLock()
 
     public static func weights(for model: String?) -> ModelWeights? {
+        classify(model)?.weights
+    }
+
+    /// Семейство и веса одним разбором: разбивка спрашивает и то и другое на
+    /// каждой строке транскрипта, а незнакомая модель должна попасть в лог
+    /// один раз, а не по разу на каждый из двух вопросов.
+    public static func classify(_ model: String?) -> (family: String, weights: ModelWeights)? {
         guard let model, model != syntheticModel else { return nil }
         for entry in table where model.hasPrefix(entry.prefix) {
-            return entry.weights
+            return (entry.family, entry.weights)
         }
         let isFirstReport: Bool = {
             reportedUnknownLock.lock()
@@ -59,7 +96,9 @@ public enum ModelPricing {
         if isFirstReport {
             Log.warn("незнакомая модель «\(model)», считаю по весам Sonnet")
         }
-        return sonnet
+        // Своим именем, а не «unknown»: в окне разбивки видно, что именно
+        // сюда попало, и по строке ясно, чего не хватает в таблице цен.
+        return (model, sonnet)
     }
 }
 
@@ -103,10 +142,11 @@ struct TranscriptLine: Decodable {
         }
     }
 
-    /// Условная стоимость сообщения в долларах; nil — строка без расхода.
-    func cost() -> Double? {
+    /// Расход одного сообщения: чем считано, сколько стоило и сколько токенов
+    /// каких видов ушло. nil — строка без расхода.
+    func usage() -> MessageUsage? {
         guard let usage = message?.usage,
-              let weights = ModelPricing.weights(for: message?.model)
+              let (family, weights) = ModelPricing.classify(message?.model)
         else { return nil }
 
         let input = Double(usage.inputTokens ?? 0)
@@ -131,8 +171,29 @@ struct TranscriptLine: Decodable {
             + write5m * weights.cacheWrite5m
             + write1h * weights.cacheWrite1h
             + read * weights.cacheRead
-        return total > 0 ? total / 1_000_000 : nil
+        guard total > 0 else { return nil }
+
+        return MessageUsage(
+            family: family,
+            cost: total / 1_000_000,
+            // Записи кеша по обоим TTL складываем: стоят они по-разному, и это
+            // уже учтено в цене выше, а в разбивке их различие ничего не
+            // объясняет — там вопрос «сколько прошло через модель».
+            tokens: TokenCounts(
+                input: usage.inputTokens ?? 0,
+                output: usage.outputTokens ?? 0,
+                cacheWrite: Int(write5m) + Int(write1h),
+                cacheRead: usage.cacheReadInputTokens ?? 0
+            )
+        )
     }
+}
+
+/// Расход одного сообщения после разбора: то, что ложится в индекс.
+struct MessageUsage {
+    let family: String
+    let cost: Double
+    let tokens: TokenCounts
 }
 
 // MARK: - Результат обхода
@@ -142,10 +203,30 @@ public struct LocalUsage: Sendable {
     public let totalCost: Double
     /// Стоимость по суткам окна; nil — сутки ещё не наступили.
     public let costByDay: [Double?]
+    /// Чем именно потрачено — от дорогого к дешёвому.
+    public let byModel: [ModelUsage]
     public let recordCount: Int
     public let duplicatesSkipped: Int
     public let filesRead: Int
     public let window: WeekWindow
+
+    public init(
+        totalCost: Double,
+        costByDay: [Double?],
+        byModel: [ModelUsage] = [],
+        recordCount: Int,
+        duplicatesSkipped: Int,
+        filesRead: Int,
+        window: WeekWindow
+    ) {
+        self.totalCost = totalCost
+        self.costByDay = costByDay
+        self.byModel = byModel
+        self.recordCount = recordCount
+        self.duplicatesSkipped = duplicatesSkipped
+        self.filesRead = filesRead
+        self.window = window
+    }
 }
 
 // MARK: - Провайдер
@@ -207,7 +288,8 @@ public actor LocalProvider: UsageProvider {
             window: window,
             source: .local,
             fetchedAt: now,
-            isEstimate: true
+            isEstimate: true,
+            byModel: usage.byModel
         )
     }
 
@@ -299,6 +381,7 @@ public actor LocalProvider: UsageProvider {
         var seen: Set<String> = []
         var duplicates = 0
         var perDay = [Double](repeating: 0, count: window.slotCount)
+        var perModel: [String: (cost: Double, tokens: TokenCounts, messages: Int)] = [:]
         var total = 0.0
         var counted = 0
 
@@ -316,6 +399,13 @@ public actor LocalProvider: UsageProvider {
                 perDay[day] += record.cost
                 total += record.cost
                 counted += 1
+
+                let current = perModel[record.model] ?? (0, TokenCounts(), 0)
+                perModel[record.model] = (
+                    current.cost + record.cost,
+                    current.tokens + record.tokens,
+                    current.messages + 1
+                )
             }
         }
 
@@ -326,11 +416,34 @@ public actor LocalProvider: UsageProvider {
         return LocalUsage(
             totalCost: total,
             costByDay: costByDay,
+            byModel: LocalProvider.breakdown(perModel, total: total),
             recordCount: counted,
             duplicatesSkipped: duplicates,
             filesRead: filesRead,
             window: window
         )
+    }
+
+    /// Собранное по моделям — в список от дорогого к дешёвому. Доля считается
+    /// от стоимости, а не от числа токенов: токен Opus стоит впятеро дороже
+    /// токена Haiku, и «поровну токенов» значит «впятеро больше лимита».
+    private static func breakdown(
+        _ perModel: [String: (cost: Double, tokens: TokenCounts, messages: Int)],
+        total: Double
+    ) -> [ModelUsage] {
+        perModel
+            .map { family, sums in
+                ModelUsage(
+                    family: family,
+                    cost: sums.cost,
+                    tokens: sums.tokens,
+                    messages: sums.messages,
+                    sharePercent: total > 0 ? sums.cost / total * 100 : 0
+                )
+            }
+            // Стоимости у двух моделей совпасть могут — тогда порядок решает
+            // имя, иначе строки в окне переставлялись бы от показа к показу.
+            .sorted { ($0.cost, $1.family) > ($1.cost, $0.family) }
     }
 
     // MARK: Файлы
@@ -395,9 +508,15 @@ public actor LocalProvider: UsageProvider {
         guard let uuid = parsed.uuid,
               let stamp = parsed.timestamp,
               let date = LocalProvider.parseTimestamp(stamp),
-              let cost = parsed.cost()
+              let usage = parsed.usage()
         else { return nil }
-        return UsageRecord(uuid: uuid, timestamp: date, cost: cost)
+        return UsageRecord(
+            uuid: uuid,
+            timestamp: date,
+            cost: usage.cost,
+            model: usage.family,
+            tokens: usage.tokens
+        )
     }
 
     static func parseTimestamp(_ text: String) -> Date? {

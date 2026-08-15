@@ -199,16 +199,21 @@ public actor OfficialProvider: UsageProvider {
         // отказа отдаётся последнее удачное число, и метить его свежим нельзя —
         // по `fetchedAt` панель называет возраст данных.
         let observedAt = lastFetch ?? now
+        // Один обход транскриптов на оба вопроса: и форма недели, и разбивка
+        // по моделям выходят из одного расчёта. Разбивки сервер не даёт вовсе
+        // (`docs/API.md`), поэтому «чем потрачено» здесь всегда локальное.
+        let local = await localUsage(window: window, now: now)
 
         return UsageSnapshot.make(
             usedPercent: usage.weekPercent,
-            cumulativeByDay: await shapeByDay(total: usage.weekPercent, window: window, now: now),
+            cumulativeByDay: shapeByDay(local, total: usage.weekPercent, window: window),
             window: window,
             source: .official,
             fetchedAt: observedAt,
             isEstimate: false,
             shapeIsEstimate: true,
-            session: usage.session
+            session: usage.session,
+            byModel: local?.byModel ?? []
         )
     }
 
@@ -300,14 +305,20 @@ public actor OfficialProvider: UsageProvider {
         Log.warn("официальный источник недоступен (\(failure)), следующая попытка через \(Formatting.duration(step))")
     }
 
-    /// Форма недели: доля каждых суток в локальной стоимости, умноженная на
-    /// официальный процент. Итог точный, форма правдоподобная.
-    private func shapeByDay(total: Double, window: WeekWindow, now: Date) async -> [Double?] {
-        guard let shape else { return Array(repeating: nil, count: window.slotCount) }
+    /// Локальный расчёт за то же окно; nil — транскриптов нет или они пусты.
+    private func localUsage(window: WeekWindow, now: Date) async -> LocalUsage? {
+        guard let shape else { return nil }
         guard let local = try? await shape.scan(window: window, now: now), local.totalCost > 0 else {
             Log.debug("локальной формы нет — панель покажет только итог")
-            return Array(repeating: nil, count: window.slotCount)
+            return nil
         }
+        return local
+    }
+
+    /// Форма недели: доля каждых суток в локальной стоимости, умноженная на
+    /// официальный процент. Итог точный, форма правдоподобная.
+    private func shapeByDay(_ local: LocalUsage?, total: Double, window: WeekWindow) -> [Double?] {
+        guard let local else { return Array(repeating: nil, count: window.slotCount) }
 
         var running = 0.0
         return local.costByDay.map { cost in

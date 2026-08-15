@@ -41,6 +41,40 @@ public struct DayUsage: Sendable, Equatable {
     }
 }
 
+/// Чем потрачена неделя: одна модель — одна строка. Считается по локальным
+/// транскриптам и только по ним: официальный `/api/oauth/usage` разбивки не
+/// отдаёт вовсе — там один процент на всю неделю (см. `docs/API.md`).
+/// Поэтому доля здесь — оценка по весам моделей, даже когда итог недели
+/// пришёл от сервера точным.
+public struct ModelUsage: Sendable, Equatable {
+    /// Семейство модели — ключ, каким его знает `ModelFamily`.
+    public let family: String
+    /// Условная стоимость в долларах — та же величина, которой меряется вся
+    /// локальная оценка.
+    public let cost: Double
+    public let tokens: TokenCounts
+    /// Сколько ответов модели попало в окно.
+    public let messages: Int
+    /// Доля этой модели в стоимости недели, 0…100.
+    public let sharePercent: Double
+
+    public init(
+        family: String,
+        cost: Double,
+        tokens: TokenCounts,
+        messages: Int,
+        sharePercent: Double
+    ) {
+        self.family = family
+        self.cost = cost
+        self.tokens = tokens
+        self.messages = messages
+        self.sharePercent = sharePercent
+    }
+
+    public var title: String { ModelFamily.title(family) }
+}
+
 /// Пятичасовая сессия — второй лимит, живущий рядом с недельным и ничем с ним
 /// не связанный: неделя может быть на 20 %, а сессия на 95 %, и упрётесь вы
 /// именно в неё. Плана внутри сессии нет: пятичасовое окно не обязано
@@ -134,6 +168,9 @@ public struct UsageSnapshot: Sendable {
     /// и выдумывать второе число по тем же данным значило бы врать точнее,
     /// чем мы знаем.
     public let session: SessionUsage?
+    /// Чем потрачена неделя; пусто — транскриптов не нашлось. Всегда оценка,
+    /// даже при точном итоге: разбивку считают локальные транскрипты.
+    public let byModel: [ModelUsage]
 
     public init(
         usedPercent: Double,
@@ -143,7 +180,8 @@ public struct UsageSnapshot: Sendable {
         fetchedAt: Date,
         isEstimate: Bool,
         shapeIsEstimate: Bool = false,
-        session: SessionUsage? = nil
+        session: SessionUsage? = nil,
+        byModel: [ModelUsage] = []
     ) {
         self.usedPercent = usedPercent
         self.byDay = byDay
@@ -153,6 +191,7 @@ public struct UsageSnapshot: Sendable {
         self.isEstimate = isEstimate
         self.shapeIsEstimate = shapeIsEstimate
         self.session = session
+        self.byModel = byModel
     }
 
     /// Собирает строки дней из накопительных процентов: `cumulative[i]` —
@@ -165,7 +204,8 @@ public struct UsageSnapshot: Sendable {
         fetchedAt: Date,
         isEstimate: Bool,
         shapeIsEstimate: Bool = false,
-        session: SessionUsage? = nil
+        session: SessionUsage? = nil,
+        byModel: [ModelUsage] = []
     ) -> UsageSnapshot {
         let days = window.days.map { slot in
             DayUsage(
@@ -185,7 +225,8 @@ public struct UsageSnapshot: Sendable {
             fetchedAt: fetchedAt,
             isEstimate: isEstimate,
             shapeIsEstimate: shapeIsEstimate,
-            session: session
+            session: session,
+            byModel: byModel
         )
     }
 
@@ -210,8 +251,16 @@ public struct UsageSnapshot: Sendable {
             fetchedAt: fetchedAt,
             isEstimate: isEstimate,
             shapeIsEstimate: shapeIsEstimate,
-            session: session
+            session: session,
+            byModel: byModel
         )
+    }
+
+    /// Сколько недельного лимита пришлось на эту модель: её доля от итога
+    /// недели. У официального источника итог точный, доля — оценка, поэтому
+    /// произведение честнее всего называть «примерно столько».
+    public func limitPercent(of model: ModelUsage) -> Double {
+        model.sharePercent / 100 * usedPercent
     }
 
     public func metrics(at now: Date, thresholds: Thresholds = Thresholds()) -> UsageMetrics {
