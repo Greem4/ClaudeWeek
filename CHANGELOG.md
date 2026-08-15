@@ -16,6 +16,19 @@ is the place for the shorter, human-facing story.
 
 ### Added
 
+- Notifications when spend crosses a threshold you set: two thresholds per
+  limit — 80 % and 95 % for the week, 75 % and 95 % for the 5-hour session —
+  configured on a new "Уведомления" tab. Each limit can be silenced on its own,
+  and one switch turns all notifications off. The banner names the limit and the
+  live percentage, gives what is left and when the limit resets, and carries the
+  same ring the menu bar shows, in the same colour (taken from the colour
+  thresholds, so banner and icon never disagree). Three rules keep it quiet: one
+  banner per threshold per limit window, only on the way up, and no two banners
+  closer than five minutes. What has been said is stored in
+  `~/.config/claude-week/alerts.json`, so a restart mid-week does not repeat it.
+  The decision logic lives in the core (`AlertPlanner`) and is covered by tests.
+- `--screenshot` now also renders the notifications tab
+  (`settings-notifications-light.png`, `settings-notifications-dark.png`).
 - Model breakdown in the panel: clicking the percentage — on a day row or on
   the 5-hour session row — replaces the day rows with one row per model (Opus,
   Sonnet, Haiku), each with the same kind of bar showing its share of the
@@ -39,6 +52,16 @@ is the place for the shorter, human-facing story.
 
 ### Notes
 
+- Notifications are on out of the box: a feature that stays silent until you
+  find its tab does not do the job it was added for. macOS asks for permission
+  once, on the first launch of the new version; if it is refused, the tab says
+  so and offers the only place the ban can be lifted — System Settings. A build
+  run straight from `swift run` has no notifications at all: macOS identifies an
+  app by its bundle, and there isn't one.
+- Session notifications need the official source. The local estimate does not
+  compute the 5-hour percentage at all, so offline there is nothing to warn
+  about — and an expired session stays quiet rather than warning off a cached
+  number that reset hours ago.
 - The breakdown is computed from local transcripts in `~/.claude/projects` and
   weighted by model prices, so it is an estimate — which the panel states
   plainly while the breakdown is on screen. The official `/api/oauth/usage`
