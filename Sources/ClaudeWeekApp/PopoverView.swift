@@ -236,6 +236,18 @@ struct PopoverView: View {
                         valueTap: toggleModels
                     )
                 }
+
+                // Откуда эти числа — сразу под ними, а не в футере: футер
+                // говорит про неделю, и оговорка про разбивку, стоящая там,
+                // читалась бы как оговорка про весь лимит. Знак «≈» в строках
+                // означает ровно это, а строка называет причину словами —
+                // цифра сервера и прикидка по своим файлам не одно и то же.
+                Text("≈ прикинуто на месте, по вашим транскриптам:\nсервер сообщает только итог недели")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(palette.secondaryText.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
             }
         }
     }
@@ -287,15 +299,7 @@ struct PopoverView: View {
                     )
                     .fixedSize(horizontal: false, vertical: true)
 
-                // В разбивке место прогноза занимает оговорка: доли считает не
-                // сервер, а мы — по транскриптам, взвесив их ценами моделей.
-                // Молчать об этом нельзя, а тревожить прогнозом посреди
-                // разбивки незачем — за ним возвращаются к неделе.
-                if model.showsModels {
-                    Text("доли — оценка по транскриптам")
-                        .font(Theme.footerFont)
-                        .foregroundStyle(palette.secondaryText.color)
-                } else if appearance.showForecast, let forecast {
+                if appearance.showForecast, let forecast {
                     Text(forecast)
                         .font(Theme.footerFont)
                         .foregroundStyle(palette.critical.color)

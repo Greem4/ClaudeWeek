@@ -19,9 +19,11 @@ is the place for the shorter, human-facing story.
 - Model breakdown in the panel: clicking the percentage — on a day row or on
   the 5-hour session row — replaces the day rows with one row per model (Opus,
   Sonnet, Haiku), each with the same kind of bar showing its share of the
-  week's spend. Clicking the percentage again brings the week back. Hovering a
-  row gives the rest: share of the weekly limit, input / output / cache tokens,
-  reply count and weighted cost.
+  week's spend. Clicking the percentage again brings the week back. Every share
+  carries a `≈`, and a line under the rows says where the numbers come from:
+  estimated locally from your transcripts, because the server reports the week
+  total only. Hovering a row gives the rest: share of the weekly limit,
+  input / output / cache tokens, reply count and weighted cost.
 - `--screenshot` now also renders the panel in that state
   (`panel-models-light.png`, `panel-models-dark.png`).
 
@@ -39,11 +41,11 @@ is the place for the shorter, human-facing story.
 ### Notes
 
 - The breakdown is computed from local transcripts in `~/.claude/projects` and
-  weighted by model prices, so it is an estimate — the panel footer says as
-  much while it is on screen. The official `/api/oauth/usage` endpoint reports
-  one number for the whole week and says nothing about models — see
-  [docs/API.md](docs/API.md). The week total in the footer is still the exact
-  figure from the server.
+  weighted by model prices, so it is an estimate — which the panel states
+  plainly while the breakdown is on screen. The official `/api/oauth/usage`
+  endpoint reports one number for the whole week and says nothing about
+  models — see [docs/API.md](docs/API.md). The week total in the footer is
+  still the exact figure from the server.
 
 ## [0.1.7] — 2026-08-15
 

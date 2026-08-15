@@ -64,7 +64,10 @@ struct ModelRow: View {
 
     @ViewBuilder
     private var value: some View {
-        let column = Text(Formatting.percent(usage.sharePercent))
+        // «≈» у каждой строки: доля посчитана здесь и по весам, а не получена
+        // от сервера, и число без оговорки стояло бы вровень с официальными
+        // процентами недели — теми, что в футере и в строке меню.
+        let column = Text("≈\(Formatting.percent(usage.sharePercent))")
             .font(Theme.dayFont)
             .fixedSize()
             .foregroundStyle(palette.primaryText.color)
