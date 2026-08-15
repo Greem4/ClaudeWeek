@@ -349,7 +349,7 @@ swift build                     # оба таргета
 # объявления: ключи kSecUseAuthenticationUI в Keychain.swift оставлены
 # намеренно, замены им нет, и группа понижена обратно до предупреждения.
 swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
-swift run ClaudeWeekTests       # 429 проверок, без сети и без UI
+swift run ClaudeWeekTests       # 430 проверок, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/signing-cert.sh       # один раз: постоянный сертификат подписи
 ./scripts/make-app.sh           # собрать dist/ClaudeWeek.app

@@ -62,6 +62,17 @@ func runAlertTests(_ t: Harness) {
         t.equal(c.notifications.week.first, 60, "своё значение прочиталось")
         t.equal(c.notifications.week.second, 95, "недостающее взято из дефолтов")
         t.check(c.notifications.session.enabled, "сессия осталась включённой")
+
+        // Окно настроек пишет конфиг целиком — пороги обязаны вернуться теми же.
+        var edited = Config.default
+        edited.notifications = NotificationsConfig(
+            enabled: true, sound: false,
+            week: LimitNotifications(first: 50, second: 90),
+            session: LimitNotifications(enabled: false, first: 70, second: 90)
+        )
+        try? ConfigStore.save(edited, to: url)
+        t.equal(ConfigStore.load(from: url).notifications, edited.notifications,
+                "правки уведомлений переживают запись и чтение")
     }
 
     t.suite("уведомления: один порог — один раз") {
