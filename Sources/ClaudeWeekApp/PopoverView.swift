@@ -123,7 +123,7 @@ struct PopoverView: View {
                 }
                 // Заголовок называет то, что сейчас в строках: иначе разбивка
                 // читалась бы как недельный ряд со странными подписями.
-                Text(model.showsModels ? "ЧЕМ ПОТРАЧЕНО" : "ЛИМИТ НЕДЕЛИ")
+                Text(model.showsModels ? "МОДЕЛИ" : "ЛИМИТ НЕДЕЛИ")
                     .font(Theme.titleFont)
                     .tracking(0.4)
                     .fixedSize()
