@@ -139,6 +139,28 @@ enum Screenshot {
         }
         model.showsModels = false
 
+        // Вкладка уведомлений: единственная настройка, которую по панели не
+        // видно — баннер приходит мимо неё, — и объяснить её в документации
+        // без картинки нечем.
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            guard let image = notificationsTab(config: config, appearance: appearance),
+                  let tiff = image.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiff),
+                  let png = bitmap.representation(using: .png, properties: [:])
+            else {
+                FileHandle.standardError.write(Data("не отрисовал уведомления \(name)\n".utf8))
+                return 1
+            }
+            let url = directory.appendingPathComponent("settings-notifications-\(name).png")
+            do {
+                try png.write(to: url)
+                print(url.path)
+            } catch {
+                FileHandle.standardError.write(Data("не сохранил \(url.path): \(error)\n".utf8))
+                return 1
+            }
+        }
+
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             guard let strip = menuBarPNG(model: model, appearance: appearance, ring: false) else {
                 FileHandle.standardError.write(Data("не отрисовал иконку \(name)\n".utf8))
@@ -209,6 +231,100 @@ enum Screenshot {
             data = rep.representation(using: .png, properties: [:])
         }
         return data
+    }
+
+    /// Вкладка «Уведомления» с заводскими порогами. Модель настроек здесь
+    /// холостая: правки уходят в никуда, проверка токена не зовётся, а
+    /// контроллер уведомлений собран как у настоящего приложения — иначе
+    /// снимок объяснял бы, что у отладочного бинаря баннеров не бывает.
+    private static func notificationsTab(config: Config, appearance name: NSAppearance.Name) -> NSImage? {
+        guard let appearance = NSAppearance(named: name) else { return nil }
+        var config = config
+        config.notifications = NotificationsConfig()
+
+        let model = SettingsModel(
+            config: config,
+            update: UpdateController(bundle: nil),
+            notifications: NotificationController(bundled: true),
+            apply: { _ in },
+            check: { _ in ("", true) }
+        )
+
+        // Высота больше оконной: в живом окне вкладка прокручивается, а на
+        // картинке нужны все три секции разом — иначе нижнюю половину
+        // настроек пришлось бы пересказывать словами.
+        return hosted(
+            NotificationSettings(model: model)
+                .environment(\.colorScheme, name == .darkAqua ? .dark : .light),
+            size: NSSize(width: 640, height: 750),
+            appearance: appearance
+        )
+    }
+
+    /// Снимок вида через настоящее окно, а не `ImageRenderer`. Форма со
+    /// стилем `.grouped` — это AppKit-таблица под тонким слоем SwiftUI, и
+    /// рендерер, не знающий про окно, отдаёт вместо неё пустой прямоугольник.
+    ///
+    /// Окно приходится сделать ключевым и на мгновение показать: в неактивном
+    /// окне macOS красит переключатели серым, и включённые настройки на
+    /// картинке читались бы как выключенные. Убираем его сразу после снимка.
+    private static func hosted(
+        _ view: some View, size: NSSize, appearance: NSAppearance
+    ) -> NSImage? {
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(origin: .zero, size: size)
+        hosting.appearance = appearance
+
+        let window = NSWindow(
+            contentRect: hosting.frame,
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.appearance = appearance
+        window.contentView = hosting
+        window.layoutIfNeeded()
+        // Ключевое окно тут не украшательство: в неактивном macOS красит
+        // переключатели серым, и включённые настройки на картинке читались бы
+        // как выключенные. Приложение при этом ещё не запущено (`--screenshot`
+        // отрабатывает до `NSApp.run()`), поэтому запускаем его вручную и сами
+        // прокачиваем очередь событий — без неё активация не доходит.
+        NSApp.setActivationPolicy(.accessory)
+        NSApp.finishLaunching()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        pumpEvents(for: 0.6)
+        hosting.displayIfNeeded()
+
+        // Вдвое крупнее, как и остальные картинки документации: на Retina
+        // однократный снимок выглядит мылом.
+        let scale: CGFloat = 2
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ), let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        rep.size = size
+
+        context.cgContext.scaleBy(x: scale, y: scale)
+        hosting.displayIgnoringOpacity(hosting.bounds, in: context)
+        window.orderOut(nil)
+
+        let image = NSImage(size: size)
+        image.addRepresentation(rep)
+        return image
+    }
+
+    /// Разбирает очередь событий заданное время: `RunLoop.run(until:)` тут не
+    /// годится — активацией окна и разметкой SwiftUI занимается сам
+    /// `NSApplication`, и события должны пройти через него.
+    private static func pumpEvents(for seconds: TimeInterval) {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            guard let event = NSApp.nextEvent(
+                matching: .any, until: deadline, inMode: .default, dequeue: true
+            ) else { break }
+            NSApp.sendEvent(event)
+        }
     }
 
     private static func image(model: PanelModel, appearance name: NSAppearance.Name) -> NSImage? {

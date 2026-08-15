@@ -528,7 +528,10 @@ private struct AppearanceSettings: View {
 /// Когда программа заговорит сама. Пороги здесь свои, отдельные от цветовых:
 /// цвет замечают, только посмотрев на значок, а баннер приходит поверх работы,
 /// и отметки, на которых человек готов отвлечься, обычно выше.
-private struct NotificationSettings: View {
+///
+/// Единственная вкладка не под `private`: её снимает `--screenshot` для
+/// документации — картинку настроек иначе пришлось бы обновлять руками.
+struct NotificationSettings: View {
     @Bindable var model: SettingsModel
 
     private var notifications: NotificationsConfig { model.config.notifications }
@@ -555,13 +558,14 @@ private struct NotificationSettings: View {
 
                 HStack {
                     Button("Показать пример") { model.previewNotification() }
-                        .disabled(!NotificationController.isAvailable)
+                        .disabled(!model.notifications.canPreview)
                     Spacer()
                 }
                 Text("""
-                Пример приходит с первым недельным порогом вместо живого \
-                расхода — на настоящие уведомления он не влияет и в их истории \
-                не остаётся.
+                Об одном пороге программа говорит один раз за окно лимита и \
+                только на ухудшении: откатившийся расход молчит, а следующая \
+                неделя и следующая сессия начинают отсчёт заново. Два баннера \
+                подряд не приходят ближе, чем через пять минут.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -572,10 +576,9 @@ private struct NotificationSettings: View {
                 PercentRow(title: "Предупредить после", value: weekFirst)
                 PercentRow(title: "И ещё раз после", value: weekSecond)
                 Text("""
-                Недельный лимит не сбросится до конца недели, поэтому и \
-                предупреждать о нём стоит раньше, чем о пятичасовом окне: \
-                после первого порога расход ещё можно растянуть на оставшиеся \
-                дни.
+                Неделя не сбросится до её конца, поэтому предупреждать о ней \
+                стоит раньше: после первого порога расход ещё можно растянуть \
+                на оставшиеся дни.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -587,26 +590,14 @@ private struct NotificationSettings: View {
                 PercentRow(title: "Предупредить после", value: sessionFirst)
                 PercentRow(title: "И ещё раз после", value: sessionSecond)
                 Text("""
-                В сессию упираются чаще, чем в неделю, но ждать после неё \
-                считаные часы. Сообщает её только официальный источник: на \
-                локальной оценке уведомлений о сессии не будет — её процент \
-                там не считается вовсе.
+                Сессию сообщает только официальный источник: на локальной \
+                оценке её процент не считается вовсе, и уведомлений о ней \
+                не будет.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
             .disabled(isOff)
-
-            Section("Как это работает") {
-                Text("""
-                Об одном пороге программа говорит один раз за окно лимита и \
-                только на ухудшении: расход, откатившийся назад, молчит, а \
-                следующая неделя и следующая сессия начинают отсчёт заново. \
-                Два баннера подряд не приходят ближе, чем через пять минут.
-                """)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
     }

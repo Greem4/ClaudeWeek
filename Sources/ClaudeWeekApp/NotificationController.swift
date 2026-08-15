@@ -30,10 +30,18 @@ final class NotificationController {
     private let delegate = BannerDelegate()
     private let logURL: URL
     private var log: AlertLog
+    /// Каким контроллер показывает себя настройкам. Совпадает с `isAvailable`
+    /// везде, кроме отрисовки картинок для документации: `--screenshot` идёт
+    /// из отладочного бинаря, и вкладка на снимке иначе объясняла бы, почему
+    /// уведомления недоступны, — при том что у собранного приложения они есть.
+    private let bundled: Bool
 
-    init(logURL: URL = Store.alertsURL) {
+    init(logURL: URL = Store.alertsURL, bundled: Bool = NotificationController.isAvailable) {
         self.logURL = logURL
+        self.bundled = bundled
         log = Store.loadAlerts(from: logURL)
+        // Центр спрашиваем только у настоящего бандла, чем бы ни было `bundled`:
+        // без Info.plist обращение к нему роняет процесс.
         center = NotificationController.isAvailable ? .current() : nil
         // Без делегата macOS прячет баннер, пока программа активна, — а
         // активной она бывает ровно тогда, когда открыто окно настроек, то
@@ -182,7 +190,7 @@ final class NotificationController {
 
     /// Состояние словами — строка на вкладке «Уведомления».
     var summary: String {
-        guard NotificationController.isAvailable else {
+        guard bundled else {
             // Ровно как автозапуск и обновление: у отладочного `swift run`
             // бандла нет, и молчащие уведомления выглядели бы поломкой.
             return """
@@ -212,8 +220,12 @@ final class NotificationController {
     /// Показывать ли кнопку «Открыть настройки macOS»: только когда запрет
     /// снимается там и больше нигде.
     var needsSystemSettings: Bool {
-        NotificationController.isAvailable && authorization == .denied
+        bundled && authorization == .denied
     }
+
+    /// Работает ли кнопка «Показать пример»: у неотличимого от программы
+    /// бинаря показывать нечем.
+    var canPreview: Bool { bundled }
 
     func openSystemSettings() {
         guard let url = URL(
