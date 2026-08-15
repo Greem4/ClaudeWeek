@@ -115,14 +115,20 @@ enum Screenshot {
 
         model.config.appearance.theme = config.appearance.theme
 
-        // Окно разбивки по моделям: палитры панели у него нет — это обычное
-        // окно, и оформление ему даёт система, — поэтому снимков всего два.
+        // Та же панель в разбивке по моделям: строки дней сменились строками
+        // моделей. Снимок нужен ровно затем же, зачем остальные, — проверить
+        // вёрстку глазами, не открывая панель руками.
+        model.showsModels = true
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            guard let png = modelsPNG(model: model, appearance: appearance) else {
-                FileHandle.standardError.write(Data("не отрисовал окно моделей \(name)\n".utf8))
+            guard let image = image(model: model, appearance: appearance),
+                  let tiff = image.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiff),
+                  let png = bitmap.representation(using: .png, properties: [:])
+            else {
+                FileHandle.standardError.write(Data("не отрисовал разбивку \(name)\n".utf8))
                 return 1
             }
-            let url = directory.appendingPathComponent("models-\(name).png")
+            let url = directory.appendingPathComponent("panel-models-\(name).png")
             do {
                 try png.write(to: url)
                 print(url.path)
@@ -131,6 +137,7 @@ enum Screenshot {
                 return 1
             }
         }
+        model.showsModels = false
 
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             guard let strip = menuBarPNG(model: model, appearance: appearance, ring: false) else {
@@ -200,27 +207,6 @@ enum Screenshot {
             NSGraphicsContext.restoreGraphicsState()
 
             data = rep.representation(using: .png, properties: [:])
-        }
-        return data
-    }
-
-    /// Окно разбивки: тот же оффскрин-рендер, что у панели, но без палитры и
-    /// теней — окно рисует система, и подделывать её оформление незачем.
-    private static func modelsPNG(model: PanelModel, appearance name: NSAppearance.Name) -> Data? {
-        guard let appearance = NSAppearance(named: name) else { return nil }
-        var data: Data?
-        appearance.performAsCurrentDrawingAppearance {
-            let renderer = ImageRenderer(
-                content: ModelsView(model: model)
-                    .background(name == .darkAqua ? Color(hex: 0x1E1E1E) : Color(hex: 0xF6F6F6))
-                    .environment(\.colorScheme, name == .darkAqua ? .dark : .light)
-            )
-            renderer.scale = 2
-            guard let image = renderer.nsImage,
-                  let tiff = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff)
-            else { return }
-            data = bitmap.representation(using: .png, properties: [:])
         }
         return data
     }

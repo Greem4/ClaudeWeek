@@ -19,8 +19,6 @@ struct PopoverView: View {
     var onRefresh: () -> Void = {}
     var onSettings: () -> Void = {}
     var onQuit: () -> Void = {}
-    /// Щёлкнули по цифрам процента — показать, из чего они набраны.
-    var onModels: () -> Void = {}
 
     private var appearance: AppearanceConfig { model.config.appearance }
     private var palette: Palette { appearance.theme.palette }
@@ -42,7 +40,7 @@ struct PopoverView: View {
                     sourceHint: model.sourceHint,
                     showsSourceText: showsSourceText,
                     onSourceTap: { showsSourceText.toggle() },
-                    onValueTap: onModels,
+                    onValueTap: toggleModels,
                     calendar: model.config.calendar,
                     animated: !reduceMotion
                 )
@@ -51,7 +49,14 @@ struct PopoverView: View {
             Divider().overlay(palette.separator.color)
 
             if let snapshot = model.snapshot {
-                days(snapshot)
+                // Разбивка встаёт ровно на место дней, в ту же сетку: щелчок
+                // по цифрам меняет содержание строк, а не открывает второе
+                // место, где те же проценты сказаны по-своему.
+                if model.showsModels {
+                    models(snapshot)
+                } else {
+                    days(snapshot)
+                }
             } else {
                 placeholders
             }
@@ -116,7 +121,9 @@ struct PopoverView: View {
                         .font(Theme.titleFont)
                         .foregroundStyle(palette.critical.color)
                 }
-                Text("ЛИМИТ НЕДЕЛИ")
+                // Заголовок называет то, что сейчас в строках: иначе разбивка
+                // читалась бы как недельный ряд со странными подписями.
+                Text(model.showsModels ? "ЧЕМ ПОТРАЧЕНО" : "ЛИМИТ НЕДЕЛИ")
                     .font(Theme.titleFont)
                     .tracking(0.4)
                     .fixedSize()
@@ -196,10 +203,45 @@ struct PopoverView: View {
                     isToday: day.index == model.todayIndex,
                     animated: !reduceMotion,
                     tap: dayTap,
-                    valueTap: onModels
+                    valueTap: toggleModels
                 )
             }
         }
+    }
+
+    // MARK: Модели
+
+    /// Разбивка на месте дней. Возвращает обратно тот же клик по цифрам —
+    /// другого выхода отсюда искать не приходится: где нажал, там и вернул.
+    private func models(_ snapshot: UsageSnapshot) -> some View {
+        VStack(spacing: Theme.rowSpacing) {
+            if snapshot.byModel.isEmpty {
+                Text("разбивки нет: транскриптов за это окно не нашлось")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(palette.secondaryText.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Нажимаемо и в пустом виде: иначе панель, открытая до
+                    // первого ответа, застревала бы в разбивке без строк.
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: toggleModels)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("нажмите — назад к неделе")
+            } else {
+                ForEach(snapshot.byModel, id: \.family) { usage in
+                    ModelRow(
+                        usage: usage,
+                        limitPercent: snapshot.limitPercent(of: usage),
+                        animated: !reduceMotion,
+                        valueTap: toggleModels
+                    )
+                }
+            }
+        }
+    }
+
+    private func toggleModels() {
+        model.showsModels.toggle()
     }
 
     /// В компактном виде клик по любой строке дня переключает ряд: свёрнутый
@@ -245,7 +287,15 @@ struct PopoverView: View {
                     )
                     .fixedSize(horizontal: false, vertical: true)
 
-                if appearance.showForecast, let forecast {
+                // В разбивке место прогноза занимает оговорка: доли считает не
+                // сервер, а мы — по транскриптам, взвесив их ценами моделей.
+                // Молчать об этом нельзя, а тревожить прогнозом посреди
+                // разбивки незачем — за ним возвращаются к неделе.
+                if model.showsModels {
+                    Text("доли — оценка по транскриптам")
+                        .font(Theme.footerFont)
+                        .foregroundStyle(palette.secondaryText.color)
+                } else if appearance.showForecast, let forecast {
                     Text(forecast)
                         .font(Theme.footerFont)
                         .foregroundStyle(palette.critical.color)

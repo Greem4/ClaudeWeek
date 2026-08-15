@@ -11,10 +11,6 @@ final class StatusItemController: NSObject {
     private let update = UpdateController()
 
     private var settings: SettingsWindowController?
-    /// Окно разбивки по моделям. Как и настройки, заводится при первом
-    /// открытии и живёт до выхода: показывает ту же модель панели, поэтому
-    /// цифры в нём не застывают.
-    private var models: ModelsWindowController?
     private var saveTask: Task<Void, Never>?
     /// Конфиг, ждущий записи из-под дебаунса. Держим отдельно от захвата в
     /// замыкании `saveTask`: без него правку, попавшую в эту задержку,
@@ -86,8 +82,7 @@ final class StatusItemController: NSObject {
                 update: update,
                 onRefresh: { [weak self] in self?.refresh() },
                 onSettings: { [weak self] in self?.openSettings() },
-                onQuit: { NSApp.terminate(nil) },
-                onModels: { [weak self] in self?.openModels() }
+                onQuit: { NSApp.terminate(nil) }
             )
         )
         applyAppearance()
@@ -183,11 +178,13 @@ final class StatusItemController: NSObject {
     }
 
     /// Панель открывают заново: часы подводим, а раскрытый кликом недельный
-    /// ряд сворачиваем. Раскрытие живёт один показ — закрывают панель щелчком
-    /// мимо и по Esc, и сбросить его больше негде.
+    /// ряд сворачиваем и разбивку по моделям убираем. Оба состояния живут один
+    /// показ — закрывают панель щелчком мимо и по Esc, и сбросить их больше
+    /// негде.
     private func prepareToShowPanel() {
         model.now = Date()
         model.expandsWeek = false
+        model.showsModels = false
     }
 
     /// Три группы: что сделать сейчас, как программа заведена, справка и
@@ -246,17 +243,6 @@ final class StatusItemController: NSObject {
         settings?.adopt(model.config)
         pinPanel()
         settings?.show(avoiding: dropdown.isShown ? dropdown.frame : nil)
-    }
-
-    /// Разбивка по моделям — по клику на цифры процента в панели.
-    ///
-    /// Панель при этом закрываем, а не закрепляем, как при настройках: там она
-    /// служит живым предпросмотром темы, здесь смотреть на неё незачем — все те
-    /// же числа стоят в шапке окна, а панель поверх чужих окон только мешает.
-    private func openModels() {
-        if models == nil { models = ModelsWindowController(model: model) }
-        dropdown.close()
-        models?.show()
     }
 
     private func pinPanel() {

@@ -115,7 +115,7 @@ struct SessionRow: View {
         .accessibilityLabel(voiceOverLabel)
         // Тем же отдельным действием, что и в строках дней: жест на цифрах
         // VoiceOver не достаётся — строка объявлена одним элементом.
-        .accessibilityAction(named: "Расход по моделям") { onValueTap?() }
+        .accessibilityAction(named: "Чем потрачено") { onValueTap?() }
     }
 
     /// Процент сессии — он же кнопка разбивки по моделям.
