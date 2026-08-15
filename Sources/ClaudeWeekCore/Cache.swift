@@ -158,6 +158,10 @@ public enum Store {
     public static var directory: URL { ConfigStore.directory }
     public static var indexURL: URL { directory.appendingPathComponent("index.json") }
     public static var cacheURL: URL { directory.appendingPathComponent("cache.json") }
+    /// Что уже сказано уведомлениями. Отдельно от кеша: тот перезаписывается
+    /// каждым обновлением и целиком описывает расход, а это — память о
+    /// разговоре с человеком, и терять её вместе с протухшим снимком нельзя.
+    public static var alertsURL: URL { directory.appendingPathComponent("alerts.json") }
 
     private static func decoder() -> JSONDecoder {
         let d = JSONDecoder()
@@ -215,6 +219,23 @@ public enum Store {
 
     public static func saveCache(_ cache: CachedUsage, to url: URL = Store.cacheURL) throws {
         try write(encoder().encode(cache), to: url)
+    }
+
+    /// Битый или отсутствующий файл — пустой лог: худшее, что случится, это
+    /// одно повторное уведомление о пороге, который уже проходили. Молчать
+    /// из-за нечитаемого файла было бы хуже.
+    public static func loadAlerts(from url: URL = Store.alertsURL) -> AlertLog {
+        guard let data = try? Data(contentsOf: url) else { return AlertLog() }
+        do {
+            return try decoder().decode(AlertLog.self, from: data)
+        } catch {
+            Log.warn("не разобрал \(url.path): \(error). Начинаю уведомления заново")
+            return AlertLog()
+        }
+    }
+
+    public static func saveAlerts(_ log: AlertLog, to url: URL = Store.alertsURL) throws {
+        try write(encoder().encode(log), to: url)
     }
 
     private static func write(_ data: Data, to url: URL) throws {

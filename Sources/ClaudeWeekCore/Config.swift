@@ -282,6 +282,9 @@ public struct Config: Codable, Sendable, Equatable {
     public var weeklyBudget: Double
     public var calibration: Calibration
     public var thresholds: Thresholds
+    /// Когда дёргать человека баннером. Отдельно от `thresholds`: цвет
+    /// замечают, только глядя на значок, а уведомление приходит само.
+    public var notifications: NotificationsConfig
     /// Вид панели; на цифры не влияет.
     public var appearance: AppearanceConfig
 
@@ -304,6 +307,7 @@ public struct Config: Codable, Sendable, Equatable {
         weeklyBudget: 0,
         calibration: Calibration(),
         thresholds: Thresholds(),
+        notifications: NotificationsConfig(),
         appearance: AppearanceConfig()
     )
 
@@ -320,6 +324,7 @@ public struct Config: Codable, Sendable, Equatable {
         weeklyBudget: Double,
         calibration: Calibration,
         thresholds: Thresholds,
+        notifications: NotificationsConfig = NotificationsConfig(),
         appearance: AppearanceConfig = AppearanceConfig()
     ) {
         self.resetWeekday = resetWeekday
@@ -334,6 +339,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.weeklyBudget = weeklyBudget
         self.calibration = calibration
         self.thresholds = thresholds
+        self.notifications = notifications
         self.appearance = appearance
     }
 
@@ -355,6 +361,8 @@ public struct Config: Codable, Sendable, Equatable {
             weeklyBudget: try c.decodeIfPresent(Double.self, forKey: .weeklyBudget) ?? d.weeklyBudget,
             calibration: try c.decodeIfPresent(Calibration.self, forKey: .calibration) ?? d.calibration,
             thresholds: try c.decodeIfPresent(Thresholds.self, forKey: .thresholds) ?? d.thresholds,
+            notifications: try c.decodeIfPresent(NotificationsConfig.self, forKey: .notifications)
+                ?? d.notifications,
             appearance: try c.decodeIfPresent(AppearanceConfig.self, forKey: .appearance) ?? d.appearance
         )
     }
@@ -385,6 +393,7 @@ public struct Config: Codable, Sendable, Equatable {
         c.workHours = c.workHours.validated()
         if c.weeklyBudget < 0 { c.weeklyBudget = 0 }
         c.thresholds = c.thresholds.validated()
+        c.notifications = c.notifications.validated()
         c.appearance = c.appearance.validated()
         return c
     }

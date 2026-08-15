@@ -35,17 +35,23 @@ final class SettingsModel {
     /// меню — сюда приходит тот же контроллер, а не его копия.
     let update: UpdateController
 
+    /// Уведомления — по той же причине тот же контроллер: разрешение macOS
+    /// живёт вне конфига, и спрашивать его вторым экземпляром бессмысленно.
+    let notifications: NotificationController
+
     private let apply: (Config) -> Void
     private let check: (Config) async -> (String, Bool)
 
     init(
         config: Config,
         update: UpdateController,
+        notifications: NotificationController,
         apply: @escaping (Config) -> Void,
         check: @escaping (Config) async -> (String, Bool)
     ) {
         self.config = config
         self.update = update
+        self.notifications = notifications
         self.apply = apply
         self.check = check
         refreshDiagnostics()
@@ -58,6 +64,9 @@ final class SettingsModel {
     func refreshDiagnostics() {
         pickedBudget = Store.loadCache()?.weeklyBudget
         launchAtLogin = LoginItem.isEnabled
+        // Разрешение на уведомления снимают там же, где выдали, — в системных
+        // настройках, мимо этого окна. Спрашиваем систему на каждый показ.
+        notifications.refresh()
     }
 
     /// Состояние возвращаем не из галочки, а из самого агента: включить его
@@ -89,6 +98,12 @@ final class SettingsModel {
             return String(format: "%.2f $ ≈ 100 %% · подобран сам", pickedBudget)
         }
         return "не подобран"
+    }
+
+    /// «Показать пример» с вкладки уведомлений: тот же баннер, что придёт
+    /// по-настоящему. Идёт мимо конфига — показывать нечего сохранять.
+    func previewNotification() {
+        notifications.preview(config: config)
     }
 
     func checkNow() {

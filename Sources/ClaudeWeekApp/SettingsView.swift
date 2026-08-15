@@ -2,10 +2,10 @@ import SwiftUI
 import AppKit
 import ClaudeWeekCore
 
-/// Окно настроек: пять вкладок, по одной на предмет разговора — откуда цифры,
-/// что показывает строка меню, как выглядит панель, доступ к токену, справка.
-/// Предпросмотром служит сама панель: она закреплена на экране, пока окно
-/// открыто, и перерисовывается на каждую правку.
+/// Окно настроек: шесть вкладок, по одной на предмет разговора — откуда цифры,
+/// что показывает строка меню, как выглядит панель, когда программа заговорит
+/// сама, доступ к токену, справка. Предпросмотром служит сама панель: она
+/// закреплена на экране, пока окно открыто, и перерисовывается на каждую правку.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
@@ -20,6 +20,9 @@ struct SettingsView: View {
             AppearanceSettings(model: model)
                 .tabItem { Label("Панель", systemImage: "paintpalette") }
 
+            NotificationSettings(model: model)
+                .tabItem { Label("Уведомления", systemImage: "bell") }
+
             AccessSettings(model: model)
                 .tabItem { Label("Доступ", systemImage: "key") }
 
@@ -27,6 +30,25 @@ struct SettingsView: View {
                 .tabItem { Label("О программе", systemImage: "info.circle") }
         }
         .frame(width: 640, height: 580)
+    }
+}
+
+/// Строка «подпись — ползунок — процент». Одна на пороги цвета и пороги
+/// уведомлений: величина в них одна и та же — процент расхода, — и выглядеть
+/// в двух вкладках по-разному она не должна.
+struct PercentRow: View {
+    let title: String
+    @Binding var value: Double
+
+    var body: some View {
+        LabeledContent(title) {
+            HStack {
+                Slider(value: $value, in: 0...100, step: 1)
+                Text(Formatting.percent(value))
+                    .font(.caption.monospacedDigit())
+                    .frame(width: 50, alignment: .trailing)
+            }
+        }
     }
 }
 
@@ -259,13 +281,13 @@ private struct MenuBarSettings: View {
             }
 
             Section("Недельный лимит") {
-                percentRow("Жёлтый после", value: weekWarn)
-                percentRow("Красный после", value: weekCritical)
+                PercentRow(title: "Жёлтый после", value: weekWarn)
+                PercentRow(title: "Красный после", value: weekCritical)
             }
 
             Section("Пятичасовая сессия") {
-                percentRow("Жёлтый после", value: sessionWarn)
-                percentRow("Красный после", value: sessionCritical)
+                PercentRow(title: "Жёлтый после", value: sessionWarn)
+                PercentRow(title: "Красный после", value: sessionCritical)
                 Text("""
                 Считается по факту: сколько потрачено прямо сейчас. План и \
                 прогноз на цвет больше не влияют — они отвечают на вопрос \
@@ -278,17 +300,6 @@ private struct MenuBarSettings: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private func percentRow(_ title: String, value: Binding<Double>) -> some View {
-        LabeledContent(title) {
-            HStack {
-                Slider(value: value, in: 0...100, step: 1)
-                Text(Formatting.percent(value.wrappedValue))
-                    .font(.caption.monospacedDigit())
-                    .frame(width: 50, alignment: .trailing)
-            }
-        }
     }
 
     private var styleHint: String {
@@ -509,6 +520,166 @@ private struct AppearanceSettings: View {
         case .midnight, .graphite, .paper, .contrast:
             "Экспериментальная палитра: валидатором не проверялась, роли цветов те же."
         }
+    }
+}
+
+// MARK: - Уведомления
+
+/// Когда программа заговорит сама. Пороги здесь свои, отдельные от цветовых:
+/// цвет замечают, только посмотрев на значок, а баннер приходит поверх работы,
+/// и отметки, на которых человек готов отвлечься, обычно выше.
+private struct NotificationSettings: View {
+    @Bindable var model: SettingsModel
+
+    private var notifications: NotificationsConfig { model.config.notifications }
+    /// Пороги настраиваются и при выключенных уведомлениях — гасим их только
+    /// вместе с самим тумблером, чтобы не пришлось включать баннеры ради того,
+    /// чтобы посмотреть, на чём они стоят.
+    private var isOff: Bool { !notifications.enabled }
+
+    var body: some View {
+        Form {
+            Section("Уведомления") {
+                Toggle("Предупреждать о приближении к лимиту", isOn: enabled)
+                Text(model.notifications.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if model.notifications.needsSystemSettings {
+                    Button("Открыть настройки уведомлений macOS") {
+                        model.notifications.openSystemSettings()
+                    }
+                }
+
+                Toggle("Со звуком", isOn: sound)
+                    .disabled(isOff)
+
+                HStack {
+                    Button("Показать пример") { model.previewNotification() }
+                        .disabled(!NotificationController.isAvailable)
+                    Spacer()
+                }
+                Text("""
+                Пример приходит с первым недельным порогом вместо живого \
+                расхода — на настоящие уведомления он не влияет и в их истории \
+                не остаётся.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Section("Недельный лимит") {
+                Toggle("Уведомлять о недельном лимите", isOn: weekEnabled)
+                PercentRow(title: "Предупредить после", value: weekFirst)
+                PercentRow(title: "И ещё раз после", value: weekSecond)
+                Text("""
+                Недельный лимит не сбросится до конца недели, поэтому и \
+                предупреждать о нём стоит раньше, чем о пятичасовом окне: \
+                после первого порога расход ещё можно растянуть на оставшиеся \
+                дни.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .disabled(isOff)
+
+            Section("Пятичасовая сессия") {
+                Toggle("Уведомлять о пятичасовой сессии", isOn: sessionEnabled)
+                PercentRow(title: "Предупредить после", value: sessionFirst)
+                PercentRow(title: "И ещё раз после", value: sessionSecond)
+                Text("""
+                В сессию упираются чаще, чем в неделю, но ждать после неё \
+                считаные часы. Сообщает её только официальный источник: на \
+                локальной оценке уведомлений о сессии не будет — её процент \
+                там не считается вовсе.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .disabled(isOff)
+
+            Section("Как это работает") {
+                Text("""
+                Об одном пороге программа говорит один раз за окно лимита и \
+                только на ухудшении: расход, откатившийся назад, молчит, а \
+                следующая неделя и следующая сессия начинают отсчёт заново. \
+                Два баннера подряд не приходят ближе, чем через пять минут.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var enabled: Binding<Bool> {
+        Binding(
+            get: { notifications.enabled },
+            set: { model.config.notifications.enabled = $0 }
+        )
+    }
+
+    private var sound: Binding<Bool> {
+        Binding(
+            get: { notifications.sound },
+            set: { model.config.notifications.sound = $0 }
+        )
+    }
+
+    private var weekEnabled: Binding<Bool> {
+        Binding(
+            get: { notifications.week.enabled },
+            set: { model.config.notifications.week.enabled = $0 }
+        )
+    }
+
+    private var sessionEnabled: Binding<Bool> {
+        Binding(
+            get: { notifications.session.enabled },
+            set: { model.config.notifications.session.enabled = $0 }
+        )
+    }
+
+    // Порядок держим прямо в биндингах, как и у цветовых порогов: второй порог
+    // ниже первого — это не «неверная настройка», а два одинаковых баннера,
+    // и не дать их сделать лучше, чем объяснять окошком с ошибкой.
+    private var weekFirst: Binding<Double> {
+        Binding(
+            get: { notifications.week.first },
+            set: {
+                model.config.notifications.week.first = $0
+                model.config.notifications.week.second = max(notifications.week.second, $0)
+            }
+        )
+    }
+
+    private var weekSecond: Binding<Double> {
+        Binding(
+            get: { notifications.week.second },
+            set: {
+                model.config.notifications.week.second = $0
+                model.config.notifications.week.first = min(notifications.week.first, $0)
+            }
+        )
+    }
+
+    private var sessionFirst: Binding<Double> {
+        Binding(
+            get: { notifications.session.first },
+            set: {
+                model.config.notifications.session.first = $0
+                model.config.notifications.session.second = max(notifications.session.second, $0)
+            }
+        )
+    }
+
+    private var sessionSecond: Binding<Double> {
+        Binding(
+            get: { notifications.session.second },
+            set: {
+                model.config.notifications.session.second = $0
+                model.config.notifications.session.first = min(notifications.session.first, $0)
+            }
+        )
     }
 }
 

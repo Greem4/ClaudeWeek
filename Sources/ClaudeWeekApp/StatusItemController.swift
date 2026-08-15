@@ -9,6 +9,7 @@ final class StatusItemController: NSObject {
     private let model: PanelModel
     private var provider: any UsageProvider
     private let update = UpdateController()
+    private let notifications = NotificationController()
 
     private var settings: SettingsWindowController?
     private var saveTask: Task<Void, Never>?
@@ -43,6 +44,11 @@ final class StatusItemController: NSObject {
         observeSystemEvents()
         startTimers()
         update.start()
+        // Разрешение на баннеры спрашиваем сразу, а не в момент первого
+        // порога: системный диалог, выскочивший посреди работы через три дня
+        // после установки, читается как выходка, а на первом запуске он
+        // ожидаем. Выключенные уведомления не спрашивают ничего.
+        notifications.apply(config.notifications)
         restoreFromCache()
         render()
         refresh()
@@ -53,7 +59,13 @@ final class StatusItemController: NSObject {
     /// Возраст подписывает сама модель — правило свежести одно на всех.
     private func restoreFromCache() {
         guard let cache = Store.loadCache(), cache.isFresh(at: Date()) else { return }
-        model.apply(cache.snapshot(config: model.config))
+        let snapshot = cache.snapshot(config: model.config)
+        model.apply(snapshot)
+        // Кеш — такой же повод сказать про лимит, как свежий ответ: машину
+        // перезагрузили посреди недели, и до первого ответа сервера человек
+        // иначе не узнал бы, что расход уже за порогом. Повториться это не
+        // даст лог сказанного.
+        notifications.consider(snapshot, config: model.config)
     }
 
     // deinit не нужен: контроллер живёт ровно столько же, сколько процесс,
@@ -230,6 +242,7 @@ final class StatusItemController: NSObject {
             let model = SettingsModel(
                 config: model.config,
                 update: update,
+                notifications: notifications,
                 apply: { [weak self] config in self?.applyFromSettings(config) },
                 check: { config in await Self.check(config: config) }
             )
@@ -262,10 +275,15 @@ final class StatusItemController: NSObject {
         // Интервал живёт в таймере, а не в провайдере: не перезапустив таймер,
         // новый интервал ждал бы перезапуска приложения.
         let intervalChanged = config.refreshInterval != model.config.refreshInterval
+        // Уведомления только что включили — спрашиваем разрешение у системы
+        // здесь же: человек как раз попросил их показывать, и диалог в ответ
+        // на щелчок понятен, в отличие от такого же через час.
+        let notificationsEnabled = config.notifications.enabled && !model.config.notifications.enabled
 
         model.config = config
         applyAppearance()
         render()
+        if notificationsEnabled { notifications.apply(config.notifications) }
 
         // Ползунок шлёт по десятку изменений в секунду — на диск ходим
         // с задержкой, применяя к панели каждое сразу.
@@ -456,7 +474,9 @@ final class StatusItemController: NSObject {
         let config = ConfigStore.load(from: configURL)
         guard config != model.config else { return }
         Log.info("конфиг изменился, применяю")
+        let notificationsEnabled = config.notifications.enabled && !model.config.notifications.enabled
         model.config = config
+        if notificationsEnabled { notifications.apply(config.notifications) }
         settings?.adopt(config)
         applyAppearance()
         provider = ResolvingProvider(config: config)
@@ -475,6 +495,7 @@ final class StatusItemController: NSObject {
             do {
                 let snapshot = try await provider.fetch()
                 self?.model.apply(snapshot)
+                if let self { notifications.consider(snapshot, config: model.config) }
             } catch {
                 Log.warn("не смог обновить данные: \(error)")
                 self?.model.apply(error: error)
