@@ -6,6 +6,7 @@
 
 [![CI](https://github.com/Greem4/ClaudeWeek/actions/workflows/ci.yml/badge.svg)](https://github.com/Greem4/ClaudeWeek/actions/workflows/ci.yml)
 [![Релиз](https://img.shields.io/github/v/release/Greem4/ClaudeWeek?label=релиз&color=brightgreen)](https://github.com/Greem4/ClaudeWeek/releases/latest)
+[![Журнал изменений](https://img.shields.io/badge/журнал-изменений-blue)](CHANGELOG.md)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple&logoColor=white)](#установка)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](Package.swift)
 [![Лицензия MIT](https://img.shields.io/badge/лицензия-MIT-blue)](LICENSE)
@@ -71,6 +72,12 @@ SHA256 с суммой из релиза, заменит себя и спрос�
 калибровка остаются на месте. Подробности — в
 [docs/USAGE.md](docs/USAGE.md#обновление); то же самое из терминала делает
 `ClaudeWeek --update`.
+
+Чем одна версия отличается от другой, записано в
+[журнале изменений](CHANGELOG.md) — человеческими словами, а не списком
+коммитов. Оттуда же собираются заметки к каждому релизу, так что читать его
+можно и прямо на странице выпуска. В программе он открывается ссылкой рядом с
+номером версии — «О программе».
 
 ### Из исходников
 
@@ -259,6 +266,7 @@ ARCH=arm64 ./scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
 
 | Файл | О чём |
 |---|---|
+| [CHANGELOG.md](CHANGELOG.md) | журнал изменений: что нового в каждой версии, начиная с первой |
 | [docs/USAGE.md](docs/USAGE.md) | руководство: доступ, панель, расчёт плана, все настройки и ключи конфига, командная строка |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | карта кода: кто за что отвечает, потоки данных, инварианты, рецепты правок |
 | [docs/API.md](docs/API.md) | официальный источник: схема ответа, токен, дисциплина запросов |
