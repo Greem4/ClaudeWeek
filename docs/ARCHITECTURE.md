@@ -45,7 +45,7 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 
 | Файл | Отвечает за | Ключевые типы |
 |---|---|---|
-| `Config.swift` | все настройки, чтение и запись `config.json`, починка недопустимых значений | `Config`, `AppearanceConfig`, `ThemeKind`, `Thresholds`, `ConfigStore` |
+| `Config.swift` | все настройки, чтение и запись `config.json`, починка недопустимых значений | `Config`, `AppearanceConfig`, `ThemeKind`, `Thresholds`, `NotificationsConfig`, `ConfigStore` |
 | `WorkHours.swift` | рабочий день: сколько рабочего времени в отрезке | `WorkHours` |
 | `WeekWindow.swift` | границы недельного окна, нарезка на календарные сутки, план на момент и на строку | `WeekWindow`, `WeekDaySlot` |
 | `Snapshot.swift` | что показываем: итог, дни, сессия, производные метрики | `UsageSnapshot`, `DayUsage`, `SessionUsage`, `UsageMetrics`, `LimitState` |
@@ -53,7 +53,8 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 | `OfficialProvider.swift` | запрос к `/api/oauth/usage`, разбор ответа, паузы после отказов | `OfficialProvider`, `OfficialUsage`, `UsageTransport` |
 | `LocalProvider.swift` | расчёт по транскриптам, цены моделей, инкрементальное чтение файлов | `LocalProvider`, `LocalUsage`, `ModelPricing` |
 | `ResolvingProvider.swift` | выбор источника, падение на запасной, калибровка, запись кеша | `ResolvingProvider` |
-| `Cache.swift` | `cache.json` и индекс прочитанных транскриптов | `CachedUsage`, `UsageIndex`, `Store` |
+| `Cache.swift` | `cache.json`, индекс прочитанных транскриптов и лог сказанного уведомлениями | `CachedUsage`, `UsageIndex`, `Store` |
+| `Alerts.swift` | уведомления: пороги, правила «когда сказать» и слова баннера | `NotificationsConfig`, `LimitNotifications`, `LimitAlert`, `AlertLog`, `AlertPlanner` |
 | `Keychain.swift` | чтение OAuth-кредов Claude Code | `KeychainCredentials`, `OAuthCredentials`, `CredentialsSource` |
 | `Formatting.swift` | «3 дн 6 ч», проценты, дни недели, часы | `Formatting` |
 | `ISO8601.swift` | разбор меток времени обоих видов (с долями секунды и без) | `ISO8601` |
@@ -151,9 +152,11 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 | `UpdateController.swift` | обновление глазами человека: расписание проверок, состояние, тексты для панели, меню и настроек, перезапуск после установки |
 | `Theme.swift` | палитры тем, метрики, шрифты, `Ink` и `Palette` |
 | `SettingsWindow.swift` | окно настроек: модель, применение изменений, проверка токена, место рядом с панелью |
-| `SettingsView.swift` | пять вкладок настроек: общие, строка меню, панель, доступ, о программе |
+| `SettingsView.swift` | шесть вкладок настроек: общие, строка меню, панель, уведомления, доступ, о программе |
 | `ConfigStamp.swift` | отпечаток файла конфига (замечает правки без file watcher) |
-| `Screenshot.swift` | `--screenshot`: панель во всех темах, она же в разбивке по моделям, иконка в PNG |
+| `NotificationController.swift` | уведомления глазами системы: разрешение macOS, отправка баннеров, лог сказанного на диске |
+| `AlertArtwork.swift` | картинка баннера: дуга для сессии, красное число для недели |
+| `Screenshot.swift` | `--screenshot`: панель во всех темах, она же в разбивке по моделям, вкладка уведомлений, иконка в PNG |
 | `AppIcon.swift` | `--icon`: `.iconset` для сборки бандла |
 | `CLI.swift` | `--json`, `--calibrate` и `--update` |
 
@@ -194,6 +197,33 @@ online», «данные offline», «данные недоступны», «д�
 возвращается вместе с активностью приложения — на уровне `.popUpMenu` она иначе
 висела бы поверх чужих окон. Закрытие или сворачивание окна → `onDismiss` →
 `dropdown.unpin()`.
+
+**Уведомления.** Каждый применённый снимок — и свежий из сети, и поднятый из
+кеша при старте — проходит через `NotificationController.consider(_:config:)`.
+Решает не он: `AlertPlanner.alerts(for:config:log:now:)` в ядре сверяет расход
+с порогами, помнит через `AlertLog`, о чём уже говорили, и отдаёт список
+поводов — обычно пустой. Контроллеру остаётся системная часть: разрешение
+macOS, сборка `UNNotificationRequest` с картинкой от `AlertArtwork` и запись
+лога в `alerts.json`.
+
+Правила живут в ядре именно затем, чтобы их гоняли тесты: «один порог — один
+раз за окно», «только на ухудшении», остывание. Уведомление, показанное дважды
+или не показанное вовсе, глазами в отладке не ловится — им нужен `AlertTests`.
+Там же и слова баннера (`LimitAlert.message`): текст — такая же часть
+уведомления, как момент отправки.
+
+Какой это лимит, в тексте не сказано — это работа картинки (`AlertArtwork`):
+сессия рисуется дугой, неделя числом, тем же языком, что значок в строке меню.
+Цвет обеих форм берётся по порогам самих уведомлений (`LimitState.forPercent`
+над `first`/`second`), а не по цветовым со вкладки «Строка меню»: те стоят на
+своих отметках, и баннер о пробитом пороге приходил бы со спокойным зелёным
+числом — просто потому, что до окраски значка не хватило процента.
+
+Разрешение спрашивается на старте (если уведомления включены) и в момент,
+когда их включают в настройках, — но не тогда, когда порог уже пробит:
+системный диалог посреди работы читается как выходка. У бинаря без бандла
+уведомлений нет вовсе — `UNUserNotificationCenter.current()` там роняет
+процесс, поэтому центр даже не запрашивается (`NotificationController.isAvailable`).
 
 **Обновление программы.** `UpdateController.start()` спрашивает GitHub через
 пять секунд после запуска и дальше раз в сутки; `checkIfDue()` добирает
@@ -328,7 +358,7 @@ swift build                     # оба таргета
 # объявления: ключи kSecUseAuthenticationUI в Keychain.swift оставлены
 # намеренно, замены им нет, и группа понижена обратно до предупреждения.
 swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
-swift run ClaudeWeekTests       # 371 проверка, без сети и без UI
+swift run ClaudeWeekTests       # 439 проверок, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/signing-cert.sh       # один раз: постоянный сертификат подписи
 ./scripts/make-app.sh           # собрать dist/ClaudeWeek.app
@@ -485,6 +515,7 @@ Intel — собирает у себя, `install.sh` соберёт нативн
 |---|---|
 | `~/.config/claude-week/config.json` | настройки (пишет и окно настроек, и вы сами) |
 | `~/.config/claude-week/cache.json` | последний снимок, подобранный бюджет, момент сброса, сессия |
+| `~/.config/claude-week/alerts.json` | о каких порогах уведомления уже говорили: окна лимитов, последние объявленные проценты, момент последнего баннера. Удаление безопасно — вернётся одно повторное уведомление |
 | `~/.config/claude-week/index.json` | индекс прочитанных транскриптов (инкрементальное чтение); схема 2 — записи хранят семейство модели и токены, из них считается разбивка. Индекс прошлой схемы не переносится, а отстраивается заново: версия проверяется до разбора записей |
 | `~/.claude/projects/**/*.jsonl` | транскрипты Claude Code — вход локального источника |
 | `~/Library/Logs/ClaudeWeek.log` | лог запущенного через LaunchAgent приложения |

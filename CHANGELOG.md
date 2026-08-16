@@ -16,6 +16,30 @@ is the place for the shorter, human-facing story.
 
 ### Added
 
+- Notifications when spend crosses a threshold you set: two thresholds per
+  limit — 80 % and 95 % for the week, 75 % and 95 % for the 5-hour session —
+  configured on a new "Уведомления" tab, with a "Показать пример" button in each
+  section that sends the real banner on demand. Each limit can be silenced on
+  its own, and one switch turns all notifications off. The banner is two lines —
+  how much is spent and how long until the reset — and *which* limit it is comes
+  from the artwork rather than a third line of text: the 5-hour session arrives
+  as an arc filled to the spend, the weekly limit as a red number, the same
+  language the menu bar icon speaks, coloured by the notification thresholds
+  themselves — amber between the two, red from the second one on. Three rules
+  keep it quiet: one banner per
+  threshold per limit window, only on the way up, and no two banners closer than
+  five minutes. What has been said is stored in
+  `~/.config/claude-week/alerts.json`, so a restart mid-week does not repeat it.
+  The decision logic and the wording both live in the core (`AlertPlanner`,
+  `LimitAlert.message`) and are covered by tests.
+- `--screenshot` now also renders the notifications tab
+  (`settings-notifications-light.png`, `settings-notifications-dark.png`). Form
+  views are captured through a real window: `ImageRenderer` returns an empty
+  rectangle for a grouped `Form`, and an inactive window would draw every switch
+  grey, making enabled settings look off.
+- `Formatting.longDuration` — the same interval in words ("2 дня 4 часа",
+  "1 час 12 минут"), with Russian pluralisation. The panel keeps the short form;
+  a banner has room for the long one.
 - Model breakdown in the panel: clicking the percentage — on a day row or on
   the 5-hour session row — replaces the day rows with one row per model (Opus,
   Sonnet, Haiku), each with the same kind of bar showing its share of the
@@ -39,6 +63,16 @@ is the place for the shorter, human-facing story.
 
 ### Notes
 
+- Notifications are on out of the box: a feature that stays silent until you
+  find its tab does not do the job it was added for. macOS asks for permission
+  once, on the first launch of the new version; if it is refused, the tab says
+  so and offers the only place the ban can be lifted — System Settings. A build
+  run straight from `swift run` has no notifications at all: macOS identifies an
+  app by its bundle, and there isn't one.
+- Session notifications need the official source. The local estimate does not
+  compute the 5-hour percentage at all, so offline there is nothing to warn
+  about — and an expired session stays quiet rather than warning off a cached
+  number that reset hours ago.
 - The breakdown is computed from local transcripts in `~/.claude/projects` and
   weighted by model prices, so it is an estimate — which the panel states
   plainly while the breakdown is on screen. The official `/api/oauth/usage`
