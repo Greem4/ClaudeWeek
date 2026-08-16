@@ -8,6 +8,17 @@
 	<string>ClaudeWeek</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.greem4.claudeweek</string>
+	<!-- Языки программы. Свои строки она выбирает сама, по настройке, но
+	     системные части — запрос разрешения на уведомления, стандартные
+	     кнопки диалогов — macOS локализует по этому списку, а языком по
+	     умолчанию считает первый. -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ru</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ru</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleIconFile</key>
 	<string>ClaudeWeek</string>
 	<key>CFBundleExecutable</key>

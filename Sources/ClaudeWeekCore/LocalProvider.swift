@@ -39,14 +39,17 @@ public enum ModelFamily {
         haiku: "Haiku",
         fable: "Fable",
         mythos: "Mythos",
-        unknown: "Неизвестно",
     ]
 
     /// Подпись для окна разбивки. Незнакомая модель зовётся своим полным
     /// именем: придумывать ей семейство мы не вправе, а спрятать под
     /// «прочее» — потерять единственную подсказку о том, что считалось.
-    public static func title(_ family: String) -> String {
-        titles[family] ?? family
+    ///
+    /// Имена моделей не переводятся — переводится только «неизвестно»: это
+    /// единственное слово здесь, а не название.
+    public static func title(_ family: String, lang: Lang = .ru) -> String {
+        if family == unknown { return L10n(lang).pick("Неизвестно", "Unknown") }
+        return titles[family] ?? family
     }
 }
 

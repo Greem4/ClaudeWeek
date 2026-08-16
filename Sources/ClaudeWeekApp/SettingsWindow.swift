@@ -91,13 +91,16 @@ final class SettingsModel {
     /// Подпись бюджета: заданный человеком важнее подобранного программой,
     /// поэтому и показываем, откуда взялось число.
     var budgetNote: String {
+        let s = config.strings
         if config.weeklyBudget > 0 {
-            return String(format: "%.2f $ ≈ 100 %% · задан вами", config.weeklyBudget)
+            let cost = Formatting.cost(config.weeklyBudget, lang: s.lang)
+            return s.pick("\(cost) ≈ 100 % · задан вами", "\(cost) ≈ 100 % · set by you")
         }
         if let pickedBudget, pickedBudget > 0 {
-            return String(format: "%.2f $ ≈ 100 %% · подобран сам", pickedBudget)
+            let cost = Formatting.cost(pickedBudget, lang: s.lang)
+            return s.pick("\(cost) ≈ 100 % · подобран сам", "\(cost) ≈ 100 % · worked out by the app")
         }
-        return "не подобран"
+        return s.pick("не подобран", "not worked out yet")
     }
 
     /// «Показать пример» с вкладки уведомлений: тот же баннер, что придёт
@@ -163,7 +166,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         let hosting = NSHostingController(rootView: SettingsView(model: model))
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Настройки ClaudeWeek"
+        window.title = model.config.strings.pick("Настройки ClaudeWeek", "ClaudeWeek Settings")
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
         window.delegate = self

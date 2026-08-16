@@ -146,7 +146,50 @@ jobs:
       - name: Заметки к релизу
         run: |
           PREV="$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)"
+          REPO="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+
+          # Что нового рассказывает журнал, а не история git: сообщения коммитов
+          # написаны про код, а тому, кто скачивает образ, нужно, что изменилось
+          # для него. Раздел версии закрывает release-on-merge.yml; молчит
+          # журнал (релиз собран руками, запись забыли) — заметки собираются из
+          # коммитов, как раньше. Ссылки внутри журнала относительные, на
+          # странице релиза они ведут в никуда — разворачиваем их на текущий тег.
+          NOTES=""
+          if NOTES="$(./scripts/changelog.sh section "$VERSION")"; then
+            NOTES="$(printf '%s\n' "$NOTES" \
+              | sed -E "s#\]\((docs/|scripts/|\.github/)#](${REPO}/blob/${GITHUB_REF_NAME}/\1#g")"
+          fi
+
           {
+            echo '## Что нового'
+            echo
+            if [ -n "$NOTES" ]; then
+              printf '%s\n' "$NOTES"
+              # Коммиты — под спойлером и ниже журнала: они про код, а страницу
+              # выпуска открывают, чтобы узнать, что изменилось для человека.
+              # Порядок ещё и практический: окно обновления в самой программе
+              # показывает первые строки заметок, обрывая их на первой разметке.
+              if [ -n "$PREV" ]; then
+                echo
+                echo '<details>'
+                echo "<summary>Коммиты с $PREV</summary>"
+                echo
+                git log --pretty='- %s' "$PREV..$GITHUB_REF_NAME"
+                echo
+                echo '</details>'
+              fi
+              echo
+              echo "Прошлые версии — в [журнале изменений]($REPO/blob/$GITHUB_REF_NAME/CHANGELOG.md)."
+            elif [ -n "$PREV" ]; then
+              git log --pretty='- %s' "$PREV..$GITHUB_REF_NAME"
+            else
+              echo '- первый релиз'
+            fi
+            if [ -n "$PREV" ]; then
+              echo
+              echo "[Все изменения с $PREV]($REPO/compare/$PREV...$GITHUB_REF_NAME)"
+            fi
+            echo
             echo '## Установка'
             echo
             echo "Скачайте \`ClaudeWeek-$VERSION-arm64.dmg\`, перетащите приложение"
@@ -170,16 +213,6 @@ jobs:
             echo
             echo 'Требуется macOS 14+ на Apple Silicon (M1 и новее). Готового образа'
             echo 'под Intel нет — там сборка из исходников тем же `install.sh`.'
-            echo
-            echo '## Что изменилось'
-            echo
-            if [ -n "$PREV" ]; then
-              git log --pretty='- %s' "$PREV..$GITHUB_REF_NAME"
-              echo
-              echo "[Все изменения с $PREV](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/$PREV...$GITHUB_REF_NAME)"
-            else
-              echo '- первый релиз'
-            fi
             echo
             echo '## Контрольная сумма'
             echo

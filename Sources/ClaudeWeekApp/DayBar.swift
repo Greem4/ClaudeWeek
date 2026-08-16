@@ -57,14 +57,17 @@ struct DayRowTap {
 
     /// Что случится по клику — словами, для подсказки при наведении и
     /// VoiceOver: полосы сами о своей нажимаемости не говорят.
-    var hint: String {
-        expands ? "нажмите — вся неделя" : "нажмите — только сегодня"
+    func hint(_ s: L10n) -> String {
+        expands
+            ? s.pick("нажмите — вся неделя", "tap for the whole week")
+            : s.pick("нажмите — только сегодня", "tap for today only")
     }
 }
 
 /// Строка панели: подпись дня, полоса и числа «факт / план».
 /// Числа обязательны — цвет нигде не остаётся единственным носителем смысла.
 struct DayRow: View {
+    @Environment(\.strings) private var s
     let day: DayUsage
     let label: String
     let fullLabel: String
@@ -93,7 +96,7 @@ struct DayRow: View {
             // Жест на цифрах VoiceOver не видит — строка объявлена одним
             // элементом. Поэтому разбивка достаётся ему отдельным действием:
             // мышью в колонку, с клавиатуры — из списка действий строки.
-            .accessibilityAction(named: "Расход по моделям") { valueTap?() }
+            .accessibilityAction(named: s.pick("Расход по моделям", "Spend by model")) { valueTap?() }
             .help(tooltip)
 
         // Нажимаемой строка становится целиком, вместе с прозрачными зазорами
@@ -104,7 +107,7 @@ struct DayRow: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: tap.action)
                 .accessibilityAddTraits(.isButton)
-                .accessibilityHint(tap.hint)
+                .accessibilityHint(tap.hint(s))
         } else {
             row
         }
@@ -154,7 +157,7 @@ struct DayRow: View {
             column
                 .contentShape(Rectangle())
                 .onTapGesture(perform: valueTap)
-                .help(DayRow.valueHint)
+                .help(DayRow.valueHint(s))
         } else {
             column
         }
@@ -162,7 +165,9 @@ struct DayRow: View {
 
     /// Что случится по клику на цифрах — словами. Одно на строку дня и строку
     /// сессии: место разное, действие одно.
-    static let valueHint = "нажмите — расход по моделям"
+    static func valueHint(_ s: L10n) -> String {
+        s.pick("нажмите — расход по моделям", "tap for spend by model")
+    }
 
     /// Наведение поясняет, какие именно часы стоят за строкой: у крайних
     /// суток недели подпись дня повторяется, и различает их только время.
@@ -171,7 +176,7 @@ struct DayRow: View {
     private var tooltip: String {
         let day = interval.map { "\(fullLabel), \($0)" } ?? fullLabel
         guard let tap else { return day }
-        return "\(day) · \(tap.hint)"
+        return "\(day) · \(tap.hint(s))"
     }
 
     private var values: String {
@@ -182,13 +187,15 @@ struct DayRow: View {
     private var voiceOverLabel: String {
         let plan = Formatting.percent(day.planPercent, withSign: false)
         // Начертание и цвет VoiceOver не читает: текущие сутки он узнаёт словом.
-        let today = isToday ? "\(fullLabel), сегодня" : fullLabel
+        let today = isToday ? s.pick("\(fullLabel), сегодня", "\(fullLabel), today") : fullLabel
         let name = interval.map { "\(today), \($0)" } ?? today
         guard let used = day.usedPercent else {
-            return "\(name), план \(plan) процентов, расхода ещё нет"
+            return s.pick("\(name), план \(plan) процентов, расхода ещё нет",
+                          "\(name), plan \(plan) per cent, nothing spent yet")
         }
         let fact = Formatting.percent(used, withSign: false)
-        let verdict = isOverspent ? ", перерасход" : ""
-        return "\(name), потрачено \(fact) процентов из \(plan) плановых\(verdict)"
+        let verdict = isOverspent ? s.pick(", перерасход", ", overspent") : ""
+        return s.pick("\(name), потрачено \(fact) процентов из \(plan) плановых\(verdict)",
+                      "\(name), \(fact) per cent spent of \(plan) planned\(verdict)")
     }
 }

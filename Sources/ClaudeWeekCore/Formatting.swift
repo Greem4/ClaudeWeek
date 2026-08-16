@@ -2,19 +2,37 @@ import Foundation
 
 /// Форматирование для UI. Имена дней заданы таблицей, а не DateFormatter:
 /// результат не зависит от установленных в системе локалей и проверяется тестами.
+///
+/// Язык приходит параметром и по умолчанию русский — тот, на котором программа
+/// говорила до появления второго. Панель и настройки передают выбранный явно.
 public enum Formatting {
     static let shortWeekdays = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"]
     static let fullWeekdays = [
         "Воскресенье", "Понедельник", "Вторник", "Среда",
         "Четверг", "Пятница", "Суббота",
     ]
+    /// Английские сокращения — двухбуквенные, как в русской таблице: колонка
+    /// дня в панели рассчитана на две буквы, и «Wed» её распирает.
+    static let shortWeekdaysEN = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
+    static let fullWeekdaysEN = [
+        "Sunday", "Monday", "Tuesday", "Wednesday",
+        "Thursday", "Friday", "Saturday",
+    ]
 
-    public static func weekdayShort(_ date: Date, calendar: Calendar) -> String {
-        shortWeekdays[(calendar.component(.weekday, from: date) - 1 + 7) % 7]
+    public static func weekdayShort(_ date: Date, calendar: Calendar, lang: Lang = .ru) -> String {
+        let index = (calendar.component(.weekday, from: date) - 1 + 7) % 7
+        return lang == .ru ? shortWeekdays[index] : shortWeekdaysEN[index]
     }
 
-    public static func weekdayFull(_ date: Date, calendar: Calendar) -> String {
-        fullWeekdays[(calendar.component(.weekday, from: date) - 1 + 7) % 7]
+    public static func weekdayFull(_ date: Date, calendar: Calendar, lang: Lang = .ru) -> String {
+        let index = (calendar.component(.weekday, from: date) - 1 + 7) % 7
+        return lang == .ru ? fullWeekdays[index] : fullWeekdaysEN[index]
+    }
+
+    /// Семь названий подряд, начиная с воскресенья, — нумерация `Calendar`.
+    /// Нужны списку «День сброса» в настройках, где дни выбираются не по дате.
+    public static func weekdayNames(_ lang: Lang) -> [String] {
+        lang == .ru ? fullWeekdays : fullWeekdaysEN
     }
 
     public static func clock(_ date: Date, calendar: Calendar) -> String {
@@ -30,57 +48,46 @@ public enum Formatting {
     }
 
     /// «3 дн 6 ч», «1 ч 12 мин», «12 мин».
-    public static func duration(_ interval: TimeInterval) -> String {
+    public static func duration(_ interval: TimeInterval, lang: Lang = .ru) -> String {
         let total = Int(max(interval, 0).rounded())
         let days = total / 86_400
         let hours = (total % 86_400) / 3_600
         let minutes = (total % 3_600) / 60
+        let l = L10n(lang)
 
-        if days > 0 { return "\(days) дн \(hours) ч" }
-        if hours > 0 { return "\(hours) ч \(minutes) мин" }
-        if minutes > 0 { return "\(minutes) мин" }
-        return "меньше минуты"
+        if days > 0 { return "\(days) \(l.pick("дн", "d")) \(hours) \(l.pick("ч", "h"))" }
+        if hours > 0 { return "\(hours) \(l.pick("ч", "h")) \(minutes) \(l.pick("мин", "m"))" }
+        if minutes > 0 { return "\(minutes) \(l.pick("мин", "m"))" }
+        return l.pick("меньше минуты", "under a minute")
     }
 
     /// «2 дня 4 часа», «1 час 12 минут», «42 минуты» — та же длительность, что
     /// у `duration`, но словами. В панели место дорого и «2 дн 4 ч» там
     /// уместно; в уведомлении строка одна, места хватает, а сокращения
     /// читаются телеграммой.
-    public static func longDuration(_ interval: TimeInterval) -> String {
+    public static func longDuration(_ interval: TimeInterval, lang: Lang = .ru) -> String {
         let total = Int(max(interval, 0).rounded())
         let days = total / 86_400
         let hours = (total % 86_400) / 3_600
         let minutes = (total % 3_600) / 60
+        let l = L10n(lang)
 
         // Ровный остаток называем одним словом: «3 часа», а не «3 часа
         // 0 минут» — ноль в строке читается как опечатка.
         if days > 0 {
-            let head = plural(days, "день", "дня", "дней")
-            return hours > 0 ? "\(head) \(plural(hours, "час", "часа", "часов"))" : head
+            let head = l.plural(days, "день", "дня", "дней", "day", "days")
+            return hours > 0
+                ? "\(head) \(l.plural(hours, "час", "часа", "часов", "hour", "hours"))"
+                : head
         }
         if hours > 0 {
-            let head = plural(hours, "час", "часа", "часов")
-            return minutes > 0 ? "\(head) \(plural(minutes, "минута", "минуты", "минут"))" : head
+            let head = l.plural(hours, "час", "часа", "часов", "hour", "hours")
+            return minutes > 0
+                ? "\(head) \(l.plural(minutes, "минута", "минуты", "минут", "minute", "minutes"))"
+                : head
         }
-        if minutes > 0 { return plural(minutes, "минута", "минуты", "минут") }
-        return "меньше минуты"
-    }
-
-    /// Русское склонение при числе: 1 час, 2 часа, 5 часов, 11 часов.
-    private static func plural(_ count: Int, _ one: String, _ few: String, _ many: String) -> String {
-        let tail = count % 100
-        let last = count % 10
-        let word: String
-        if (11...14).contains(tail) {
-            word = many
-        } else if last == 1 {
-            word = one
-        } else if (2...4).contains(last) {
-            word = few
-        } else {
-            word = many
-        }
-        return "\(count) \(word)"
+        if minutes > 0 { return l.plural(minutes, "минута", "минуты", "минут", "minute", "minutes") }
+        return l.pick("меньше минуты", "under a minute")
     }
 
     /// Проценты без дрожания знаков: всегда целое число.
@@ -91,28 +98,41 @@ public enum Formatting {
 
     /// «12,4 млн», «812 тыс», «431». Токенов за неделю набегают миллионы, и
     /// точное их число не значит ничего — читается порядок.
-    public static func tokens(_ count: Int) -> String {
+    ///
+    /// Дробный разделитель идёт за языком: «12,4 млн» по-русски и «12.4M»
+    /// по-английски — запятая там читается как разделитель тысяч.
+    public static func tokens(_ count: Int, lang: Lang = .ru) -> String {
         let value = Double(count)
         if value >= 1_000_000 {
             let millions = String(format: "%.1f", value / 1_000_000)
-            return "\(millions.replacingOccurrences(of: ".", with: ",")) млн"
+            return lang == .ru
+                ? "\(millions.replacingOccurrences(of: ".", with: ",")) млн"
+                : "\(millions)M"
         }
-        if value >= 1_000 { return "\(Int((value / 1_000).rounded())) тыс" }
+        if value >= 1_000 {
+            let thousands = Int((value / 1_000).rounded())
+            return lang == .ru ? "\(thousands) тыс" : "\(thousands)K"
+        }
         return "\(count)"
     }
 
     /// Условная стоимость: те же доллары, которыми меряется недельный бюджет.
     /// Настоящих денег это не значит — подписка списывает своё независимо.
-    public static func cost(_ value: Double) -> String {
-        String(format: "%.2f $", value).replacingOccurrences(of: ".", with: ",")
+    public static func cost(_ value: Double, lang: Lang = .ru) -> String {
+        let text = String(format: "%.2f", value)
+        return lang == .ru
+            ? "\(text.replacingOccurrences(of: ".", with: ",")) $"
+            : "$\(text)"
     }
 
     /// «сброс ПТ 16:00» — час сброса в зоне окна, той же, по которой панель
     /// считает сутки. Московского хвоста для сверки здесь больше нет: два часа
     /// подряд читались как спорящие, а нужен всегда только свой.
-    public static func resetLabel(_ window: WeekWindow) -> String {
+    public static func resetLabel(_ window: WeekWindow, lang: Lang = .ru) -> String {
         let end = window.end
-        return "сброс \(weekdayShort(end, calendar: window.calendar)) \(clock(end, calendar: window.calendar))"
+        let day = weekdayShort(end, calendar: window.calendar, lang: lang)
+        let time = clock(end, calendar: window.calendar)
+        return L10n(lang).pick("сброс \(day) \(time)", "resets \(day) \(time)")
     }
 
     /// Хвост подписи сессии: «через 1 ч 12 мин», «в 14:35» или «через 1 ч 12
@@ -126,16 +146,19 @@ public enum Formatting {
         at resetsAt: Date,
         now: Date,
         display: SessionResetDisplay,
-        calendar: Calendar
+        calendar: Calendar,
+        lang: Lang = .ru
     ) -> String {
-        let left = "через \(duration(max(resetsAt.timeIntervalSince(now), 0)))"
+        let l = L10n(lang)
+        let remaining = duration(max(resetsAt.timeIntervalSince(now), 0), lang: lang)
+        let left = l.pick("через \(remaining)", "in \(remaining)")
         let sameDay = calendar.isDate(resetsAt, inSameDayAs: now)
-        let day = sameDay ? "" : "\(weekdayShort(resetsAt, calendar: calendar)) "
+        let day = sameDay ? "" : "\(weekdayShort(resetsAt, calendar: calendar, lang: lang)) "
         let moment = "\(day)\(clock(resetsAt, calendar: calendar))"
 
         switch display {
         case .relative: return left
-        case .absolute: return "в \(moment)"
+        case .absolute: return l.pick("в \(moment)", "at \(moment)")
         case .both: return "\(left) (\(moment))"
         }
     }

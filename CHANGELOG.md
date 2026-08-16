@@ -1,204 +1,246 @@
-# Changelog
+# Журнал изменений
 
-All notable changes to ClaudeWeek are recorded here.
+Здесь записано всё заметное, что менялось в ClaudeWeek.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — по
+[семантическому версионированию](https://semver.org/lang/ru/).
 
-Entries for 0.1.0–0.1.7 were reconstructed from git history and release notes —
-the file was started during 0.1.8 development. From 0.1.8 on, every change is
-written here in the same pull request that makes it, under `Unreleased`; the
-heading is renamed to the version once the release goes out. Release notes on
-GitHub are still generated from commit subjects by `release.yml`, so this file
-is the place for the shorter, human-facing story.
+Записи 0.1.0–0.1.7 восстановлены по истории git и заметкам к релизам: сам файл
+завели уже во время работы над 0.1.8. С 0.1.8 каждое изменение пишется сюда тем
+же pull request, который его вносит, — в раздел «Не выпущено». Заголовок
+раздела превращается в номер версии при выпуске, и делает это
+[workflow](.github/workflows/release-on-merge.yml), а не человек: строчка,
+которую надо не забыть, рано или поздно забывается. Отсюда же собираются
+заметки к релизу на GitHub, так что написанное здесь читают не только те, кто
+заглядывает в репозиторий.
 
-## [Unreleased]
+## [Не выпущено]
 
-### Changed
+### Добавлено
 
-- New app icon: the ring from the menu bar, drawn large on an ink-coloured
-  tile — green from 0 to 80 %, amber to 90 %, red closing the circle to 100 %,
-  in the same colours the panel uses. The old icon was three week bars, and
-  below 32 pt they merged into a green smudge; the ring survives down to 16 pt,
-  which is the size Spotlight and the "Open with" list show. Thresholds of the
-  icon are deliberately not the notification defaults (80 / 95): five per cent
-  of a circle is one pixel at that size, and red would not be visible at all.
-- Notification screenshots in the README and the guide retaken — the banners
-  carry the app icon, so both showed the old one. The README now opens with the
-  icon as well (`docs/images/app-icon.png`).
+- Английский интерфейс. Язык следует за системным — русский на русской macOS,
+  английский на любой другой, — а на вкладке «Общие» выбирается явно: «Как в
+  системе», «Русский» или «English». Переключается на ходу, без перезапуска:
+  язык лежит в конфиге, и панель с настройками перерисовываются по нему тем же
+  движением, что и на любую другую правку. Переведено всё, что видит человек:
+  панель и её разбивка по моделям, меню строки меню, шесть вкладок настроек,
+  баннеры уведомлений, окна обновления и ошибки, доходящие до панели. Дни
+  недели, длительности и единицы токенов идут за языком со своими правилами
+  склонения — «2 дня 4 часа» и «2 days 4 hours». Лог-файл остаётся русским: его
+  читают при разборе поломки, и одну ошибку не должно быть видно двумя разными
+  строками.
+- `--lang=system|ru|en` — язык на один запуск, не трогая настройку. Тем же
+  ключом снимаются английские картинки: `--screenshot` рисует то, что выбрано.
+- Ссылка «журнал изменений» рядом с номером версии на вкладке «О программе» —
+  открывает этот файл на GitHub. Раньше прочитать, что изменилось, можно было
+  только при доступном обновлении: кнопка «Что нового» появляется вместе с ним
+  и ведёт на страницу выпуска.
+- `scripts/changelog.sh` — закрыть версию в журнале (`release`) и достать её
+  раздел (`section`). Им же пользуются оба релизных workflow, так что
+  посмотреть заранее, что уедет в заметки, можно той же командой.
+
+### Изменено
+
+- Журнал ведётся по-русски, как и вся остальная документация проекта, и
+  разделы в нём русские: «Добавлено», «Изменено», «Исправлено», «Заметки».
+- Заметки к релизу начинаются с раздела журнала, а список коммитов уехал под
+  спойлер ниже: страницу выпуска открывают, чтобы узнать, что изменилось для
+  человека, а не какие подписи были у коммитов. Из тех же строк собирается окно
+  обновления в самой программе — теперь оно показывает первые пункты «что
+  нового», а не начало инструкции по установке.
+- Раздел «Не выпущено» закрывает `release-on-merge.yml` тем же шагом, которым
+  поднимает версию: заголовок превращается в номер с датой, сверху заводится
+  новый пустой, ссылки сравнения дописываются. Пока это была ручная
+  обязанность, она не пережила первого же выпуска — записи 0.1.10 уехали в
+  релиз, так и оставшись под «не выпущено»; заодно эта версия закрыта задним
+  числом.
+
+## [0.1.10] — 2026-08-16
+
+### Изменено
+
+- Новая иконка приложения: то самое кольцо из строки меню, нарисованное крупно
+  на чернильной плитке — зелёное от 0 до 80 %, жёлтое до 90 %, красное замыкает
+  круг на 100 %, теми же цветами, какими говорит панель. Прежней иконкой были
+  три полосы недели, и мельче 32 pt они сливались в зелёное пятно; кольцо
+  держится до 16 pt — размера, которым его показывают Spotlight и список
+  «Открыть в программе». Пороги на иконке намеренно не те, что стоят по
+  умолчанию у уведомлений (80 / 95): пять процентов круга на таком размере —
+  один пиксель, красного не было бы видно вовсе.
+- Скриншоты уведомлений в README и руководстве пересняты: баннер несёт иконку
+  приложения, и на обоих она была старая. README теперь и открывается иконкой
+  (`docs/images/app-icon.png`).
 
 ## [0.1.9] — 2026-08-16
 
-### Added
+### Добавлено
 
-- Notifications when spend crosses a threshold you set: two thresholds per
-  limit — 80 % and 95 % for the week, 75 % and 95 % for the 5-hour session —
-  configured on a new "Уведомления" tab, with a "Показать пример" button in each
-  section that sends the real banner on demand. Each limit can be silenced on
-  its own, and one switch turns all notifications off. The banner is two lines —
-  how much is spent and how long until the reset — and *which* limit it is comes
-  from the artwork rather than a third line of text: the 5-hour session arrives
-  as an arc filled to the spend, the weekly limit as a red number, the same
-  language the menu bar icon speaks, coloured by the notification thresholds
-  themselves — amber between the two, red from the second one on. Three rules
-  keep it quiet: one banner per
-  threshold per limit window, only on the way up, and no two banners closer than
-  five minutes. What has been said is stored in
-  `~/.config/claude-week/alerts.json`, so a restart mid-week does not repeat it.
-  The decision logic and the wording both live in the core (`AlertPlanner`,
-  `LimitAlert.message`) and are covered by tests.
-- `--screenshot` now also renders the notifications tab
-  (`settings-notifications-light.png`, `settings-notifications-dark.png`). Form
-  views are captured through a real window: `ImageRenderer` returns an empty
-  rectangle for a grouped `Form`, and an inactive window would draw every switch
-  grey, making enabled settings look off.
-- `Formatting.longDuration` — the same interval in words ("2 дня 4 часа",
-  "1 час 12 минут"), with Russian pluralisation. The panel keeps the short form;
-  a banner has room for the long one.
+- Уведомления, когда расход перешагнул заданную вами отметку: по два порога на
+  лимит — 80 и 95 % у недели, 75 и 95 % у пятичасовой сессии, — на новой
+  вкладке «Уведомления», где в каждой секции есть кнопка «Показать пример»: она
+  присылает настоящий баннер по требованию. Каждый лимит выключается отдельно,
+  все уведомления разом — одним тумблером. В баннере две строки — сколько
+  потрачено и через сколько сброс, — а *какой* это лимит, говорит картинка, а
+  не третья строка текста: пятичасовая сессия приходит дугой, залитой по
+  расходу, недельный лимит — красным числом. Тот же язык, на котором говорит
+  значок в строке меню, и цвет считается по самим порогам уведомлений — жёлтый
+  между первым и вторым, красный от второго и выше. Тишину держат три правила:
+  один баннер на порог за окно лимита, только на ухудшении и не чаще раза в
+  пять минут. Сказанное хранится в `~/.config/claude-week/alerts.json`, поэтому
+  перезапуск посреди недели ничего не повторяет. И решение, и формулировки
+  живут в ядре (`AlertPlanner`, `LimitAlert.message`) и покрыты тестами.
+- `--screenshot` снимает теперь и вкладку уведомлений
+  (`settings-notifications-light.png`, `settings-notifications-dark.png`).
+  Формы снимаются через настоящее окно: `ImageRenderer` отдаёт для
+  сгруппированной `Form` пустой прямоугольник, а в неактивном окне все
+  переключатели рисуются серыми — включённые настройки выглядели бы
+  выключенными.
+- `Formatting.longDuration` — тот же интервал словами («2 дня 4 часа»,
+  «1 час 12 минут»), со склонением. Панели хватает короткой формы, а в баннере
+  есть место под длинную.
 
-### Notes
+### Заметки
 
-- Notifications are on out of the box: a feature that stays silent until you
-  find its tab does not do the job it was added for. macOS asks for permission
-  once, on the first launch of the new version; if it is refused, the tab says
-  so and offers the only place the ban can be lifted — System Settings. A build
-  run straight from `swift run` has no notifications at all: macOS identifies an
-  app by its bundle, and there isn't one.
-- Session notifications need the official source. The local estimate does not
-  compute the 5-hour percentage at all, so offline there is nothing to warn
-  about — and an expired session stays quiet rather than warning off a cached
-  number that reset hours ago.
+- Уведомления включены из коробки: функция, молчащая до тех пор, пока не найдёшь её
+  вкладку, не делает того, ради чего её добавляли. macOS спрашивает разрешение
+  один раз, при первом запуске новой версии; если отказали — вкладка так и
+  говорит и ведёт в единственное место, где запрет снимается, в Системные
+  настройки. У сборки, запущенной прямо через `swift run`, уведомлений нет
+  вовсе: macOS узнаёт программу по бандлу, а его там нет.
+- Уведомлениям о сессии нужен официальный источник. Локальная оценка процент
+  пятичасового лимита не считает вовсе, поэтому офлайн предупреждать не о чем —
+  а истёкшая сессия молчит, вместо того чтобы пугать цифрой из кеша, сброшенной
+  несколько часов назад.
 
 ## [0.1.8] — 2026-08-15
 
-### Added
+### Добавлено
 
-- Model breakdown in the panel: clicking the percentage — on a day row or on
-  the 5-hour session row — replaces the day rows with one row per model (Opus,
-  Sonnet, Haiku), each with the same kind of bar showing its share of the
-  week's spend. Clicking the percentage again brings the week back. Every share
-  carries a `≈`, and a line under the rows marks the whole thing as a rough
-  local estimate. Hovering a row gives the rest: share of the weekly limit,
-  input / output / cache tokens, reply count and weighted cost.
-- `--screenshot` now also renders the panel in that state
+- Разбивка по моделям в панели: щелчок по проценту — в строке дня или в строке
+  пятичасовой сессии — заменяет дни строками моделей (Opus, Sonnet, Haiku), и у
+  каждой такая же полоса с её долей в расходе недели. Щелчок по проценту ещё
+  раз возвращает неделю. Каждая доля идёт со знаком `≈`, а строка под ними
+  прямо говорит, что это грубая локальная оценка. Наведение на строку добавляет
+  остальное: долю недельного лимита, токены на вход, выход и кеш, число ответов
+  и взвешенную стоимость.
+- `--screenshot` снимает теперь и панель в этом состоянии
   (`panel-models-light.png`, `panel-models-dark.png`).
 
-### Changed
+### Изменено
 
-- The update status on the About tab now names the version and the day it was
-  checked: "у вас последняя — 0.1.7, проверено ВТ в 14:23". Previously it gave
-  the time only, which read as "today" for a check made two days ago.
-- Usage index schema bumped to 2: records now carry the model family and token
-  counts, which is what the breakdown is built from. The old index cannot be
-  migrated and is rebuilt from transcripts on first run — one longer scan, then
-  business as usual. A stale index is now recognised by its version before it is
-  parsed, so a schema change no longer looks like a corrupted file in the log.
+- Состояние обновления на вкладке «О программе» называет версию и день
+  проверки: «у вас последняя — 0.1.7, проверено ВТ в 14:23». Раньше там стояло
+  одно время, и проверка двухдневной давности читалась как сегодняшняя.
+- Схема индекса расхода поднята до 2: записи несут семейство модели и число
+  токенов — из этого и собрана разбивка. Старый индекс не мигрируется, а
+  пересобирается из транскриптов при первом запуске — один долгий проход, дальше
+  как обычно. Устаревший индекс теперь узнаётся по версии до разбора, поэтому
+  смена схемы больше не выглядит в логе испорченным файлом.
 
-### Notes
+### Заметки
 
-- The breakdown is computed from local transcripts in `~/.claude/projects` and
-  weighted by model prices, so it is an estimate — which the panel states
-  plainly while the breakdown is on screen. The official `/api/oauth/usage`
-  endpoint reports one number for the whole week and says nothing about
-  models — see [docs/API.md](docs/API.md). The week total in the footer is
-  still the exact figure from the server.
+- Разбивка считается по локальным транскриптам в `~/.claude/projects` и
+  взвешивается ценами моделей, то есть это оценка — о чём панель прямо и
+  говорит, пока разбивка на экране. Официальный `/api/oauth/usage` отдаёт одно
+  число на всю неделю и про модели не сообщает ничего — см.
+  [docs/API.md](docs/API.md). Итог недели в подвале по-прежнему точная цифра
+  сервера.
 
 ## [0.1.7] — 2026-08-15
 
-### Added
+### Добавлено
 
-- Releases now go out on pull request merge: `release-on-merge.yml` bumps the
-  version, tags it and starts the release build. PR labels pick the part —
-  `версия:мажор`, `версия:минор`, patch by default, `без-релиза` to skip.
-  Documentation-only merges do not produce a release.
-- `scripts/bump-version.sh` for raising the version in `Version.swift`.
+- Релизы выходят по слиянию pull request: `release-on-merge.yml` поднимает
+  версию, ставит тег и запускает сборку релиза. Разряд выбирается метками PR —
+  `версия:мажор`, `версия:минор`, по умолчанию патч, `без-релиза` пропускает
+  выпуск. Слияние с одной только документацией релиза не даёт.
+- `scripts/bump-version.sh` — поднять версию в `Version.swift`.
 
 ## [0.1.6] — 2026-08-10
 
-### Changed
+### Изменено
 
-- Release builds moved to the `macos-26` runner: on macOS 26 the look of an app
-  is decided by the SDK it was linked with, and builds from the older runner
-  looked dated next to locally built ones. The workflow now fails if the SDK
-  turns out to be older than 26.
-- Factory defaults changed to the settings the app had actually been used with;
-  README screenshots were regenerated to match.
+- Сборка релиза переехала на раннер `macos-26`: на macOS 26 облик программы
+  решает SDK, которым она слинкована, и сборки со старого раннера выглядели
+  устаревшими рядом с собранными дома. Workflow теперь падает, если SDK
+  оказался старее 26.
+- Заводские настройки заменены на те, с которыми программой на самом деле
+  пользовались; скриншоты в README пересняты под них.
 
-### Fixed
+### Исправлено
 
-- Strict builds no longer break on deprecated Keychain keys.
+- Строгая сборка больше не спотыкается об устаревшие ключи Keychain.
 
 ## [0.1.5] — 2026-08-10
 
-### Fixed
+### Исправлено
 
-- The Keychain access prompt no longer comes back after every update: the token
-  is read through `/usr/bin/security` rather than a direct Keychain query, so
-  the permission survives the token being refreshed by Claude Code.
+- Запрос доступа к Keychain больше не возвращается после каждого обновления:
+  токен читается через `/usr/bin/security`, а не прямым запросом к Keychain,
+  поэтому разрешение переживает обновление токена со стороны Claude Code.
 
 ## [0.1.4] — 2026-08-09
 
-### Added
+### Добавлено
 
-- Release builds are signed with a stable project certificate
-  (`scripts/signing-cert.sh`). The signature proves nothing about origin — it is
-  there so the designated requirement stays the same between versions and macOS
-  keeps the Keychain permission across updates. Without the secrets configured
-  the build falls back to ad-hoc signing.
+- Релизные сборки подписываются постоянным сертификатом проекта
+  (`scripts/signing-cert.sh`). О происхождении сборки подпись не говорит ничего
+  — она нужна, чтобы designated requirement не менялся от версии к версии и
+  macOS сохраняла разрешение на Keychain при обновлении. Без настроенных
+  секретов сборка откатывается на ad-hoc подпись.
 
-### Fixed
+### Исправлено
 
-- Release workflow no longer fails outright when checking for signing secrets:
-  the `secrets` context is not available in a step condition, and GitHub
-  rejected the whole file.
+- Релизный workflow больше не падает целиком на проверке секретов подписи:
+  контекст `secrets` в условии шага недоступен, и GitHub отвергал весь файл.
 
 ## [0.1.3] — 2026-08-08
 
-### Added
+### Добавлено
 
-- In-app updates: the app checks GitHub releases (at startup and once a day),
-  offers the new version, downloads the disk image, verifies its checksum and
-  replaces the running bundle. Installing and relaunching stay manual.
-- Launch at login moved from the menu into Settings, where the rest of the
-  settings live.
+- Обновление изнутри программы: она спрашивает релизы GitHub (при запуске и раз
+  в сутки), предлагает новую версию, скачивает образ, сверяет его контрольную
+  сумму и заменяет работающий бандл. Установка и перезапуск остаются ручными.
+- Автозапуск переехал из меню в настройки, где живёт всё остальное.
 
 ## [0.1.2] — 2026-08-07
 
-### Added
+### Добавлено
 
-- Install scripts: `install.sh`, `make-app.sh`, `make-dmg.sh`, `uninstall.sh`,
-  plus the `probe-usage` and `probe-panel` probes.
-- Launch at login through a launchd agent set up by the installer.
-- Choice of which limit fills the menu bar ring arc and which one sits as the
-  number inside it.
+- Скрипты установки: `install.sh`, `make-app.sh`, `make-dmg.sh`,
+  `uninstall.sh`, а с ними пробы `probe-usage` и `probe-panel`.
+- Автозапуск через launchd-агент, который ставит установщик.
+- Выбор, какой лимит заполняет дугу кольца в строке меню, а какой стоит цифрой
+  внутри.
 
-### Changed
+### Изменено
 
-- Menu bar colour now follows spend thresholds rather than pace, so the icon no
-  longer turns amber before any meaningful spend.
+- Цвет в строке меню считается теперь по порогам расхода, а не по темпу —
+  значок больше не желтеет раньше сколько-нибудь заметной траты.
 
 ## [0.1.1] — 2026-08-07
 
-### Fixed
+### Исправлено
 
-- The panel opens on the first click when the desktop has just been switched.
-- The week resets to zero immediately after the reset moment instead of showing
-  the exhausted limit until the next scheduled poll.
-- The percentage column is wide enough not to wrap.
+- Панель открывается с первого щелчка после переключения рабочего стола.
+- Неделя обнуляется сразу после момента сброса, а не показывает исчерпанный
+  лимит до следующего опроса.
+- Колонка процента достаточно широка, чтобы не переноситься.
 
-### Added
+### Добавлено
 
-- A release can be rebuilt by hand from its tag (Actions → Release → Run
-  workflow), for when a tag push misses Actions entirely.
+- Релиз можно пересобрать руками по его тегу (Actions → Release → Run
+  workflow) — на случай, когда push тега прошёл мимо Actions вовсе.
 
 ## [0.1.0] — 2026-08-06
 
-First release: the weekly Claude Code limit in the menu bar — panel with the
-seven days of the week window, the 5-hour session, official numbers from
-`/api/oauth/usage` with a local estimate as fallback, settings window, MIT
-licence, CI, and a disk image built by tag for Apple Silicon.
+Первый релиз: недельный лимит Claude Code в строке меню — панель с семью днями
+недельного окна, пятичасовая сессия, официальные цифры из `/api/oauth/usage` с
+локальной оценкой как запасным вариантом, окно настроек, лицензия MIT, CI и
+образ, собираемый по тегу под Apple Silicon.
 
-[Unreleased]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.9...HEAD
+[Не выпущено]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.6...v0.1.7

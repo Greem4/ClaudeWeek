@@ -18,11 +18,12 @@ public actor UpdateInstaller {
         case verifying
         case installing
 
-        public var title: String {
+        public func title(_ lang: Lang) -> String {
+            let l = L10n(lang)
             switch self {
-            case .downloading: "качаю образ…"
-            case .verifying: "сверяю контрольную сумму…"
-            case .installing: "ставлю…"
+            case .downloading: return l.pick("качаю образ…", "downloading the image…")
+            case .verifying: return l.pick("сверяю контрольную сумму…", "verifying the checksum…")
+            case .installing: return l.pick("ставлю…", "installing…")
             }
         }
     }
@@ -85,10 +86,10 @@ public actor UpdateInstaller {
                 ]
             )
         } catch {
-            throw UpdateError.network(error.localizedDescription)
+            throw UpdateError.network(Bilingual(stringLiteral: error.localizedDescription))
         }
         guard code == 200 else { throw UpdateError.http(code) }
-        guard !data.isEmpty else { throw UpdateError.install("образ скачался пустым") }
+        guard !data.isEmpty else { throw UpdateError.install(Bilingual("образ скачался пустым", "the image downloaded empty")) }
         return data
     }
 
@@ -124,7 +125,7 @@ public actor UpdateInstaller {
                 ]
             )
         } catch {
-            throw UpdateError.network(error.localizedDescription)
+            throw UpdateError.network(Bilingual(stringLiteral: error.localizedDescription))
         }
     }
 
@@ -155,7 +156,7 @@ public actor UpdateInstaller {
         defer { detach(mount) }
 
         guard let source = try appBundle(in: mount) else {
-            throw UpdateError.install("в образе нет ClaudeWeek.app")
+            throw UpdateError.install(Bilingual("в образе нет ClaudeWeek.app", "the image has no ClaudeWeek.app"))
         }
 
         let staged = staging.appendingPathComponent(source.lastPathComponent)
@@ -209,7 +210,8 @@ public actor UpdateInstaller {
 
         let signature = Self.run("/usr/bin/codesign", ["--verify", "--strict", app.path])
         guard signature.code == 0 else {
-            throw UpdateError.install("подпись образа не сошлась: \(signature.output)")
+            throw UpdateError.install(Bilingual("подпись образа не сошлась: \(signature.output)",
+                                          "the image signature did not check out: \(signature.output)"))
         }
 
         let plist = app.appendingPathComponent("Contents/Info.plist")
@@ -219,10 +221,11 @@ public actor UpdateInstaller {
               let raw = info["CFBundleShortVersionString"] as? String,
               let inside = Version(raw)
         else {
-            throw UpdateError.install("в образе не читается версия")
+            throw UpdateError.install(Bilingual("в образе не читается версия", "the image has no readable version"))
         }
         guard inside == version else {
-            throw UpdateError.install("в образе версия \(inside), а релиз обещал \(version)")
+            throw UpdateError.install(Bilingual("в образе версия \(inside), а релиз обещал \(version)",
+                                          "the image holds \(inside) while the release promised \(version)"))
         }
     }
 

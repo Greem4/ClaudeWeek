@@ -72,7 +72,7 @@ public struct ModelUsage: Sendable, Equatable {
         self.sharePercent = sharePercent
     }
 
-    public var title: String { ModelFamily.title(family) }
+    public func title(_ lang: Lang = .ru) -> String { ModelFamily.title(family, lang: lang) }
 }
 
 /// Пятичасовая сессия — второй лимит, живущий рядом с недельным и ничем с ним

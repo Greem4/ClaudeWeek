@@ -9,6 +9,11 @@ import ClaudeWeekCore
 @MainActor
 @Observable
 final class UpdateController {
+    /// Язык окон и строки в панели. У AppKit-класса нет окружения SwiftUI,
+    /// поэтому язык ему выдаёт владелец — тем же движением, каким применяет
+    /// конфиг.
+    var strings = L10n(Lang.ru)
+
     enum State: Equatable {
         /// Ни новостей, ни повода что-то показывать.
         case idle
@@ -121,7 +126,7 @@ final class UpdateController {
                     if manually { offer(release) }
                 }
             } catch {
-                let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription
+                let text = (error as? UpdateError)?.message(strings.lang) ?? error.localizedDescription
                 Log.warn("проверка обновлений не удалась: \(text)")
                 state = manually ? .failed(text, nil) : .idle
                 if manually { report(text) }
@@ -148,7 +153,7 @@ final class UpdateController {
                 state = .installed(release)
                 askRelaunch(release)
             } catch {
-                let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription
+                let text = (error as? UpdateError)?.message(strings.lang) ?? error.localizedDescription
                 Log.warn("не поставил обновление: \(text)")
                 state = .failed(text, release)
                 report(text)
@@ -170,7 +175,8 @@ final class UpdateController {
             try process.run()
         } catch {
             Log.warn("не смог перезапуститься: \(error)")
-            state = .failed("новая версия поставлена, но перезапустить не вышло — запустите вручную", nil)
+            state = .failed(strings.pick("новая версия поставлена, но перезапустить не вышло — запустите вручную",
+                                         "the new version is installed but the restart failed — start it by hand"), nil)
             return
         }
         NSApp.terminate(nil)
@@ -183,11 +189,11 @@ final class UpdateController {
     /// и отправляем за подробностями на страницу релиза.
     private func offer(_ release: Release) {
         let alert = NSAlert()
-        alert.messageText = "Вышла версия \(release.version)"
+        alert.messageText = strings.pick("Вышла версия \(release.version)", "Version \(release.version) is out")
         alert.informativeText = Self.digest(of: release)
-        alert.addButton(withTitle: "Обновить")
-        alert.addButton(withTitle: "Что нового")
-        alert.addButton(withTitle: "Отмена")
+        alert.addButton(withTitle: strings.pick("Обновить", "Update"))
+        alert.addButton(withTitle: strings.pick("Что нового", "What’s new"))
+        alert.addButton(withTitle: strings.pick("Отмена", "Cancel"))
 
         switch present(alert) {
         case .alertFirstButtonReturn:
@@ -206,30 +212,35 @@ final class UpdateController {
     /// человек должен сам.
     private func askRelaunch(_ release: Release) {
         let alert = NSAlert()
-        alert.messageText = "ClaudeWeek \(release.version) установлена"
-        alert.informativeText = """
+        alert.messageText = strings.pick("ClaudeWeek \(release.version) установлена",
+                                         "ClaudeWeek \(release.version) is installed")
+        alert.informativeText = strings.pick("""
         В строке меню пока работает \(ClaudeWeek.version) — новая версия \
         начнётся с перезапуска. Настройки, кеш и калибровка остались на месте.
-        """
-        alert.addButton(withTitle: "Перезапустить")
-        alert.addButton(withTitle: "Позже")
+        """, """
+        The menu bar still runs \(ClaudeWeek.version) — the new one starts with a \
+        restart. Settings, cache and calibration stayed where they were.
+        """)
+        alert.addButton(withTitle: strings.pick("Перезапустить", "Restart"))
+        alert.addButton(withTitle: strings.pick("Позже", "Later"))
         if present(alert) == .alertFirstButtonReturn { relaunch() }
     }
 
     private func sayUpToDate() {
         let alert = NSAlert()
-        alert.messageText = "У вас последняя версия"
-        alert.informativeText = "ClaudeWeek \(ClaudeWeek.version) — свежее на GitHub ничего нет."
-        alert.addButton(withTitle: "Хорошо")
+        alert.messageText = strings.pick("У вас последняя версия", "You are on the latest version")
+        alert.informativeText = strings.pick("ClaudeWeek \(ClaudeWeek.version) — свежее на GitHub ничего нет.",
+                                             "ClaudeWeek \(ClaudeWeek.version) — nothing newer on GitHub.")
+        alert.addButton(withTitle: strings.pick("Хорошо", "OK"))
         _ = present(alert)
     }
 
     private func report(_ text: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Обновиться не вышло"
+        alert.messageText = strings.pick("Обновиться не вышло", "The update did not go through")
         alert.informativeText = text
-        alert.addButton(withTitle: "Понятно")
+        alert.addButton(withTitle: strings.pick("Понятно", "Got it"))
         _ = present(alert)
     }
 
@@ -243,20 +254,47 @@ final class UpdateController {
     /// Начало заметок без разметки: NSAlert растёт вместе с текстом, а полный
     /// список коммитов в модальном окне никому не нужен.
     private static func digest(of release: Release) -> String {
-        var lines: [String] = []
+        var items: [String] = []
         for raw in release.notes.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
+            // Свёрнутый список коммитов и строка-ссылка «все изменения» стоят
+            // после главного — дальше читать нечего. Ссылка узнаётся по тому,
+            // что занимает строку целиком: ссылка на `docs/` посреди фразы
+            // заканчивается словами, а не закрывающей скобкой.
+            if line.hasPrefix("<") || (line.hasPrefix("[") && line.hasSuffix(")")) { break }
             // Заголовки секций, ограждения блоков кода и команды карантина —
             // это про установку руками, которой здесь как раз не будет.
             guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("```") else { continue }
-            lines.append(line)
-            if lines.count == 6 { break }
+
+            if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                if items.count == 3 { break }
+                items.append(String(line.dropFirst(2)))
+            } else if let last = items.popLast() {
+                // Заметки приходят из журнала, а там строки перенесены по
+                // ширине файла: без склейки окно обрывало бы фразу на
+                // полуслове там, где кончилась строка markdown.
+                items.append(last + " " + line)
+            } else {
+                items.append(line)
+            }
         }
-        let notes = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n\n"
+        let notes = items.isEmpty
+            ? ""
+            : items.map { "• " + shortened($0) }.joined(separator: "\n") + "\n\n"
         return """
         \(notes)У вас \(ClaudeWeek.version). Образ скачается со страницы релиза, \
         сверится по контрольной сумме и заменит работающее приложение.
         """
+    }
+
+    /// Пункт журнала бывает в абзац длиной — целиком он раздувает модальное
+    /// окно и топит соседние. Обрезаем по границе слова: подробности всё равно
+    /// за кнопкой «Что нового».
+    private static func shortened(_ text: String, limit: Int = 180) -> String {
+        guard text.count > limit else { return text }
+        let cut = text.prefix(limit)
+        let end = cut.lastIndex(of: " ") ?? cut.endIndex
+        return cut[..<end].trimmingCharacters(in: .whitespaces) + "…"
     }
 
     private var isBusy: Bool {
@@ -276,9 +314,11 @@ final class UpdateController {
     var banner: String? {
         switch state {
         case .idle, .checking, .upToDate: nil
-        case .available(let release): "вышла версия \(release.version)"
-        case .installing(_, let stage): stage.title
-        case .installed(let release): "версия \(release.version) готова"
+        case .available(let release):
+            strings.pick("вышла версия \(release.version)", "version \(release.version) is out")
+        case .installing(_, let stage): stage.title(strings.lang)
+        case .installed(let release):
+            strings.pick("версия \(release.version) готова", "version \(release.version) is ready")
         case .failed(let text, _): text
         }
     }
@@ -287,12 +327,14 @@ final class UpdateController {
     /// по нажатию.
     var actionTitle: String {
         switch state {
-        case .idle, .upToDate, .failed(_, .none): "Проверить обновления"
-        case .available(let release): "Обновить до \(release.version)…"
-        case .failed(_, .some): "Попробовать ещё раз"
-        case .installed: "Перезапустить"
-        case .checking: "Проверяю…"
-        case .installing(_, let stage): stage.title
+        case .idle, .upToDate, .failed(_, .none):
+            strings.pick("Проверить обновления", "Check for updates")
+        case .available(let release):
+            strings.pick("Обновить до \(release.version)…", "Update to \(release.version)…")
+        case .failed(_, .some): strings.pick("Попробовать ещё раз", "Try again")
+        case .installed: strings.pick("Перезапустить", "Restart")
+        case .checking: strings.pick("Проверяю…", "Checking…")
+        case .installing(_, let stage): stage.title(strings.lang)
         }
     }
 
@@ -301,17 +343,22 @@ final class UpdateController {
     var summary: String {
         switch state {
         case .idle:
-            isAvailable ? "проверю в ближайшие секунды" : "только у собранного приложения"
+            isAvailable
+                ? strings.pick("проверю в ближайшие секунды", "checking in a few seconds")
+                : strings.pick("только у собранного приложения", "built app only")
         case .checking:
-            "спрашиваю GitHub…"
+            strings.pick("спрашиваю GitHub…", "asking GitHub…")
         case .upToDate(let at):
-            "у вас последняя — \(ClaudeWeek.version), проверено \(Self.checkedAt(at))"
+            strings.pick("у вас последняя — \(ClaudeWeek.version), проверено \(Self.checkedAt(at, lang: strings.lang))",
+                         "you are on the latest — \(ClaudeWeek.version), checked \(Self.checkedAt(at, lang: strings.lang))")
         case .available(let release):
-            "доступна \(release.version) — у вас \(ClaudeWeek.version)"
+            strings.pick("доступна \(release.version) — у вас \(ClaudeWeek.version)",
+                         "\(release.version) is available — you have \(ClaudeWeek.version)")
         case .installing(_, let stage):
-            stage.title
+            stage.title(strings.lang)
         case .installed(let release):
-            "\(release.version) поставлена — осталось перезапустить"
+            strings.pick("\(release.version) поставлена — осталось перезапустить",
+                         "\(release.version) is installed — a restart is all that is left")
         case .failed(let text, _):
             text
         }
@@ -320,11 +367,17 @@ final class UpdateController {
     /// «в 14:23», а проверенное вчера — «ВТ в 14:23». День нужен потому, что
     /// программа живёт в строке меню сутками, а проверка идёт раз в сутки:
     /// голый час у позавчерашней проверки читается как сегодняшний.
-    static func checkedAt(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    static func checkedAt(
+        _ date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        lang: Lang = .ru
+    ) -> String {
         let day = calendar.isDate(date, inSameDayAs: now)
             ? ""
-            : "\(Formatting.weekdayShort(date, calendar: calendar)) "
-        return "\(day)в \(Formatting.clock(date, calendar: calendar))"
+            : "\(Formatting.weekdayShort(date, calendar: calendar, lang: lang)) "
+        let clock = Formatting.clock(date, calendar: calendar)
+        return L10n(lang).pick("\(day)в \(clock)", "\(day)at \(clock)")
     }
 
     var isWorking: Bool {

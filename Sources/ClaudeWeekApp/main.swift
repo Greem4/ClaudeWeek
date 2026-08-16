@@ -31,6 +31,16 @@ if let raw = arguments.first(where: { $0.hasPrefix("--provider=") })?
     config.provider = choice
 }
 
+// Язык из аргумента перекрывает конфиг и на один запуск, и на снимки: так
+// английские картинки для документации снимаются, ничего не переключая руками.
+if let raw = arguments.first(where: { $0.hasPrefix("--lang=") })?
+    .dropFirst("--lang=".count) {
+    guard let choice = Language(rawValue: String(raw)) else {
+        exit(CLI.complain("неизвестный язык «\(raw)»: бывают system, ru и en"))
+    }
+    config.language = choice
+}
+
 if let raw = arguments.first(where: { $0.hasPrefix("--calibrate=") })?
     .dropFirst("--calibrate=".count) {
     guard let percent = Double(raw) else {
@@ -40,7 +50,7 @@ if let raw = arguments.first(where: { $0.hasPrefix("--calibrate=") })?
 }
 
 if arguments.contains("--update") {
-    exit(await CLI.update(bundle: UpdateController.runningBundle))
+    exit(await CLI.update(bundle: UpdateController.runningBundle, lang: config.language.resolved))
 }
 
 if arguments.contains("--json") {

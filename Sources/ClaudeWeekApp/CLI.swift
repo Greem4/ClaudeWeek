@@ -15,6 +15,7 @@ enum CLI {
       ClaudeWeek --config=ПУТЬ   свой файл конфигурации
       ClaudeWeek --calibrate=N   подогнать локальную оценку под официальные N %
                                  (число берётся из /usage внутри Claude Code)
+      ClaudeWeek --lang=X        язык интерфейса: system, ru или en
       ClaudeWeek --screenshot КАТ отрисовать панель и иконку в PNG (обе темы)
       ClaudeWeek --icon КАТ      сгенерировать .iconset для сборки бандла
       ClaudeWeek --update        поставить свежий выпуск с GitHub, если он вышел
@@ -25,7 +26,7 @@ enum CLI {
     /// Флаги без значения и префиксы флагов со значением. По ним же отличаем
     /// опечатку от каталога у `--icon` и `--screenshot`: те не начинаются с «-».
     static let flags = ["--help", "-h", "--verbose", "--json", "--icon", "--screenshot", "--update"]
-    static let flagPrefixes = ["--config=", "--provider=", "--calibrate="]
+    static let flagPrefixes = ["--config=", "--provider=", "--calibrate=", "--lang="]
 
     static func isKnown(_ argument: String) -> Bool {
         flags.contains(argument) || flagPrefixes.contains { argument.hasPrefix($0) }
@@ -145,7 +146,7 @@ enum CLI {
     /// `bundle` — что подменяем. У `swift run` бандла нет, поэтому явный путь
     /// к установленной копии допустим: `--update` из отладочной сборки чинит
     /// ту, что в ~/Applications.
-    static func update(bundle: URL?) async -> Int32 {
+    static func update(bundle: URL?, lang: Lang = .ru) async -> Int32 {
         guard let bundle else {
             FileHandle.standardError.write(Data("""
             обновлять нечего: запущено не из ClaudeWeek.app.
@@ -174,7 +175,7 @@ enum CLI {
         print("вышла версия \(release.version), у вас \(ClaudeWeek.version)")
         do {
             try await UpdateInstaller(bundle: bundle).install(release) { stage in
-                print("  \(stage.title)")
+                print("  \(stage.title(lang))")
             }
         } catch {
             let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription

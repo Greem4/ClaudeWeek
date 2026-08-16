@@ -167,12 +167,16 @@ final class PanelModel {
     /// свежие перед ним цифры сервера или посчитанные на месте.
     var sourceHint: String {
         switch sourceState {
-        case .synced: "данные online"
-        case .stale, .local: "данные offline"
-        case .pending: "данные загружаются"
-        case .missing: "данные недоступны"
+        case .synced: strings.pick("данные online", "data online")
+        case .stale, .local: strings.pick("данные offline", "data offline")
+        case .pending: strings.pick("данные загружаются", "loading data")
+        case .missing: strings.pick("данные недоступны", "no data available")
         }
     }
+
+    /// Строки панели на выбранном языке. Одно место на всю панель: строки,
+    /// подписи для VoiceOver и подсказки берут язык отсюда, а не каждый свой.
+    var strings: L10n { config.strings }
 
     var isEstimate: Bool { snapshot?.isEstimate ?? false }
 

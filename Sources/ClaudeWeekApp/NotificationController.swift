@@ -200,31 +200,40 @@ final class NotificationController {
     // MARK: Для настроек
 
     /// Состояние словами — строка на вкладке «Уведомления».
-    var summary: String {
+    func summary(_ s: L10n) -> String {
         guard bundled else {
             // Ровно как автозапуск и обновление: у отладочного `swift run`
             // бандла нет, и молчащие уведомления выглядели бы поломкой.
-            return """
+            return s.pick("""
             Доступно только у собранного приложения: отладочный swift run \
             macOS не считает программой и уведомления от него не принимает.
-            """
+            """, """
+            Only available to a built app: macOS does not consider a debug \
+            swift run an application and accepts no notifications from it.
+            """)
         }
         return switch authorization {
         case .notDetermined:
-            "macOS спросит разрешение, когда программа соберётся показать первый баннер."
+            s.pick("macOS спросит разрешение, когда программа соберётся показать первый баннер.",
+                   "macOS will ask for permission when the app is about to show its first banner.")
         case .denied:
-            """
+            s.pick("""
             macOS не пропускает уведомления ClaudeWeek. Разрешить их можно \
             только в системных настройках — кнопка ниже.
-            """
+            """, """
+            macOS is blocking ClaudeWeek notifications. They can only be allowed \
+            in System Settings — the button below.
+            """)
         case .authorized:
-            "macOS пропускает уведомления."
+            s.pick("macOS пропускает уведомления.", "macOS lets notifications through.")
         case .provisional:
-            "macOS пропускает уведомления тихо: без звука и сразу в Центр уведомлений."
+            s.pick("macOS пропускает уведомления тихо: без звука и сразу в Центр уведомлений.",
+                   "macOS delivers notifications quietly: no sound, straight to Notification Centre.")
         case .ephemeral:
-            "Уведомления разрешены на время этого сеанса."
+            s.pick("Уведомления разрешены на время этого сеанса.",
+                   "Notifications are allowed for this session only.")
         @unknown default:
-            "Состояние разрешения macOS неизвестно."
+            s.pick("Состояние разрешения macOS неизвестно.", "The macOS permission state is unknown.")
         }
     }
 
