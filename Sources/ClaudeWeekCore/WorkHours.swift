@@ -31,14 +31,15 @@ public struct WorkHours: Codable, Sendable, Equatable, Hashable {
 
     /// Название распорядка: по нему его и выбирают, а часы дописаны рядом,
     /// чтобы не гадать, что кроется за «вечерним».
-    public var name: String {
-        if isAllDay { return "Круглосуточно" }
+    public func name(_ lang: Lang) -> String {
+        let l = L10n(lang)
+        if isAllDay { return l.pick("Круглосуточно", "Around the clock") }
         switch (start, end) {
-        case (10, 18): return "Рабочий день"
-        case (10, 22): return "Длинный день"
-        case (11, 24): return "Вечерний"
-        case (9, 22): return "С утра до ночи"
-        default: return "Свои часы"
+        case (10, 18): return l.pick("Рабочий день", "Office hours")
+        case (10, 22): return l.pick("Длинный день", "Long day")
+        case (11, 24): return l.pick("Вечерний", "Evening")
+        case (9, 22): return l.pick("С утра до ночи", "Dawn to dusk")
+        default: return l.pick("Свои часы", "Custom hours")
         }
     }
 
@@ -46,14 +47,16 @@ public struct WorkHours: Codable, Sendable, Equatable, Hashable {
     public var range: String { "\(start)–\(end)" }
 
     /// Подпись для списка: «Рабочий день 10–18», «Круглосуточно».
-    public var title: String {
-        isAllDay ? name : "\(name) \(range)"
+    public func title(_ lang: Lang) -> String {
+        isAllDay ? name(lang) : "\(name(lang)) \(range)"
     }
 
     /// Часы словами: «10:00 – 18:00», «11:00 – полуночи».
-    public var clockRange: String {
-        if isAllDay { return "круглые сутки" }
-        return "\(start):00 – \(end >= 24 ? "полуночи" : "\(end):00")"
+    public func clockRange(_ lang: Lang) -> String {
+        let l = L10n(lang)
+        if isAllDay { return l.pick("круглые сутки", "all day and night") }
+        let close = end >= 24 ? l.pick("полуночи", "midnight") : "\(end):00"
+        return "\(start):00 – \(close)"
     }
 
     public init(start: Int = 11, end: Int = 24) {

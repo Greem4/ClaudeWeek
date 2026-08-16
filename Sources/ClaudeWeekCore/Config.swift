@@ -26,10 +26,10 @@ public enum RingArc: String, Codable, Sendable, CaseIterable {
     /// Дуга — неделя, цифра — пятичасовая сессия.
     case week
 
-    public var title: String {
+    public func title(_ lang: Lang) -> String {
         switch self {
-        case .session: "Пятичасовую сессию"
-        case .week: "Недельный лимит"
+        case .session: L10n(lang).pick("Пятичасовую сессию", "The 5-hour session")
+        case .week: L10n(lang).pick("Недельный лимит", "The weekly limit")
         }
     }
 
@@ -57,13 +57,14 @@ public enum ThemeKind: String, Codable, Sendable, CaseIterable {
     /// Максимальный контраст: плотные цвета, никакой полупрозрачности.
     case contrast
 
-    public var title: String {
+    public func title(_ lang: Lang) -> String {
+        let l = L10n(lang)
         switch self {
-        case .system: "Системная"
-        case .midnight: "Полночь"
-        case .graphite: "Графит"
-        case .paper: "Бумага"
-        case .contrast: "Контраст"
+        case .system: return l.pick("Системная", "System")
+        case .midnight: return l.pick("Полночь", "Midnight")
+        case .graphite: return l.pick("Графит", "Graphite")
+        case .paper: return l.pick("Бумага", "Paper")
+        case .contrast: return l.pick("Контраст", "Contrast")
         }
     }
 }
@@ -79,11 +80,12 @@ public enum SessionResetDisplay: String, Codable, Sendable, CaseIterable {
     /// «сброс через 1 ч 12 мин (14:35)» — и то, и другое.
     case both
 
-    public var title: String {
+    public func title(_ lang: Lang) -> String {
+        let l = L10n(lang)
         switch self {
-        case .relative: "Сколько осталось"
-        case .absolute: "Во сколько сбросится"
-        case .both: "И то, и другое"
+        case .relative: return l.pick("Сколько осталось", "Time left")
+        case .absolute: return l.pick("Во сколько сбросится", "Reset time")
+        case .both: return l.pick("И то, и другое", "Both")
         }
     }
 }
@@ -98,10 +100,11 @@ public enum PanelLayout: String, Codable, Sendable, CaseIterable {
     /// раскрывает её целиком, пока панель открыта.
     case compact
 
-    public var title: String {
+    public func title(_ lang: Lang) -> String {
+        let l = L10n(lang)
         switch self {
-        case .week: "Вся неделя"
-        case .compact: "Только сегодня"
+        case .week: return l.pick("Вся неделя", "The whole week")
+        case .compact: return l.pick("Только сегодня", "Today only")
         }
     }
 }

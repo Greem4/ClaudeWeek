@@ -172,10 +172,14 @@ public struct LimitAlert: Sendable, Equatable {
     /// «в воскресенье в 2:10» — одно и то же, сказанное дважды. Точный момент
     /// сброса по-прежнему стоит в панели, где на него смотрят осознанно.
     /// Порога нет по той же причине: человек его сам и задал.
-    public func message(now: Date) -> (title: String, body: String) {
+    public func message(now: Date, lang: Lang = .ru) -> (title: String, body: String) {
+        let l = L10n(lang)
         let spent = (isEstimate ? "≈" : "") + Formatting.percent(percent)
-        let title = isExhausted ? "Лимит исчерпан" : "Израсходовано \(spent)"
-        let body = "Сброс через \(Formatting.longDuration(resetsAt.timeIntervalSince(now)))"
+        let title = isExhausted
+            ? l.pick("Лимит исчерпан", "Limit reached")
+            : l.pick("Израсходовано \(spent)", "\(spent) used")
+        let left = Formatting.longDuration(resetsAt.timeIntervalSince(now), lang: lang)
+        let body = l.pick("Сброс через \(left)", "Resets in \(left)")
         return (title, body)
     }
 }
