@@ -165,8 +165,10 @@ jobs:
             echo
             if [ -n "$NOTES" ]; then
               printf '%s\n' "$NOTES"
-              echo
-              echo "Прошлые версии — в [журнале изменений]($REPO/blob/$GITHUB_REF_NAME/CHANGELOG.md)."
+              # Коммиты — под спойлером и ниже журнала: они про код, а страницу
+              # выпуска открывают, чтобы узнать, что изменилось для человека.
+              # Порядок ещё и практический: окно обновления в самой программе
+              # показывает первые строки заметок, обрывая их на первой разметке.
               if [ -n "$PREV" ]; then
                 echo
                 echo '<details>'
@@ -176,6 +178,8 @@ jobs:
                 echo
                 echo '</details>'
               fi
+              echo
+              echo "Прошлые версии — в [журнале изменений]($REPO/blob/$GITHUB_REF_NAME/CHANGELOG.md)."
             elif [ -n "$PREV" ]; then
               git log --pretty='- %s' "$PREV..$GITHUB_REF_NAME"
             else

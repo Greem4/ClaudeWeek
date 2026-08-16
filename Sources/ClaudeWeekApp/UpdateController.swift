@@ -243,20 +243,47 @@ final class UpdateController {
     /// Начало заметок без разметки: NSAlert растёт вместе с текстом, а полный
     /// список коммитов в модальном окне никому не нужен.
     private static func digest(of release: Release) -> String {
-        var lines: [String] = []
+        var items: [String] = []
         for raw in release.notes.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
+            // Свёрнутый список коммитов и строка-ссылка «все изменения» стоят
+            // после главного — дальше читать нечего. Ссылка узнаётся по тому,
+            // что занимает строку целиком: ссылка на `docs/` посреди фразы
+            // заканчивается словами, а не закрывающей скобкой.
+            if line.hasPrefix("<") || (line.hasPrefix("[") && line.hasSuffix(")")) { break }
             // Заголовки секций, ограждения блоков кода и команды карантина —
             // это про установку руками, которой здесь как раз не будет.
             guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("```") else { continue }
-            lines.append(line)
-            if lines.count == 6 { break }
+
+            if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                if items.count == 3 { break }
+                items.append(String(line.dropFirst(2)))
+            } else if let last = items.popLast() {
+                // Заметки приходят из журнала, а там строки перенесены по
+                // ширине файла: без склейки окно обрывало бы фразу на
+                // полуслове там, где кончилась строка markdown.
+                items.append(last + " " + line)
+            } else {
+                items.append(line)
+            }
         }
-        let notes = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n\n"
+        let notes = items.isEmpty
+            ? ""
+            : items.map { "• " + shortened($0) }.joined(separator: "\n") + "\n\n"
         return """
         \(notes)У вас \(ClaudeWeek.version). Образ скачается со страницы релиза, \
         сверится по контрольной сумме и заменит работающее приложение.
         """
+    }
+
+    /// Пункт журнала бывает в абзац длиной — целиком он раздувает модальное
+    /// окно и топит соседние. Обрезаем по границе слова: подробности всё равно
+    /// за кнопкой «Что нового».
+    private static func shortened(_ text: String, limit: Int = 180) -> String {
+        guard text.count > limit else { return text }
+        let cut = text.prefix(limit)
+        let end = cut.lastIndex(of: " ") ?? cut.endIndex
+        return cut[..<end].trimmingCharacters(in: .whitespaces) + "…"
     }
 
     private var isBusy: Bool {
