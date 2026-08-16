@@ -18,6 +18,14 @@
 //       `collectionBehavior` у `MenuPanel`: проверять такое чтением кода
 //       бесполезно, см. docs/SPACES.md.
 //
+//   swift scripts/probe-panel.swift --displays
+//       То же самое для двух мониторов: по полоске на каждый, поведение окна —
+//       как у панели. Отвечает на вопросы, от которых зависит весь показ на
+//       втором мониторе: что говорит `isOnActiveSpace` про окно на соседнем
+//       мониторе, когда столы переключают на этом, и остаётся ли окно на своём
+//       мониторе при показе. Заодно печатает, где лежит окно значка
+//       ClaudeWeek — панель считает место от него.
+//
 // В обоих режимах пройдитесь по рабочим столам — свайпом или ⌃→. Разбор
 // собранного и что с ним делать: docs/SPACES.md.
 //
@@ -121,8 +129,11 @@ func watch() -> Never {
 
 // MARK: - Режим --behaviors
 
-func makeProbePanel(tag: String, behavior: NSWindow.CollectionBehavior, y: CGFloat) -> NSPanel {
-    let screen = NSScreen.main!.frame
+func makeProbePanel(
+    tag: String, behavior: NSWindow.CollectionBehavior, y: CGFloat,
+    on display: NSScreen = NSScreen.main ?? NSScreen.screens[0]
+) -> NSPanel {
+    let screen = display.frame
     let panel = NSPanel(
         contentRect: NSRect(x: screen.midX - 200, y: y, width: 400, height: 40),
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
@@ -190,12 +201,134 @@ func compareBehaviors() -> Never {
     exit(0)
 }
 
+// MARK: - Режим --displays
+
+/// Слой окна пункта строки меню: `NSWindow.Level.statusBar`. По нему в списке
+/// окон находится значок ClaudeWeek — панель считает место от его рамки, и на
+/// двух мониторах важно, где эта рамка лежит в момент щелчка.
+let statusLayer = 25
+
+/// Номер монитора под точкой (координаты AppKit, снизу вверх).
+func display(at point: NSPoint) -> String {
+    guard let index = NSScreen.screens.firstIndex(where: { $0.frame.contains(point) })
+    else { return "—" }
+    return "\(index + 1)"
+}
+
+/// Номер монитора под окном из списка окон. Список отдаёт координаты сверху
+/// вниз от главного экрана, NSScreen — снизу вверх; без приведения к одному
+/// виду монитор определяется неверно ровно на втором экране.
+func display(ofListed rect: CGRect) -> String {
+    let top = NSScreen.screens[0].frame.maxY
+    return display(at: NSPoint(x: rect.midX, y: top - rect.midY))
+}
+
+/// Монитор, который окно считает своим (`NSWindow.screen` — тот, где лежит
+/// большая часть окна). «нет» у снятого с экрана окна.
+func display(ofWindow window: NSWindow) -> String {
+    guard let screen = window.screen,
+          let index = NSScreen.screens.firstIndex(of: screen)
+    else { return "нет" }
+    return "\(index + 1)"
+}
+
+func claudeWeekPID() -> pid_t? {
+    NSWorkspace.shared.runningApplications.first {
+        $0.localizedName == "ClaudeWeek" || $0.executableURL?.lastPathComponent == "ClaudeWeek"
+    }?.processIdentifier
+}
+
+/// Рамка окна значка — того самого `anchor`, от которого считается панель.
+func statusItemFrame(pid: pid_t) -> CGRect? {
+    guard let list = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]],
+          let item = list.first(where: {
+              ($0[kCGWindowOwnerPID as String] as? pid_t) == pid
+                  && ($0[kCGWindowLayer as String] as? Int) == statusLayer
+          }),
+          let bounds = item[kCGWindowBounds as String] as? [String: CGFloat]
+    else { return nil }
+    return CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0,
+                  width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
+}
+
+func compareDisplays() -> Never {
+    let screens = NSScreen.screens
+    guard screens.count > 1 else {
+        say("подключён один монитор — сравнивать нечего. Подключите второй и повторите")
+        exit(1)
+    }
+
+    // По полоске на каждый монитор, поведение окна — как у панели.
+    let strips = screens.enumerated().map { index, screen in
+        makeProbePanel(
+            tag: "D\(index + 1)  монитор \(index + 1) — поведение панели",
+            behavior: [.moveToActiveSpace, .fullScreenAuxiliary, .stationary, .ignoresCycle],
+            y: screen.frame.maxY - 140,
+            on: screen
+        )
+    }
+    let pid = claudeWeekPID()
+    if pid == nil { say("ClaudeWeek не запущен — про значок строки меню данных не будет") }
+
+    func status() -> String {
+        var parts = ["активный стол:\(activeSpace())"]
+        if let pid, let rect = statusItemFrame(pid: pid) {
+            parts.append(String(format: "значок: монитор %@ x%.0f", display(ofListed: rect), rect.midX))
+        }
+        for (index, strip) in strips.enumerated() {
+            parts.append("D\(index + 1): монитор=\(display(ofWindow: strip))"
+                + " на своём столе=\(strip.isOnActiveSpace ? "да " : "НЕТ")"
+                + " столы=\(spaces(ofWindow: strip.windowNumber))")
+        }
+        return parts.joined(separator: " | ")
+    }
+
+    say("по полоске на каждом мониторе, 70 секунд. Переключайте столы на обоих"
+        + " мониторах и щёлкайте по значку — на том мониторе и на соседнем")
+
+    NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
+        let point = NSEvent.mouseLocation
+        say(String(format: "%@ клик x%.0f y%.0f монитор %@ | %@",
+                   stamp(), point.x, point.y, display(at: point), status()))
+        // Значок переезжает вслед за строкой меню, и вопрос в том, успевает ли
+        // он к обработке щелчка: панель считает место от его рамки.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            say("\(stamp()) через 0.3 с | \(status())")
+        }
+    }
+
+    var previous = ""
+    var ticks = 0
+    let timer = Timer(timeInterval: 0.5, repeats: true) { _ in
+        ticks += 1
+        let line = status()
+        if line != previous {
+            previous = line
+            say("\(stamp()) \(line)")
+        }
+        // Раз в четыре секунды показываем заново — так показывается панель.
+        // Здесь и видно, остаётся окно на своём мониторе или уезжает.
+        if ticks.isMultiple(of: 8) {
+            for strip in strips {
+                strip.orderOut(nil)
+                strip.orderFrontRegardless()
+            }
+        }
+        if ticks >= 140 { exit(0) }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    NSApplication.shared.setActivationPolicy(.accessory)
+    NSApplication.shared.run()
+    exit(0)
+}
+
 // MARK: - Запуск
 
 switch CommandLine.arguments.dropFirst().first {
 case "--watch", nil: watch()
 case "--behaviors": compareBehaviors()
+case "--displays": compareDisplays()
 case let other?:
-    say("не знаю такого режима: \(other). Есть --watch и --behaviors")
+    say("не знаю такого режима: \(other). Есть --watch, --behaviors и --displays")
     exit(2)
 }
