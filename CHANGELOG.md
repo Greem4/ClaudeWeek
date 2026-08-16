@@ -14,6 +14,21 @@ is the place for the shorter, human-facing story.
 
 ## [Unreleased]
 
+### Changed
+
+- New app icon: the ring from the menu bar, drawn large on an ink-coloured
+  tile — green from 0 to 80 %, amber to 90 %, red closing the circle to 100 %,
+  in the same colours the panel uses. The old icon was three week bars, and
+  below 32 pt they merged into a green smudge; the ring survives down to 16 pt,
+  which is the size Spotlight and the "Open with" list show. Thresholds of the
+  icon are deliberately not the notification defaults (80 / 95): five per cent
+  of a circle is one pixel at that size, and red would not be visible at all.
+- Notification screenshots in the README and the guide retaken — the banners
+  carry the app icon, so both showed the old one. The README now opens with the
+  icon as well (`docs/images/app-icon.png`).
+
+## [0.1.9] — 2026-08-16
+
 ### Added
 
 - Notifications when spend crosses a threshold you set: two thresholds per
@@ -40,6 +55,24 @@ is the place for the shorter, human-facing story.
 - `Formatting.longDuration` — the same interval in words ("2 дня 4 часа",
   "1 час 12 минут"), with Russian pluralisation. The panel keeps the short form;
   a banner has room for the long one.
+
+### Notes
+
+- Notifications are on out of the box: a feature that stays silent until you
+  find its tab does not do the job it was added for. macOS asks for permission
+  once, on the first launch of the new version; if it is refused, the tab says
+  so and offers the only place the ban can be lifted — System Settings. A build
+  run straight from `swift run` has no notifications at all: macOS identifies an
+  app by its bundle, and there isn't one.
+- Session notifications need the official source. The local estimate does not
+  compute the 5-hour percentage at all, so offline there is nothing to warn
+  about — and an expired session stays quiet rather than warning off a cached
+  number that reset hours ago.
+
+## [0.1.8] — 2026-08-15
+
+### Added
+
 - Model breakdown in the panel: clicking the percentage — on a day row or on
   the 5-hour session row — replaces the day rows with one row per model (Opus,
   Sonnet, Haiku), each with the same kind of bar showing its share of the
@@ -63,16 +96,6 @@ is the place for the shorter, human-facing story.
 
 ### Notes
 
-- Notifications are on out of the box: a feature that stays silent until you
-  find its tab does not do the job it was added for. macOS asks for permission
-  once, on the first launch of the new version; if it is refused, the tab says
-  so and offers the only place the ban can be lifted — System Settings. A build
-  run straight from `swift run` has no notifications at all: macOS identifies an
-  app by its bundle, and there isn't one.
-- Session notifications need the official source. The local estimate does not
-  compute the 5-hour percentage at all, so offline there is nothing to warn
-  about — and an expired session stays quiet rather than warning off a cached
-  number that reset hours ago.
 - The breakdown is computed from local transcripts in `~/.claude/projects` and
   weighted by model prices, so it is an estimate — which the panel states
   plainly while the breakdown is on screen. The official `/api/oauth/usage`
@@ -175,7 +198,9 @@ seven days of the week window, the 5-hour session, official numbers from
 `/api/oauth/usage` with a local estimate as fallback, settings window, MIT
 licence, CI, and a disk image built by tag for Apple Silicon.
 
-[Unreleased]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.8...v0.1.9
+[0.1.8]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.4...v0.1.5

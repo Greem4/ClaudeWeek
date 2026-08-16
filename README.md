@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/app-icon.png" width="128" alt="Иконка ClaudeWeek: кольцо недели">
+</p>
+
 # ClaudeWeek
 
 [![CI](https://github.com/Greem4/ClaudeWeek/actions/workflows/ci.yml/badge.svg)](https://github.com/Greem4/ClaudeWeek/actions/workflows/ci.yml)

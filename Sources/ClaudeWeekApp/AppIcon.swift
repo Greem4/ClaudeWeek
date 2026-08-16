@@ -1,14 +1,29 @@
 import AppKit
 
-/// Иконка приложения — та же метафора, что и в панели: три полосы недели,
-/// где зелёная упирается в янтарную. Рисуем кодом, потому что без Xcode
-/// собрать ассет-каталог нечем.
+/// Иконка приложения — то же кольцо, что висит в строке меню, только крупно:
+/// шкала недельного лимита, разложенная по порогам. Рисуем кодом, потому что
+/// без Xcode собрать ассет-каталог нечем.
 ///
-/// Цвета берутся из родной палитры, тёмной её половины: иконка на плитке
-/// Launchpad живёт своей жизнью и на тему системы не смотрит, но роли у полос
+/// Цвета дуг берутся из родной палитры, тёмной её половины: иконка на плитке
+/// Launchpad живёт своей жизнью и на тему системы не смотрит, но роли у цветов
 /// те же, что в панели, — и расходиться их оттенки не должны.
 enum AppIcon {
     private static let ink = Palette.system
+
+    /// Где зелёное сменяется янтарным и янтарное — красным. Числа не совпадают
+    /// с порогами уведомлений (80 и 95 по умолчанию) намеренно: на 16 pt пять
+    /// процентов круга вырождаются в одну точку, и красного в знаке попросту
+    /// не видно. Тридцать шесть градусов — минимум, который переживает
+    /// уменьшение до иконки в Spotlight.
+    private static let warningStart: CGFloat = 80
+    private static let criticalStart: CGFloat = 90
+
+    /// Плитка. Своих цветов у неё в палитре нет: фон панели рассчитан на текст
+    /// поверх материала, а плитке нужен градиент, который читается на любом
+    /// рабочем столе. Холодный графит выбран под кольцо — тёплый серый рядом с
+    /// зелёным желтит.
+    private static let plateTop: UInt32 = 0x2A2E38
+    private static let plateBottom: UInt32 = 0x111318
 
     /// Пары «имя файла в .iconset — сторона в пикселях».
     static let variants: [(name: String, pixels: Int)] = [
@@ -48,68 +63,92 @@ enum AppIcon {
 
     private static func draw(side: CGFloat) -> NSImage {
         NSImage(size: NSSize(width: side, height: side), flipped: false) { _ in
-            // macOS сама не скругляет иконку — рисуем «сквиркл» вручную,
-            // с отступом по гайдлайну (примерно десятая часть стороны).
-            let inset = side * 0.08
-            let plate = NSRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
-            let corner = plate.width * 0.22
-
-            NSColor(hex: ink.panelBackground.dark).setFill()
-            NSBezierPath(roundedRect: plate, xRadius: corner, yRadius: corner).fill()
-
-            let barHeight = plate.height * 0.11
-            let spacing = plate.height * 0.10
-            let left = plate.minX + plate.width * 0.14
-            let usable = plate.width * 0.72
-            let radius = barHeight / 2
-            let totalHeight = barHeight * 3 + spacing * 2
-            var y = plate.midY + totalHeight / 2 - barHeight
-
-            // Сверху вниз: недобор, ровно по плану, перерасход.
-            let rows: [(fill: Double, plan: Double)] = [
-                (0.45, 0.70),
-                (0.70, 0.70),
-                (0.95, 0.70),
-            ]
-
-            for row in rows {
-                NSColor(hex: ink.track.dark).setFill()
-                NSBezierPath(
-                    roundedRect: NSRect(x: left, y: y, width: usable, height: barHeight),
-                    xRadius: radius, yRadius: radius
-                ).fill()
-
-                NSColor(hex: ink.plan.dark).setFill()
-                NSBezierPath(
-                    roundedRect: NSRect(x: left, y: y, width: usable * row.plan, height: barHeight),
-                    xRadius: radius, yRadius: radius
-                ).fill()
-
-                NSColor(hex: ink.good.dark).setFill()
-                NSBezierPath(
-                    roundedRect: NSRect(
-                        x: left, y: y,
-                        width: usable * min(row.fill, row.plan), height: barHeight
-                    ),
-                    xRadius: radius, yRadius: radius
-                ).fill()
-
-                if row.fill > row.plan {
-                    let gap = max(side * 0.012, 1)
-                    let start = left + usable * row.plan + gap
-                    NSColor(hex: ink.warning.dark).setFill()
-                    NSBezierPath(
-                        roundedRect: NSRect(
-                            x: start, y: y,
-                            width: max(left + usable * row.fill - start, 1), height: barHeight
-                        ),
-                        xRadius: radius, yRadius: radius
-                    ).fill()
-                }
-
-                y -= barHeight + spacing
-            }
+            let plate = plateRect(side: side)
+            fillPlate(plate)
+            drawRing(in: plate)
             return true
         }
+    }
+
+    /// Отступ по гайдлайну: плитка не занимает квадрат целиком.
+    private static func plateRect(side: CGFloat) -> NSRect {
+        let inset = side * 0.055
+        return NSRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
+    }
+
+    private static func fillPlate(_ rect: NSRect) {
+        NSGraphicsContext.current?.saveGraphicsState()
+        defer { NSGraphicsContext.current?.restoreGraphicsState() }
+
+        squircle(in: rect).addClip()
+        NSGradient(colors: [NSColor(hex: plateTop), NSColor(hex: plateBottom)])?
+            .draw(in: rect, angle: -90)
+        // Блик по верхней кромке: без него плитка выглядит наклейкой, а не
+        // иконкой рядом с системными.
+        NSGradient(colors: [NSColor(white: 1, alpha: 0.14), NSColor(white: 1, alpha: 0)])?
+            .draw(
+                in: NSRect(
+                    x: rect.minX, y: rect.maxY - rect.height * 0.4,
+                    width: rect.width, height: rect.height * 0.4
+                ),
+                angle: -90
+            )
+    }
+
+    /// Форма плитки macOS — суперэллипс, а не прямоугольник со скруглением:
+    /// у скруглённого угол ломается там, где дуга встречается с прямой, и
+    /// рядом с системными иконками это видно.
+    private static func squircle(in rect: NSRect, exponent: CGFloat = 5) -> NSBezierPath {
+        let path = NSBezierPath()
+        let a = rect.width / 2, b = rect.height / 2
+        let steps = 720
+        for step in 0...steps {
+            let t = CGFloat(step) / CGFloat(steps) * 2 * .pi
+            let cosT = cos(t), sinT = sin(t)
+            let point = NSPoint(
+                x: rect.midX + a * copysign(pow(abs(cosT), 2 / exponent), cosT),
+                y: rect.midY + b * copysign(pow(abs(sinT), 2 / exponent), sinT)
+            )
+            if step == 0 { path.move(to: point) } else { path.line(to: point) }
+        }
+        path.close()
+        return path
+    }
+
+    private static func drawRing(in plate: NSRect) {
+        let center = NSPoint(x: plate.midX, y: plate.midY)
+        let radius = plate.width * 0.305
+        let width = plate.width * 0.165
+
+        // Соседние дуги перекрываются на полградуса: встык AppKit оставляет
+        // волосяную щель, и на мелком размере она читается как грязь.
+        let bleed: CGFloat = 0.5
+        let warningAngle = warningStart * 3.6
+        let criticalAngle = criticalStart * 3.6
+
+        arc(center: center, radius: radius, width: width,
+            from: 90, sweep: warningAngle + bleed, color: ink.good.dark)
+        arc(center: center, radius: radius, width: width,
+            from: 90 - warningAngle, sweep: criticalAngle - warningAngle + bleed,
+            color: ink.warning.dark)
+        arc(center: center, radius: radius, width: width,
+            from: 90 - criticalAngle, sweep: 360 - criticalAngle, color: ink.critical.dark)
+    }
+
+    /// 12 часов — верх круга; в системе координат AppKit это 90°, дальше по
+    /// часовой стрелке, как заполняется кольцо в строке меню.
+    private static func arc(
+        center: NSPoint, radius: CGFloat, width: CGFloat,
+        from: CGFloat, sweep: CGFloat, color: UInt32
+    ) {
+        let path = NSBezierPath()
+        path.appendArc(
+            withCenter: center, radius: radius,
+            startAngle: from, endAngle: from - min(sweep, 359.9), clockwise: true
+        )
+        path.lineWidth = width
+        path.lineCapStyle = .butt
+        NSColor(hex: color).setStroke()
+        path.stroke()
     }
 }
