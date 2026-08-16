@@ -18,11 +18,12 @@ public actor UpdateInstaller {
         case verifying
         case installing
 
-        public var title: String {
+        public func title(_ lang: Lang) -> String {
+            let l = L10n(lang)
             switch self {
-            case .downloading: "качаю образ…"
-            case .verifying: "сверяю контрольную сумму…"
-            case .installing: "ставлю…"
+            case .downloading: return l.pick("качаю образ…", "downloading the image…")
+            case .verifying: return l.pick("сверяю контрольную сумму…", "verifying the checksum…")
+            case .installing: return l.pick("ставлю…", "installing…")
             }
         }
     }

@@ -50,7 +50,7 @@ if let raw = arguments.first(where: { $0.hasPrefix("--calibrate=") })?
 }
 
 if arguments.contains("--update") {
-    exit(await CLI.update(bundle: UpdateController.runningBundle))
+    exit(await CLI.update(bundle: UpdateController.runningBundle, lang: config.language.resolved))
 }
 
 if arguments.contains("--json") {

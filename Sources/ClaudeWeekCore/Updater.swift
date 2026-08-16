@@ -108,28 +108,40 @@ public enum UpdateError: Error, LocalizedError, Equatable {
     case notWritable(String)
     case install(String)
 
-    public var errorDescription: String? {
+    /// Русский текст: он же уходит в лог, который читают при разборе поломки.
+    public var errorDescription: String? { message(.ru) }
+
+    /// То же самое на языке интерфейса — для панели и окон, где это читает
+    /// не автор, а тот, у кого обновление не встало.
+    public func message(_ lang: Lang) -> String {
+        let l = L10n(lang)
         switch self {
         case .network(let text):
-            "не дозвонился до GitHub: \(text)"
+            return l.pick("не дозвонился до GitHub: \(text)", "could not reach GitHub: \(text)")
         case .http(let code):
-            code == 403 || code == 429
-                ? "GitHub не пустил (\(code)) — слишком часто спрашивали, попробуйте позже"
-                : "GitHub ответил \(code)"
+            return code == 403 || code == 429
+                ? l.pick("GitHub не пустил (\(code)) — слишком часто спрашивали, попробуйте позже",
+                         "GitHub turned us away (\(code)) — too many requests, try later")
+                : l.pick("GitHub ответил \(code)", "GitHub replied \(code)")
         case .decoding(let text):
-            "не разобрал ответ GitHub: \(text)"
+            return l.pick("не разобрал ответ GitHub: \(text)", "could not parse GitHub’s reply: \(text)")
         case .noImage(let arch):
-            "в релизе нет образа под \(arch) — соберите из исходников: ./scripts/install.sh"
+            return l.pick("в релизе нет образа под \(arch) — соберите из исходников: ./scripts/install.sh",
+                          "the release has no image for \(arch) — build from source: ./scripts/install.sh")
         case .checksumMissing(let name):
-            "в SHA256SUMS.txt нет строки про \(name)"
+            return l.pick("в SHA256SUMS.txt нет строки про \(name)",
+                          "SHA256SUMS.txt has no line for \(name)")
         case .checksumMismatch(let expected, let got):
-            "образ скачался повреждённым: сумма \(got.prefix(12))… вместо \(expected.prefix(12))…"
+            return l.pick("образ скачался повреждённым: сумма \(got.prefix(12))… вместо \(expected.prefix(12))…",
+                          "the image downloaded corrupted: \(got.prefix(12))… instead of \(expected.prefix(12))…")
         case .notBundled:
-            "обновлять нечего: программа запущена не из ClaudeWeek.app"
+            return l.pick("обновлять нечего: программа запущена не из ClaudeWeek.app",
+                          "nothing to update: the app was not launched from ClaudeWeek.app")
         case .notWritable(let path):
-            "нет прав переписать \(path) — перетащите новую версию руками"
+            return l.pick("нет прав переписать \(path) — перетащите новую версию руками",
+                          "no permission to overwrite \(path) — drag the new version in by hand")
         case .install(let text):
-            "не поставил обновление: \(text)"
+            return l.pick("не поставил обновление: \(text)", "could not install the update: \(text)")
         }
     }
 }

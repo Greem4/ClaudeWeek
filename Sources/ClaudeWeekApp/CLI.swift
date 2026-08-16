@@ -146,7 +146,7 @@ enum CLI {
     /// `bundle` — что подменяем. У `swift run` бандла нет, поэтому явный путь
     /// к установленной копии допустим: `--update` из отладочной сборки чинит
     /// ту, что в ~/Applications.
-    static func update(bundle: URL?) async -> Int32 {
+    static func update(bundle: URL?, lang: Lang = .ru) async -> Int32 {
         guard let bundle else {
             FileHandle.standardError.write(Data("""
             обновлять нечего: запущено не из ClaudeWeek.app.
@@ -175,7 +175,7 @@ enum CLI {
         print("вышла версия \(release.version), у вас \(ClaudeWeek.version)")
         do {
             try await UpdateInstaller(bundle: bundle).install(release) { stage in
-                print("  \(stage.title)")
+                print("  \(stage.title(lang))")
             }
         } catch {
             let text = (error as? UpdateError)?.errorDescription ?? error.localizedDescription

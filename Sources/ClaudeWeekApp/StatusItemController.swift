@@ -47,6 +47,7 @@ final class StatusItemController: NSObject {
         configurePanel()
         observeSystemEvents()
         startTimers()
+        update.strings = config.strings
         update.start()
         // Разрешение на баннеры спрашиваем сразу, а не в момент первого
         // порога: системный диалог, выскочивший посреди работы через три дня
@@ -292,6 +293,7 @@ final class StatusItemController: NSObject {
         let notificationsEnabled = config.notifications.enabled && !model.config.notifications.enabled
 
         model.config = config
+        update.strings = config.strings
         applyAppearance()
         render()
         if notificationsEnabled { notifications.apply(config.notifications) }
@@ -347,7 +349,7 @@ final class StatusItemController: NSObject {
             return (config.strings.pick("получилось: \(spent) недельного лимита",
                                         "worked: \(spent) of the weekly limit"), true)
         } catch {
-            let text = (error as? UsageError)?.errorDescription ?? error.localizedDescription
+            let text = (error as? UsageError)?.message(config.strings.lang) ?? error.localizedDescription
             return (text, false)
         }
     }
@@ -491,6 +493,7 @@ final class StatusItemController: NSObject {
         Log.info("конфиг изменился, применяю")
         let notificationsEnabled = config.notifications.enabled && !model.config.notifications.enabled
         model.config = config
+        update.strings = config.strings
         if notificationsEnabled { notifications.apply(config.notifications) }
         settings?.adopt(config)
         applyAppearance()
