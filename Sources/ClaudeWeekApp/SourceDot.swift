@@ -79,13 +79,13 @@ extension SourceState {
 
     /// Для VoiceOver: кружок сам по себе скрыт от него — цвет и заливку
     /// озвучить нечем, поэтому строка называет источник словом.
-    var spokenName: String {
+    func spokenName(_ s: L10n) -> String {
         switch self {
-        case .synced: "данные с сервера"
-        case .stale: "данные с сервера, устаревшие"
-        case .local: "локальная оценка"
-        case .pending: "данные загружаются"
-        case .missing: "данных нет"
+        case .synced: s.pick("данные с сервера", "data from the server")
+        case .stale: s.pick("данные с сервера, устаревшие", "data from the server, stale")
+        case .local: s.pick("локальная оценка", "local estimate")
+        case .pending: s.pick("данные загружаются", "loading data")
+        case .missing: s.pick("данных нет", "no data")
         }
     }
 }

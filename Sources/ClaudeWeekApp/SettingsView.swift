@@ -643,7 +643,7 @@ struct NotificationSettings: View {
             Section(s.pick("Уведомления", "Notifications")) {
                 Toggle(s.pick("Предупреждать о приближении к лимиту", "Warn when a limit gets close"),
                        isOn: enabled)
-                Text(model.notifications.summary)
+                Text(model.notifications.summary(s))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if model.notifications.needsSystemSettings {

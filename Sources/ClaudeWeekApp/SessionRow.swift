@@ -64,6 +64,7 @@ struct SessionRow: View {
     let animated: Bool
 
     @Environment(\.palette) private var palette
+    @Environment(\.strings) private var s
 
     private var isWarning: Bool {
         state != .normal
@@ -72,7 +73,7 @@ struct SessionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
-                Text("5 Ч")
+                Text(s.pick("5 Ч", "5 H"))
                     .font(Theme.dayFont)
                     .foregroundStyle(palette.secondaryText.color)
                     .frame(width: Theme.dayLabelWidth, alignment: .leading)
@@ -115,7 +116,7 @@ struct SessionRow: View {
         .accessibilityLabel(voiceOverLabel)
         // Тем же отдельным действием, что и в строках дней: жест на цифрах
         // VoiceOver не достаётся — строка объявлена одним элементом.
-        .accessibilityAction(named: "Расход по моделям") { onValueTap?() }
+        .accessibilityAction(named: s.pick("Расход по моделям", "Spend by model")) { onValueTap?() }
     }
 
     /// Процент сессии — он же кнопка разбивки по моделям.
@@ -138,7 +139,7 @@ struct SessionRow: View {
             column
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onValueTap)
-                .help(DayRow.valueHint)
+                .help(DayRow.valueHint(s))
         } else {
             column
         }
@@ -149,7 +150,8 @@ struct SessionRow: View {
             at: session.resetsAt,
             now: now,
             display: resetDisplay,
-            calendar: calendar
+            calendar: calendar,
+            lang: s.lang
         )
     }
 
@@ -158,16 +160,19 @@ struct SessionRow: View {
     /// подлежащего не остаётся, а молчать о полосе в потолке нельзя.
     private var caption: String {
         session.isExhausted
-            ? "лимит исчерпан · отпустит \(reset)"
-            : "сброс \(reset)"
+            ? s.pick("лимит исчерпан · отпустит \(reset)", "limit spent · frees up \(reset)")
+            : s.pick("сброс \(reset)", "resets \(reset)")
     }
 
     private var voiceOverLabel: String {
         let percent = Formatting.percent(session.usedPercent, withSign: false)
-        let verdict = session.isExhausted ? ", лимит исчерпан" : ""
-        return """
+        let verdict = session.isExhausted ? s.pick(", лимит исчерпан", ", limit spent") : ""
+        return s.pick("""
         Пятичасовая сессия, потрачено \(percent) процентов\(verdict), \
-        сброс \(reset), \(source.spokenName)
-        """
+        сброс \(reset), \(source.spokenName(s))
+        """, """
+        Five-hour session, \(percent) per cent spent\(verdict), \
+        resets \(reset), \(source.spokenName(s))
+        """)
     }
 }

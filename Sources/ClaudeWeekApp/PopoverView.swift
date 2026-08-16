@@ -23,6 +23,10 @@ struct PopoverView: View {
     private var appearance: AppearanceConfig { model.config.appearance }
     private var palette: Palette { appearance.theme.palette }
 
+    /// Язык панели — тот же, что у настроек: обе половины программы читают
+    /// его из конфига, и переключение перерисовывает их разом.
+    private var s: L10n { model.strings }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.rowSpacing) {
             header
@@ -75,6 +79,7 @@ struct PopoverView: View {
         // вуаль поверх него. Непрозрачный — сплошная заливка палитры.
         .background(backdrop)
         .environment(\.palette, palette)
+        .environment(\.strings, s)
         // Текст уходит сам: панель открывают ради полос, и оставлять её без
         // них до следующего клика нельзя. Повторный клик снимает текст раньше
         // — смена `showsSourceText` отменяет и эту задачу.
@@ -123,7 +128,9 @@ struct PopoverView: View {
                 }
                 // Заголовок называет то, что сейчас в строках: иначе разбивка
                 // читалась бы как недельный ряд со странными подписями.
-                Text(model.showsModels ? "МОДЕЛИ" : "ЛИМИТ НЕДЕЛИ")
+                Text(model.showsModels
+                     ? s.pick("МОДЕЛИ", "MODELS")
+                     : s.pick("ЛИМИТ НЕДЕЛИ", "WEEKLY LIMIT"))
                     .font(Theme.titleFont)
                     .tracking(0.4)
                     .fixedSize()
@@ -159,7 +166,7 @@ struct PopoverView: View {
                 // приходится туда же, куда щёлкнул.
                 ZStack(alignment: .trailing) {
                     if let window = model.snapshot?.window {
-                        Text(Formatting.resetLabel(window))
+                        Text(Formatting.resetLabel(window, lang: s.lang))
                             .fixedSize()
                             .opacity(showsHeaderSourceText ? 0 : 1)
                     }
@@ -181,7 +188,7 @@ struct PopoverView: View {
         // кружок. VoiceOver цвет с заливкой не читает, поэтому источник он
         // получает подсказкой, и только когда кружок стоит здесь.
         .accessibilityElement(children: .combine)
-        .accessibilityHint(showsSessionRow ? "" : model.sourceState.spokenName)
+        .accessibilityHint(showsSessionRow ? "" : model.sourceState.spokenName(s))
     }
 
     // MARK: Дни
@@ -216,7 +223,8 @@ struct PopoverView: View {
     private func models(_ snapshot: UsageSnapshot) -> some View {
         VStack(spacing: Theme.rowSpacing) {
             if snapshot.byModel.isEmpty {
-                Text("разбивки нет: транскриптов за это окно не нашлось")
+                Text(s.pick("разбивки нет: транскриптов за это окно не нашлось",
+                            "no breakdown: no transcripts found for this window"))
                     .font(Theme.captionFont)
                     .foregroundStyle(palette.secondaryText.color)
                     .fixedSize(horizontal: false, vertical: true)
@@ -226,7 +234,7 @@ struct PopoverView: View {
                     .contentShape(Rectangle())
                     .onTapGesture(perform: toggleModels)
                     .accessibilityAddTraits(.isButton)
-                    .accessibilityHint("нажмите — назад к неделе")
+                    .accessibilityHint(s.pick("нажмите — назад к неделе", "tap to go back to the week"))
             } else {
                 ForEach(snapshot.byModel, id: \.family) { usage in
                     ModelRow(
@@ -240,7 +248,7 @@ struct PopoverView: View {
                 // Откуда эти числа — сразу под ними, а не в футере: футер
                 // говорит про неделю, и оговорка про разбивку, стоящая там,
                 // читалась бы как оговорка про весь лимит.
-                Text("≈ примерный локальный подсчёт")
+                Text(s.pick("≈ примерный локальный подсчёт", "≈ rough local estimate"))
                     .font(Theme.captionFont)
                     .foregroundStyle(palette.secondaryText.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -281,7 +289,7 @@ struct PopoverView: View {
             }
         }
         .opacity(0.6)
-        .accessibilityLabel("данные загружаются")
+        .accessibilityLabel(s.pick("данные загружаются", "loading data"))
     }
 
     // MARK: Футер
@@ -317,7 +325,7 @@ struct PopoverView: View {
                 // размером с меню он читается как ошибка вёрстки. Обе кнопки
                 // футера дублируются пунктами меню — клавиатуре они не нужны.
                 .focusEffectDisabled()
-                .accessibilityLabel("настройки")
+                .accessibilityLabel(s.pick("настройки", "settings"))
 
                 Button(action: onRefresh) {
                     Text(model.isRefreshing ? "…" : "⟳")
@@ -326,7 +334,7 @@ struct PopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .focusEffectDisabled()
-                .accessibilityLabel("обновить")
+                .accessibilityLabel(s.pick("обновить", "refresh"))
             }
         }
     }
@@ -352,7 +360,7 @@ struct PopoverView: View {
 
                 Spacer(minLength: 8)
 
-                Text("в настройках →")
+                Text(s.pick("в настройках →", "in settings →"))
                     .font(Theme.footerFont)
                     .foregroundStyle(palette.secondaryText.color)
             }
@@ -360,19 +368,22 @@ struct PopoverView: View {
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        .accessibilityLabel("\(text). Открыть настройки")
+        .accessibilityLabel(s.pick("\(text). Открыть настройки", "\(text). Open settings"))
     }
 
     private var summary: String {
-        guard let metrics = model.metrics else { return "нет данных" }
+        guard let metrics = model.metrics else { return s.pick("нет данных", "no data") }
+        let left = Formatting.duration(metrics.timeLeft, lang: s.lang)
         if model.state == .exhausted {
-            return "лимит недели исчерпан · сброс через \(Formatting.duration(metrics.timeLeft))"
+            return s.pick("лимит недели исчерпан · сброс через \(left)",
+                          "weekly limit spent · resets in \(left)")
         }
         // Темпа «1.0×» здесь больше нет: то же самое видно по расхождению
         // зелёной и синей полос, а числом это читалось как ещё один лимит.
         // Когда темп ведёт к беде, о ней говорит строка прогноза ниже.
-        return "осталось \(Formatting.percent(metrics.remainingPercent))"
-            + " · сброс через \(Formatting.duration(metrics.timeLeft))"
+        let remaining = Formatting.percent(metrics.remainingPercent)
+        return s.pick("осталось \(remaining) · сброс через \(left)",
+                      "\(remaining) left · resets in \(left)")
     }
 
     /// Вторая строка футера появляется только когда при нынешнем темпе лимит
@@ -382,8 +393,9 @@ struct PopoverView: View {
               let exhaustion = model.metrics?.exhaustionDate,
               let window = model.snapshot?.window
         else { return nil }
-        let day = Formatting.weekdayShort(exhaustion, calendar: window.calendar)
+        let day = Formatting.weekdayShort(exhaustion, calendar: window.calendar, lang: s.lang)
         let clock = Formatting.clock(exhaustion, calendar: window.calendar)
-        return "при таком темпе кончится \(day) \(clock)"
+        return s.pick("при таком темпе кончится \(day) \(clock)",
+                      "at this rate it runs out \(day) \(clock)")
     }
 }

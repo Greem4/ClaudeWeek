@@ -7,6 +7,10 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let dropdown = DropdownPanel()
     private let model: PanelModel
+
+    /// Строки меню и подсказок. Берутся из той же модели, что и панель, —
+    /// у AppKit-частей нет окружения SwiftUI, но конфиг у них общий.
+    private var s: L10n { model.strings }
     private var provider: any UsageProvider
     private let update = UpdateController()
     private let notifications = NotificationController()
@@ -112,7 +116,8 @@ final class StatusItemController: NSObject {
 
         button.image = menuBarImage(palette: model.config.appearance.theme.palette)
         // Без текстового заголовка кнопку нечего озвучивать — даём подпись сами.
-        button.setAccessibilityLabel("ClaudeWeek — потрачено \(model.menuBarTitle)")
+        button.setAccessibilityLabel(s.pick("ClaudeWeek — потрачено \(model.menuBarTitle)",
+                                            "ClaudeWeek — \(model.menuBarTitle) spent"))
         button.toolTip = tooltip
     }
 
@@ -157,13 +162,19 @@ final class StatusItemController: NSObject {
     /// Кольцо показывает два лимита сразу, и подсказка обязана назвать оба:
     /// иначе непонятно, чей процент горит красным.
     private var tooltip: String {
-        guard let metrics = model.metrics else { return "ClaudeWeek — данных пока нет" }
-        var lines = ["Неделя — \(Formatting.percent(metrics.usedPercent)) из лимита"]
-        if let session = model.session {
-            lines.append("Сессия 5 ч — \(Formatting.percent(session.usedPercent)) из лимита")
+        guard let metrics = model.metrics else {
+            return s.pick("ClaudeWeek — данных пока нет", "ClaudeWeek — no data yet")
         }
-        lines.append("План на сейчас — \(Formatting.percent(metrics.planNowPercent))")
-        lines.append("До сброса недели \(Formatting.duration(metrics.timeLeft))")
+        let used = Formatting.percent(metrics.usedPercent)
+        var lines = [s.pick("Неделя — \(used) из лимита", "Week — \(used) of the limit")]
+        if let session = model.session {
+            let spent = Formatting.percent(session.usedPercent)
+            lines.append(s.pick("Сессия 5 ч — \(spent) из лимита", "5-hour session — \(spent) of the limit"))
+        }
+        let plan = Formatting.percent(metrics.planNowPercent)
+        lines.append(s.pick("План на сейчас — \(plan)", "Plan for now — \(plan)"))
+        let left = Formatting.duration(metrics.timeLeft, lang: s.lang)
+        lines.append(s.pick("До сброса недели \(left)", "Week resets in \(left)"))
         return lines.joined(separator: "\n")
     }
 
@@ -210,16 +221,16 @@ final class StatusItemController: NSObject {
 
         let menu = NSMenu()
 
-        menu.addItem(withTitle: "Обновить", action: #selector(refreshFromMenu), keyEquivalent: "r")
+        menu.addItem(withTitle: s.pick("Обновить", "Refresh"), action: #selector(refreshFromMenu), keyEquivalent: "r")
             .target = self
         menu.addItem(.separator())
 
-        menu.addItem(withTitle: "Настройки…", action: #selector(openConfig), keyEquivalent: ",")
+        menu.addItem(withTitle: s.pick("Настройки…", "Settings…"), action: #selector(openConfig), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "О программе", action: #selector(showAbout), keyEquivalent: "")
+        menu.addItem(withTitle: s.pick("О программе", "About"), action: #selector(showAbout), keyEquivalent: "")
             .target = self
-        menu.addItem(withTitle: "Выйти", action: #selector(quit), keyEquivalent: "q")
+        menu.addItem(withTitle: s.pick("Выйти", "Quit"), action: #selector(quit), keyEquivalent: "q")
             .target = self
 
         statusItem.menu = menu
@@ -330,7 +341,11 @@ final class StatusItemController: NSObject {
         config.provider = .official
         do {
             let snapshot = try await ResolvingProvider(config: config).fetch()
-            return ("получилось: \(Formatting.percent(snapshot.usedPercent)) недельного лимита", true)
+            // Метод статический, окружения у него нет — язык берём из того же
+            // конфига, с которым проверяют доступ.
+            let spent = Formatting.percent(snapshot.usedPercent)
+            return (config.strings.pick("получилось: \(spent) недельного лимита",
+                                        "worked: \(spent) of the weekly limit"), true)
         } catch {
             let text = (error as? UsageError)?.errorDescription ?? error.localizedDescription
             return (text, false)

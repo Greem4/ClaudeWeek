@@ -33,6 +33,7 @@ struct ModelBar: View {
 /// сетке — подпись, полоса, число справа, — чтобы переключение туда-обратно не
 /// перекладывало панель заново.
 struct ModelRow: View {
+    @Environment(\.strings) private var s
     let usage: ModelUsage
     /// Доля этой модели в недельном лимите: та же доля, умноженная на итог
     /// недели. Стоит в подсказке — в строке для второго числа места нет.
@@ -58,7 +59,7 @@ struct ModelRow: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(voiceOverLabel)
-        .accessibilityAction(named: "Назад к неделе") { valueTap?() }
+        .accessibilityAction(named: s.pick("Назад к неделе", "Back to the week")) { valueTap?() }
         .help(tooltip)
     }
 
