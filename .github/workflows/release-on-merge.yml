@@ -75,8 +75,14 @@ jobs:
           fi
 
           # Версию подняли прямо в PR — уважаем её и не поднимаем второй раз.
-          if printf '%s\n' "$FILES" | grep -qx 'Sources/ClaudeWeekCore/Version.swift'; then
-            echo "Version.swift поднят в самом PR — беру его версию как есть"
+          # Но присутствие Version.swift в списке файлов этого не доказывает: PR
+          # «Локализация» правил в нём соседние строки, версия осталась
+          # выпущенной 0.1.10, разряд вышел keep, и релиз упал на занятом теге.
+          # Признак настоящий один — номер в файле ещё не выпущен тегом.
+          CURRENT="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' \
+              Sources/ClaudeWeekCore/Version.swift)"
+          if [ -n "$CURRENT" ] && ! git rev-parse -q --verify "refs/tags/v$CURRENT" >/dev/null; then
+            echo "версия $CURRENT в Version.swift ещё не выпущена — беру её как есть"
             KIND=keep
           fi
 
