@@ -65,18 +65,14 @@ enum AlertArtwork {
             guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return }
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = context
+            // Цвет один на обе формы и берётся по порогам уведомлений: первый
+            // порог — жёлтый, второй и исчерпанный лимит — красный. Так дуга и
+            // число говорят одно и то же одним языком, а разные красные в паре
+            // баннеров не читаются как два разных смысла.
+            let ink = color(for: state, palette: palette)
             switch kind {
-            case .session:
-                drawArc(percent: percent, color: color(for: state, palette: palette), palette: palette)
-            case .week:
-                // Число всегда красное — тем же красным, каким горит дуга на
-                // критическом пороге: два разных красных в одной паре
-                // баннеров читаются как два разных смысла, хотя смысл один.
-                // Баннер приходит только на пороге, то есть говорить он может
-                // лишь об одном: расход подошёл к краю. У дуги тревожность
-                // видна заполнением, а голая цифра без цвета читается как
-                // справка.
-                drawNumber(percent: percent, color: palette.critical.nsColor)
+            case .session: drawArc(percent: percent, color: ink, palette: palette)
+            case .week: drawNumber(percent: percent, color: ink)
             }
             NSGraphicsContext.restoreGraphicsState()
             data = rep.representation(using: .png, properties: [:])

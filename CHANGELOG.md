@@ -24,7 +24,9 @@ is the place for the shorter, human-facing story.
   how much is spent and how long until the reset — and *which* limit it is comes
   from the artwork rather than a third line of text: the 5-hour session arrives
   as an arc filled to the spend, the weekly limit as a red number, the same
-  language the menu bar icon speaks. Three rules keep it quiet: one banner per
+  language the menu bar icon speaks, coloured by the notification thresholds
+  themselves — amber between the two, red from the second one on. Three rules
+  keep it quiet: one banner per
   threshold per limit window, only on the way up, and no two banners closer than
   five minutes. What has been said is stored in
   `~/.config/claude-week/alerts.json`, so a restart mid-week does not repeat it.
