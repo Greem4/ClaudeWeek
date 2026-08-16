@@ -59,8 +59,24 @@ private struct GeneralSettings: View {
 
     private var config: Binding<Config> { $model.config }
 
+    /// Строки на выбранном языке. Читаются из конфига, а не из глобальной
+    /// переменной: смена языка меняет конфиг, а по нему SwiftUI перерисует
+    /// вкладку сам — без перезапуска и без ручного оповещения.
+    private var s: L10n { model.config.strings }
+
     var body: some View {
         Form {
+            Section {
+                Picker(s.languageTitle, selection: config.language) {
+                    ForEach(Language.allCases, id: \.self) { language in
+                        Text(language.title(s.lang)).tag(language)
+                    }
+                }
+                Text(s.languageHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Запуск") {
                 Toggle("Запускать при входе в систему", isOn: launchAtLogin)
                     .disabled(!LoginItem.isAvailable)

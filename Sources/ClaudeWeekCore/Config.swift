@@ -287,6 +287,14 @@ public struct Config: Codable, Sendable, Equatable {
     public var notifications: NotificationsConfig
     /// Вид панели; на цифры не влияет.
     public var appearance: AppearanceConfig
+    /// Язык интерфейса. `system` — как в системе; на расчёты не влияет,
+    /// календарь ниже остаётся русским в любом случае.
+    public var language: Language
+
+    /// Строки интерфейса на выбранном языке. Живёт здесь, а не глобальной
+    /// переменной: панель и настройки перерисовываются по изменению конфига,
+    /// и язык обязан меняться тем же движением, что и всё остальное.
+    public var strings: L10n { L10n(language) }
 
     public static let minimumRefreshInterval: TimeInterval = 30
 
@@ -308,7 +316,8 @@ public struct Config: Codable, Sendable, Equatable {
         calibration: Calibration(),
         thresholds: Thresholds(),
         notifications: NotificationsConfig(),
-        appearance: AppearanceConfig()
+        appearance: AppearanceConfig(),
+        language: .system
     )
 
     public init(
@@ -325,7 +334,8 @@ public struct Config: Codable, Sendable, Equatable {
         calibration: Calibration,
         thresholds: Thresholds,
         notifications: NotificationsConfig = NotificationsConfig(),
-        appearance: AppearanceConfig = AppearanceConfig()
+        appearance: AppearanceConfig = AppearanceConfig(),
+        language: Language = .system
     ) {
         self.resetWeekday = resetWeekday
         self.resetHour = resetHour
@@ -341,6 +351,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.thresholds = thresholds
         self.notifications = notifications
         self.appearance = appearance
+        self.language = language
     }
 
     // Каждое поле необязательно: незнакомый или неполный конфиг не должен
@@ -363,7 +374,8 @@ public struct Config: Codable, Sendable, Equatable {
             thresholds: try c.decodeIfPresent(Thresholds.self, forKey: .thresholds) ?? d.thresholds,
             notifications: try c.decodeIfPresent(NotificationsConfig.self, forKey: .notifications)
                 ?? d.notifications,
-            appearance: try c.decodeIfPresent(AppearanceConfig.self, forKey: .appearance) ?? d.appearance
+            appearance: try c.decodeIfPresent(AppearanceConfig.self, forKey: .appearance) ?? d.appearance,
+            language: try c.decodeIfPresent(Language.self, forKey: .language) ?? d.language
         )
     }
 
