@@ -107,16 +107,27 @@ final class NotificationController {
     }
 
     /// «Показать пример» из настроек: тот же баннер, что придёт по-настоящему,
-    /// с первым недельным порогом вместо живого расхода. Лога не трогает —
-    /// это разговор не про расход, а про то, как он будет выглядеть.
-    func preview(config: Config) {
+    /// с первым порогом лимита вместо живого расхода. Лога не трогает — это
+    /// разговор не про расход, а про то, как он будет выглядеть.
+    ///
+    /// Примеров два, по одному на лимит: у недели и сессии разные заголовки,
+    /// разный масштаб времени до сброса и разные пороги, и посмотреть на
+    /// недельный баннер, настраивая сессию, — значит не увидеть своего.
+    func preview(_ kind: AlertKind, config: Config) {
         guard center != nil else { return }
         let now = Date()
+        let limit = kind == .week ? config.notifications.week : config.notifications.session
+        // Момент сброса у недели настоящий, у сессии — выдуманные 72 минуты:
+        // живого пятичасового окна в этот момент может не быть вовсе, а
+        // подпись «сброс через …» показать надо.
+        let resetsAt = kind == .week
+            ? WeekWindow(containing: now, config: config).end
+            : now.addingTimeInterval(72 * 60)
         let alert = LimitAlert(
-            kind: .week,
-            threshold: config.notifications.week.first,
-            percent: config.notifications.week.first,
-            resetsAt: WeekWindow(containing: now, config: config).end,
+            kind: kind,
+            threshold: limit.first,
+            percent: limit.first,
+            resetsAt: resetsAt,
             isEstimate: false
         )
         Task {
@@ -128,7 +139,7 @@ final class NotificationController {
     private func send(_ alert: LimitAlert, config: Config, now: Date) {
         guard let center else { return }
 
-        let text = alert.message(now: now, calendar: config.calendar)
+        let text = alert.message(now: now)
         let content = UNMutableNotificationContent()
         content.title = text.title
         content.body = text.body
@@ -139,7 +150,8 @@ final class NotificationController {
 
         if let picture = AlertArtwork.png(
             percent: alert.percent,
-            state: state(for: alert, thresholds: config.thresholds),
+            state: state(for: alert, config: config.notifications),
+            kind: alert.kind,
             palette: config.appearance.theme.palette
         ), let attachment = try? UNNotificationAttachment(
             identifier: "ring", url: picture, options: nil
@@ -156,26 +168,25 @@ final class NotificationController {
         Task {
             do {
                 try await center.add(request)
+                // Баннер — единственное, что программа делает поверх чужой
+                // работы, и в логе он должен быть виден: разбор «почему меня
+                // дёрнули» начинается отсюда.
+                Log.info("уведомление: \(alert.kind.rawValue) \(Formatting.percent(alert.percent)), порог \(Int(alert.threshold))")
             } catch {
                 Log.warn("не показал уведомление: \(error)")
             }
         }
     }
 
-    /// Цвет кольца на картинке — по тем же порогам, что красят значок в
-    /// строке меню, а не по порогу уведомления: иначе баннер и значок
-    /// показывали бы один и тот же расход разными цветами.
-    private func state(for alert: LimitAlert, thresholds: Thresholds) -> LimitState {
-        switch alert.kind {
-        case .week:
-            LimitState.forPercent(
-                alert.percent, warn: thresholds.weekWarn, critical: thresholds.weekCritical
-            )
-        case .session:
-            LimitState.forPercent(
-                alert.percent, warn: thresholds.sessionWarn, critical: thresholds.sessionCritical
-            )
-        }
+    /// Цвет картинки — по порогам самого уведомления, а не по цветовым со
+    /// вкладки «Строка меню». Иначе выходила бы нелепость: баннер о том, что
+    /// расход перешагнул вашу отметку, приходил бы со спокойным зелёным
+    /// числом — просто потому, что до порога окраски значка не хватило
+    /// процента. Первый порог рисуется жёлтым, второй и исчерпанный лимит —
+    /// красным: чем выше расход, тем тревожнее картинка.
+    private func state(for alert: LimitAlert, config: NotificationsConfig) -> LimitState {
+        let limit = alert.kind == .week ? config.week : config.session
+        return LimitState.forPercent(alert.percent, warn: limit.first, critical: limit.second)
     }
 
     private func save() {

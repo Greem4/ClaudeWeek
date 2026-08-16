@@ -18,17 +18,26 @@ is the place for the shorter, human-facing story.
 
 - Notifications when spend crosses a threshold you set: two thresholds per
   limit — 80 % and 95 % for the week, 75 % and 95 % for the 5-hour session —
-  configured on a new "Уведомления" tab. Each limit can be silenced on its own,
-  and one switch turns all notifications off. The banner names the limit and the
-  live percentage, gives what is left and when the limit resets, and carries the
-  same ring the menu bar shows, in the same colour (taken from the colour
-  thresholds, so banner and icon never disagree). Three rules keep it quiet: one
-  banner per threshold per limit window, only on the way up, and no two banners
-  closer than five minutes. What has been said is stored in
+  configured on a new "Уведомления" tab, with a "Показать пример" button in each
+  section that sends the real banner on demand. Each limit can be silenced on
+  its own, and one switch turns all notifications off. The banner is two lines —
+  how much is spent and how long until the reset — and *which* limit it is comes
+  from the artwork rather than a third line of text: the 5-hour session arrives
+  as an arc filled to the spend, the weekly limit as a red number, the same
+  language the menu bar icon speaks. Three rules keep it quiet: one banner per
+  threshold per limit window, only on the way up, and no two banners closer than
+  five minutes. What has been said is stored in
   `~/.config/claude-week/alerts.json`, so a restart mid-week does not repeat it.
-  The decision logic lives in the core (`AlertPlanner`) and is covered by tests.
+  The decision logic and the wording both live in the core (`AlertPlanner`,
+  `LimitAlert.message`) and are covered by tests.
 - `--screenshot` now also renders the notifications tab
-  (`settings-notifications-light.png`, `settings-notifications-dark.png`).
+  (`settings-notifications-light.png`, `settings-notifications-dark.png`). Form
+  views are captured through a real window: `ImageRenderer` returns an empty
+  rectangle for a grouped `Form`, and an inactive window would draw every switch
+  grey, making enabled settings look off.
+- `Formatting.longDuration` — the same interval in words ("2 дня 4 часа",
+  "1 час 12 минут"), with Russian pluralisation. The panel keeps the short form;
+  a banner has room for the long one.
 - Model breakdown in the panel: clicking the percentage — on a day row or on
   the 5-hour session row — replaces the day rows with one row per model (Opus,
   Sonnet, Haiku), each with the same kind of bar showing its share of the

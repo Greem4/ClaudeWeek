@@ -1,9 +1,15 @@
 import AppKit
 import ClaudeWeekCore
 
-/// Картинка к уведомлению — то же кольцо, что стоит в строке меню, только
-/// крупно. Нужна не для красоты: баннер приходит сбоку от работы, и по
-/// цветному кольцу видно, о чём он, ещё до того, как прочитан заголовок.
+/// Картинка к уведомлению. Нужна не для красоты: по ней видно, о каком из двух
+/// лимитов речь, ещё до того, как прочитан текст, — поэтому лимиты нарисованы
+/// по-разному.
+///
+/// Пятичасовая сессия приходит **дугой**, недельный лимит — **числом**. Это тот
+/// же язык, каким говорит значок в строке меню: там дуга по умолчанию отдана
+/// сессии, а цифра в центре — неделе. Один взгляд на баннер — и понятно,
+/// кончается пятичасовое окно или неделя, а текст только уточняет, сколько
+/// именно.
 ///
 /// Цвет берётся по тем же порогам, что красят значок, а не по порогу
 /// уведомления: человек привык, что жёлтое кольцо у часов означает одно и то
@@ -24,8 +30,11 @@ enum AlertArtwork {
     ///
     /// Не вышло — nil, и уведомление уйдёт без картинки: текст в нём главное,
     /// и терять весь баннер из-за неудавшейся отрисовки незачем.
-    static func png(percent: Double, state: LimitState, palette: Palette) -> URL? {
-        guard let data = render(percent: percent, state: state, palette: palette) else { return nil }
+    static func png(
+        percent: Double, state: LimitState, kind: AlertKind, palette: Palette
+    ) -> URL? {
+        guard let data = render(percent: percent, state: state, kind: kind, palette: palette)
+        else { return nil }
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("claudeweek-alert-\(UUID().uuidString).png")
         do {
@@ -37,7 +46,9 @@ enum AlertArtwork {
         }
     }
 
-    private static func render(percent: Double, state: LimitState, palette: Palette) -> Data? {
+    private static func render(
+        percent: Double, state: LimitState, kind: AlertKind, palette: Palette
+    ) -> Data? {
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: side, pixelsHigh: side,
@@ -54,16 +65,31 @@ enum AlertArtwork {
             guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return }
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = context
-            draw(percent: percent, color: color(for: state, palette: palette), palette: palette)
+            switch kind {
+            case .session:
+                drawArc(percent: percent, color: color(for: state, palette: palette), palette: palette)
+            case .week:
+                // Число всегда красное — тем же красным, каким горит дуга на
+                // критическом пороге: два разных красных в одной паре
+                // баннеров читаются как два разных смысла, хотя смысл один.
+                // Баннер приходит только на пороге, то есть говорить он может
+                // лишь об одном: расход подошёл к краю. У дуги тревожность
+                // видна заполнением, а голая цифра без цвета читается как
+                // справка.
+                drawNumber(percent: percent, color: palette.critical.nsColor)
+            }
             NSGraphicsContext.restoreGraphicsState()
             data = rep.representation(using: .png, properties: [:])
         }
         return data
     }
 
-    private static func draw(percent: Double, color: NSColor, palette: Palette) {
+    /// Пятичасовая сессия: кольцо, заполненное израсходованным. Числа внутри
+    /// нет — его говорит первая строка баннера, а пустая середина как раз и
+    /// отличает сессию от недели с одного взгляда.
+    private static func drawArc(percent: Double, color: NSColor, palette: Palette) {
         let box = NSRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side))
-        let stroke = box.width * 0.11
+        let stroke = box.width * 0.14
         let bounds = box.insetBy(dx: stroke / 2 + box.width * 0.04, dy: stroke / 2 + box.width * 0.04)
         let center = NSPoint(x: bounds.midX, y: bounds.midY)
         let radius = bounds.width / 2
@@ -75,32 +101,43 @@ enum AlertArtwork {
         track.stroke()
 
         let fraction = min(max(percent, 0), 100) / 100
-        if fraction > 0 {
-            // Тот же приём, что в значке: полный круг `appendArc` не рисует,
-            // и на 100 % дуга не замыкается на волос.
-            let arc = NSBezierPath()
-            arc.appendArc(
-                withCenter: center, radius: radius,
-                startAngle: 90, endAngle: 90 - min(360 * fraction, 359.9),
-                clockwise: true
-            )
-            arc.lineWidth = stroke
-            arc.lineCapStyle = .round
-            color.setStroke()
-            arc.stroke()
-        }
+        guard fraction > 0 else { return }
+        // Тот же приём, что в значке: полный круг `appendArc` не рисует,
+        // и на 100 % дуга не замыкается на волос.
+        let arc = NSBezierPath()
+        arc.appendArc(
+            withCenter: center, radius: radius,
+            startAngle: 90, endAngle: 90 - min(360 * fraction, 359.9),
+            clockwise: true
+        )
+        arc.lineWidth = stroke
+        arc.lineCapStyle = .round
+        color.setStroke()
+        arc.stroke()
+    }
 
-        // Трёхзначный процент сажаем мельче — по той же причине, что в кольце
-        // строки меню: «100» в прежнем кегле вылезает за дугу.
+    /// Недельный лимит: одно число во всю плашку — без знака процента. Знак в
+    /// миниатюре съедает половину места и ничего не добавляет: в первой строке
+    /// баннера уже написано «Израсходовано 82 %», а картинка должна читаться
+    /// на бегу, одним крупным числом.
+    ///
+    /// Кегль не задан числом, а подобран под ширину: «7», «82» и «100» —
+    /// строки разной длины, и с постоянным кеглем короткая терялась бы в углу,
+    /// а длинная не влезала.
+    private static func drawNumber(percent: Double, color: NSColor) {
+        let box = NSRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side))
         let text = Formatting.percent(percent, withSign: false)
+
+        // Меряем пробной строкой и масштабируем: так строка занимает по ширине
+        // ровно то, что ей отведено, какой бы длины ни оказалась.
+        let probe: CGFloat = 100
+        let probeWidth = (text as NSString)
+            .size(withAttributes: [.font: NSFont.systemFont(ofSize: probe, weight: .bold)]).width
+        let byWidth = probe * (box.width * 0.86) / max(probeWidth, 1)
+        let font = NSFont.systemFont(ofSize: min(byWidth, box.height * 0.78), weight: .bold)
+
         let label = NSAttributedString(
-            string: text,
-            attributes: [
-                .font: NSFont.monospacedDigitSystemFont(
-                    ofSize: box.width * (text.count >= 3 ? 0.32 : 0.42), weight: .semibold
-                ),
-                .foregroundColor: color,
-            ]
+            string: text, attributes: [.font: font, .foregroundColor: color]
         )
         let size = label.size()
         label.draw(at: NSPoint(x: (box.width - size.width) / 2, y: (box.height - size.height) / 2))

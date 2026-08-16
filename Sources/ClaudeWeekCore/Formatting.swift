@@ -42,6 +42,47 @@ public enum Formatting {
         return "меньше минуты"
     }
 
+    /// «2 дня 4 часа», «1 час 12 минут», «42 минуты» — та же длительность, что
+    /// у `duration`, но словами. В панели место дорого и «2 дн 4 ч» там
+    /// уместно; в уведомлении строка одна, места хватает, а сокращения
+    /// читаются телеграммой.
+    public static func longDuration(_ interval: TimeInterval) -> String {
+        let total = Int(max(interval, 0).rounded())
+        let days = total / 86_400
+        let hours = (total % 86_400) / 3_600
+        let minutes = (total % 3_600) / 60
+
+        // Ровный остаток называем одним словом: «3 часа», а не «3 часа
+        // 0 минут» — ноль в строке читается как опечатка.
+        if days > 0 {
+            let head = plural(days, "день", "дня", "дней")
+            return hours > 0 ? "\(head) \(plural(hours, "час", "часа", "часов"))" : head
+        }
+        if hours > 0 {
+            let head = plural(hours, "час", "часа", "часов")
+            return minutes > 0 ? "\(head) \(plural(minutes, "минута", "минуты", "минут"))" : head
+        }
+        if minutes > 0 { return plural(minutes, "минута", "минуты", "минут") }
+        return "меньше минуты"
+    }
+
+    /// Русское склонение при числе: 1 час, 2 часа, 5 часов, 11 часов.
+    private static func plural(_ count: Int, _ one: String, _ few: String, _ many: String) -> String {
+        let tail = count % 100
+        let last = count % 10
+        let word: String
+        if (11...14).contains(tail) {
+            word = many
+        } else if last == 1 {
+            word = one
+        } else if (2...4).contains(last) {
+            word = few
+        } else {
+            word = many
+        }
+        return "\(count) \(word)"
+    }
+
     /// Проценты без дрожания знаков: всегда целое число.
     public static func percent(_ value: Double, withSign sign: Bool = true) -> String {
         let rounded = Int(value.rounded())

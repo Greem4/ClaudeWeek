@@ -156,35 +156,27 @@ public struct LimitAlert: Sendable, Equatable {
 
     public var isExhausted: Bool { percent >= 100 }
 
-    /// Заголовок и текст баннера. Живут в ядре вместе с правилами: слова —
-    /// такая же часть уведомления, как момент его отправки, и проверяются
-    /// теми же тестами.
+    /// Две строки баннера. Живут в ядре вместе с правилами: слова — такая же
+    /// часть уведомления, как момент его отправки, и проверяются теми же
+    /// тестами.
     ///
-    /// Заголовок называет лимит и число, текст — остаток и сброс. Порога в
-    /// тексте нет намеренно: человек его сам и задал, а знать ему нужно, где
-    /// он сейчас и сколько ждать.
-    public func message(now: Date, calendar: Calendar) -> (title: String, body: String) {
-        let reset = Formatting.sessionReset(
-            at: resetsAt, now: now, display: .both, calendar: calendar
-        )
-        let value = (isEstimate ? "≈" : "") + Formatting.percent(percent)
-
-        switch (kind, isExhausted) {
-        case (.week, false):
-            return (
-                "Недельный лимит — \(value)",
-                "Осталось \(Formatting.percent(100 - percent)). Сброс \(reset)."
-            )
-        case (.week, true):
-            return ("Недельный лимит исчерпан", "Сброс \(reset).")
-        case (.session, false):
-            return (
-                "Пятичасовая сессия — \(value)",
-                "Осталось \(Formatting.percent(100 - percent)). Сброс \(reset)."
-            )
-        case (.session, true):
-            return ("Пятичасовая сессия исчерпана", "Отпустит \(reset).")
-        }
+    /// Первая, полужирная, отвечает на единственный вопрос «сколько уже
+    /// потрачено», вторая — «сколько ждать». Больше в баннере не нужно
+    /// ничего: третья строка переносилась бы и превращала его в кашу.
+    ///
+    /// Какой это лимит, говорит не текст, а картинка справа: пятичасовая
+    /// сессия приходит дугой, недельный лимит — числом. Тот же язык, что в
+    /// строке меню, где дуга по умолчанию отдана сессии, а цифра — неделе.
+    ///
+    /// Часа на циферблате здесь нет намеренно: «через 2 часа 56 минут» и
+    /// «в воскресенье в 2:10» — одно и то же, сказанное дважды. Точный момент
+    /// сброса по-прежнему стоит в панели, где на него смотрят осознанно.
+    /// Порога нет по той же причине: человек его сам и задал.
+    public func message(now: Date) -> (title: String, body: String) {
+        let spent = (isEstimate ? "≈" : "") + Formatting.percent(percent)
+        let title = isExhausted ? "Лимит исчерпан" : "Израсходовано \(spent)"
+        let body = "Сброс через \(Formatting.longDuration(resetsAt.timeIntervalSince(now)))"
+        return (title, body)
     }
 }
 

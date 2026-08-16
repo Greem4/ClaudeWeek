@@ -101,9 +101,10 @@ final class SettingsModel {
     }
 
     /// «Показать пример» с вкладки уведомлений: тот же баннер, что придёт
-    /// по-настоящему. Идёт мимо конфига — показывать нечего сохранять.
-    func previewNotification() {
-        notifications.preview(config: config)
+    /// по-настоящему, — по одному на каждый лимит. Идёт мимо конфига:
+    /// показанному баннеру нечего сохранять.
+    func previewNotification(_ kind: AlertKind) {
+        notifications.preview(kind, config: config)
     }
 
     func checkNow() {

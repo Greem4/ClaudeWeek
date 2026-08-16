@@ -256,7 +256,7 @@ enum Screenshot {
         return hosted(
             NotificationSettings(model: model)
                 .environment(\.colorScheme, name == .darkAqua ? .dark : .light),
-            size: NSSize(width: 640, height: 750),
+            size: NSSize(width: 640, height: 830),
             appearance: appearance
         )
     }

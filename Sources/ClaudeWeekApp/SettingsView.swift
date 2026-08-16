@@ -556,11 +556,14 @@ struct NotificationSettings: View {
                 Toggle("Со звуком", isOn: sound)
                     .disabled(isOff)
 
-                HStack {
-                    Button("Показать пример") { model.previewNotification() }
-                        .disabled(!model.notifications.canPreview)
-                    Spacer()
-                }
+                Text("""
+                В баннере две строки: сколько израсходовано и через сколько \
+                сброс. Какой это лимит, говорит картинка справа — пятичасовая \
+                сессия приходит дугой, недельный лимит красным числом.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
                 Text("""
                 Об одном пороге программа говорит один раз за окно лимита и \
                 только на ухудшении: откатившийся расход молчит, а следующая \
@@ -575,6 +578,7 @@ struct NotificationSettings: View {
                 Toggle("Уведомлять о недельном лимите", isOn: weekEnabled)
                 PercentRow(title: "Предупредить после", value: weekFirst)
                 PercentRow(title: "И ещё раз после", value: weekSecond)
+                previewButton(.week)
                 Text("""
                 Неделя не сбросится до её конца, поэтому предупреждать о ней \
                 стоит раньше: после первого порога расход ещё можно растянуть \
@@ -589,6 +593,7 @@ struct NotificationSettings: View {
                 Toggle("Уведомлять о пятичасовой сессии", isOn: sessionEnabled)
                 PercentRow(title: "Предупредить после", value: sessionFirst)
                 PercentRow(title: "И ещё раз после", value: sessionSecond)
+                previewButton(.session)
                 Text("""
                 Сессию сообщает только официальный источник: на локальной \
                 оценке её процент не считается вовсе, и уведомлений о ней \
@@ -600,6 +605,17 @@ struct NotificationSettings: View {
             .disabled(isOff)
         }
         .formStyle(.grouped)
+    }
+
+    /// Кнопка «Показать пример» стоит в секции своего лимита: у недели и
+    /// сессии баннеры разные — заголовком, порогом и масштабом времени до
+    /// сброса, — и одна кнопка на двоих показывала бы чужой.
+    private func previewButton(_ kind: AlertKind) -> some View {
+        HStack {
+            Button("Показать пример") { model.previewNotification(kind) }
+                .disabled(!model.notifications.canPreview)
+            Spacer()
+        }
     }
 
     private var enabled: Binding<Bool> {

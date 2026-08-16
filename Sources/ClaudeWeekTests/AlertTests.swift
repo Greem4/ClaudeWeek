@@ -190,27 +190,45 @@ func runAlertTests(_ t: Harness) {
     }
 
     t.suite("уведомления: слова") {
-        let calendar = config().calendar
+        // Две строки: сколько потрачено и сколько ждать. Какой это лимит,
+        // говорит картинка — сессия дугой, неделя числом.
+        let session = LimitAlert(
+            kind: .session, threshold: 75, percent: 75,
+            resetsAt: now.addingTimeInterval(72 * 60), isEstimate: false
+        ).message(now: now)
+        t.equal(session.title, "Израсходовано 75 %", "первая строка — расход")
+        t.equal(session.body, "Сброс через 1 час 12 минут", "вторая — сколько ждать")
+
         let week = LimitAlert(
             kind: .week, threshold: 80, percent: 84,
-            resetsAt: now.addingTimeInterval(3 * 3600), isEstimate: false
-        ).message(now: now, calendar: calendar)
-        t.equal(week.title, "Недельный лимит — 84 %", "заголовок называет лимит и число")
-        t.check(week.body.hasPrefix("Осталось 16 %."), "в тексте остаток: \(week.body)")
-        t.check(week.body.contains("через 3 ч 0 мин"), "и когда сброс: \(week.body)")
+            resetsAt: at(2026, 8, 14, 16, 0), isEstimate: false
+        ).message(now: now)
+        t.equal(week.title, "Израсходовано 84 %", "у недели те же слова")
+        t.equal(week.body, "Сброс через 2 дня 2 часа", "и тот же шаблон срока")
 
         let estimate = LimitAlert(
             kind: .week, threshold: 80, percent: 84,
             resetsAt: now.addingTimeInterval(3600), isEstimate: true
-        ).message(now: now, calendar: calendar)
-        t.equal(estimate.title, "Недельный лимит — ≈84 %", "оценка помечена так же, как в панели")
+        ).message(now: now)
+        t.equal(estimate.title, "Израсходовано ≈84 %", "оценка помечена так же, как в панели")
 
         let done = LimitAlert(
             kind: .session, threshold: 95, percent: 100,
             resetsAt: now.addingTimeInterval(2700), isEstimate: false
-        ).message(now: now, calendar: calendar)
-        t.equal(done.title, "Пятичасовая сессия исчерпана", "исчерпанному лимиту свой заголовок")
-        t.check(done.body.hasPrefix("Отпустит через 45 мин"), "и свой глагол: \(done.body)")
+        ).message(now: now)
+        t.equal(done.title, "Лимит исчерпан", "исчерпанному лимиту своя первая строка")
+        t.equal(done.body, "Сброс через 45 минут", "срок остаётся на месте")
+    }
+
+    t.suite("уведомления: длительность словами") {
+        t.equal(Formatting.longDuration(72 * 60), "1 час 12 минут", "часы и минуты")
+        t.equal(Formatting.longDuration(3 * 3600), "3 часа", "ровный остаток без нулевых минут")
+        t.equal(Formatting.longDuration(2 * 86_400 + 4 * 3600), "2 дня 4 часа", "дни и часы")
+        t.equal(Formatting.longDuration(86_400), "1 день", "ровные сутки")
+        t.equal(Formatting.longDuration(11 * 3600), "11 часов", "11 — не «11 часа»")
+        t.equal(Formatting.longDuration(21 * 60), "21 минута", "21 — «минута», как и 1")
+        t.equal(Formatting.longDuration(45 * 60), "45 минут", "минуты без часов")
+        t.equal(Formatting.longDuration(30), "меньше минуты", "полминуты не называем числом")
     }
 
     t.suite("уведомления: лог переживает перезапуск") {
