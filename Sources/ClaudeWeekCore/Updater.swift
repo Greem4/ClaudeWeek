@@ -96,9 +96,9 @@ public enum UpdateCheck: Sendable, Equatable {
 }
 
 public enum UpdateError: Error, LocalizedError, Equatable {
-    case network(String)
+    case network(Bilingual)
     case http(Int)
-    case decoding(String)
+    case decoding(Bilingual)
     /// В релизе нет образа под эту архитектуру.
     case noImage(String)
     case checksumMissing(String)
@@ -106,7 +106,7 @@ public enum UpdateError: Error, LocalizedError, Equatable {
     /// Запущено не из бандла — обновлять нечего.
     case notBundled
     case notWritable(String)
-    case install(String)
+    case install(Bilingual)
 
     /// Русский текст: он же уходит в лог, который читают при разборе поломки.
     public var errorDescription: String? { message(.ru) }
@@ -117,14 +117,16 @@ public enum UpdateError: Error, LocalizedError, Equatable {
         let l = L10n(lang)
         switch self {
         case .network(let text):
-            return l.pick("не дозвонился до GitHub: \(text)", "could not reach GitHub: \(text)")
+            return l.pick("не дозвонился до GitHub: \(text.text(lang))",
+                          "could not reach GitHub: \(text.text(lang))")
         case .http(let code):
             return code == 403 || code == 429
                 ? l.pick("GitHub не пустил (\(code)) — слишком часто спрашивали, попробуйте позже",
                          "GitHub turned us away (\(code)) — too many requests, try later")
                 : l.pick("GitHub ответил \(code)", "GitHub replied \(code)")
         case .decoding(let text):
-            return l.pick("не разобрал ответ GitHub: \(text)", "could not parse GitHub’s reply: \(text)")
+            return l.pick("не разобрал ответ GitHub: \(text.text(lang))",
+                          "could not parse GitHub’s reply: \(text.text(lang))")
         case .noImage(let arch):
             return l.pick("в релизе нет образа под \(arch) — соберите из исходников: ./scripts/install.sh",
                           "the release has no image for \(arch) — build from source: ./scripts/install.sh")
@@ -141,7 +143,8 @@ public enum UpdateError: Error, LocalizedError, Equatable {
             return l.pick("нет прав переписать \(path) — перетащите новую версию руками",
                           "no permission to overwrite \(path) — drag the new version in by hand")
         case .install(let text):
-            return l.pick("не поставил обновление: \(text)", "could not install the update: \(text)")
+            return l.pick("не поставил обновление: \(text.text(lang))",
+                          "could not install the update: \(text.text(lang))")
         }
     }
 }
@@ -195,7 +198,7 @@ public struct Updater: Sendable {
         do {
             (code, body) = try await transport.get(url: Updater.latestReleaseURL, headers: Updater.headers)
         } catch {
-            throw UpdateError.network(error.localizedDescription)
+            throw UpdateError.network(Bilingual(stringLiteral: error.localizedDescription))
         }
         guard code == 200 else { throw UpdateError.http(code) }
 
@@ -236,10 +239,11 @@ public struct Updater: Sendable {
         }
 
         guard let version = Version(payload.tagName) else {
-            throw UpdateError.decoding("тег «\(payload.tagName)» не похож на версию")
+            throw UpdateError.decoding(Bilingual("тег «\(payload.tagName)» не похож на версию",
+                                           "tag “\(payload.tagName)” does not look like a version"))
         }
         guard let page = URL(string: payload.htmlUrl) else {
-            throw UpdateError.decoding("страница релиза без адреса")
+            throw UpdateError.decoding(Bilingual("страница релиза без адреса", "the release page has no address"))
         }
 
         // Ищем по суффиксу имени, а не собираем его из версии: схема

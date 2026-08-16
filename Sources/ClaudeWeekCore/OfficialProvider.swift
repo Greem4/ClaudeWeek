@@ -93,12 +93,14 @@ struct UsageResponse: Decodable {
         let session = limits?.first { $0.kind == UsageResponse.sessionKind }
 
         guard let percent = sevenDay?.utilization ?? weekly?.percent else {
-            throw UsageError.decoding("в ответе нет недельного процента (seven_day/weekly_all)")
+            throw UsageError.decoding(Bilingual("в ответе нет недельного процента (seven_day/weekly_all)",
+                                                "the reply has no weekly percentage (seven_day/weekly_all)"))
         }
         guard let resetsText = sevenDay?.resetsAt ?? weekly?.resetsAt,
               let resetsAt = ISO8601.parse(resetsText)
         else {
-            throw UsageError.decoding("в ответе нет разбираемого resets_at для недели")
+            throw UsageError.decoding(Bilingual("в ответе нет разбираемого resets_at для недели",
+                                                "the reply has no parsable resets_at for the week"))
         }
 
         return OfficialUsage(
@@ -274,7 +276,7 @@ public actor OfficialProvider: UsageProvider {
                 ]
             )
         } catch {
-            throw UsageError.network(error.localizedDescription)
+            throw UsageError.network(Bilingual(stringLiteral: error.localizedDescription))
         }
 
         switch code {
@@ -289,7 +291,7 @@ public actor OfficialProvider: UsageProvider {
         case 401, 403:
             throw UsageError.unauthorized
         case 429:
-            throw UsageError.unavailable("слишком частые запросы (429)")
+            throw UsageError.unavailable(Bilingual("слишком частые запросы (429)", "too many requests (429)"))
         default:
             throw UsageError.unavailable("HTTP \(code)")
         }

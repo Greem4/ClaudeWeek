@@ -202,8 +202,8 @@ struct PopoverView: View {
             ForEach(model.dayRows(snapshot), id: \.index) { day in
                 DayRow(
                     day: day,
-                    label: Formatting.weekdayShort(day.start, calendar: calendar),
-                    fullLabel: Formatting.weekdayFull(day.start, calendar: calendar),
+                    label: Formatting.weekdayShort(day.start, calendar: calendar, lang: s.lang),
+                    fullLabel: Formatting.weekdayFull(day.start, calendar: calendar, lang: s.lang),
                     // День сброса короче суток: интервал поясняет, какая из
                     // его половин сейчас на строке.
                     interval: day.isPartial ? Formatting.interval(day.start, day.end, calendar: calendar) : nil,

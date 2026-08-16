@@ -9,9 +9,9 @@ public enum UsageError: Error, LocalizedError {
     /// Локальный бюджет не подобран — процент считать не из чего.
     case notCalibrated
     case unauthorized
-    case network(String)
-    case decoding(String)
-    case unavailable(String)
+    case network(Bilingual)
+    case decoding(Bilingual)
+    case unavailable(Bilingual)
 
     /// Русский текст: он же уходит в лог, который читают при разборе поломки.
     public var errorDescription: String? { message(.ru) }
@@ -27,11 +27,13 @@ public enum UsageError: Error, LocalizedError {
         case .unauthorized:
             return l.pick("нужна авторизация в Claude Code", "Claude Code authorisation is required")
         case .network(let text):
-            return l.pick("сеть недоступна: \(text)", "network unavailable: \(text)")
+            return l.pick("сеть недоступна: \(text.text(lang))", "network unavailable: \(text.text(lang))")
         case .decoding(let text):
-            return l.pick("не разобрал ответ: \(text)", "could not parse the reply: \(text)")
+            return l.pick("не разобрал ответ: \(text.text(lang))",
+                          "could not parse the reply: \(text.text(lang))")
         case .unavailable(let text):
-            return l.pick("источник недоступен: \(text)", "source unavailable: \(text)")
+            return l.pick("источник недоступен: \(text.text(lang))",
+                          "source unavailable: \(text.text(lang))")
         }
     }
 }

@@ -110,3 +110,35 @@ extension L10n {
         """)
     }
 }
+
+/// Строка, у которой есть обе версии сразу.
+///
+/// Нужна там, где текст рождается глубоко в ядре — отказ Keychain, сорванная
+/// установка, — а показывается наверху, в панели или в окне: язык в точке
+/// появления ещё неизвестен, а тащить его туда параметром значит протянуть
+/// его через полдюжины слоёв, которым он больше нигде не нужен.
+///
+/// Литерал остаётся литералом: строка без перевода читается одинаково на обоих
+/// языках. Так подробности вроде системного сообщения или пути к файлу
+/// подставляются как есть, не заводя себе второй копии.
+public struct Bilingual: Sendable, Equatable, ExpressibleByStringLiteral,
+                         ExpressibleByStringInterpolation, CustomStringConvertible {
+    let ru: String
+    let en: String
+
+    public init(_ ru: String, _ en: String) {
+        self.ru = ru
+        self.en = en
+    }
+
+    public init(stringLiteral value: String) {
+        self.ru = value
+        self.en = value
+    }
+
+    public func text(_ lang: Lang) -> String { lang == .ru ? ru : en }
+
+    /// Русский — тот же выбор, что и у `errorDescription`: в лог идёт язык,
+    /// на котором написан весь остальной лог.
+    public var description: String { ru }
+}

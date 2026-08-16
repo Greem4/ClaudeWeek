@@ -46,7 +46,7 @@ struct ModelRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(usage.title)
+            Text(usage.title(s.lang))
                 .font(Theme.dayFont)
                 .foregroundStyle(palette.primaryText.color)
                 .lineLimit(1)
@@ -87,19 +87,33 @@ struct ModelRow: View {
     /// условная стоимость. Вопрос «почему у Haiku миллионы токенов и ничего в
     /// доле» решается именно этой подсказкой — чтение кеша вдесятеро дешевле.
     private var tooltip: String {
-        """
+        let input = Formatting.tokens(usage.tokens.input, lang: s.lang)
+        let output = Formatting.tokens(usage.tokens.output, lang: s.lang)
+        let cacheWrite = Formatting.tokens(usage.tokens.cacheWrite, lang: s.lang)
+        let cacheRead = Formatting.tokens(usage.tokens.cacheRead, lang: s.lang)
+        let cost = Formatting.cost(usage.cost, lang: s.lang)
+        return s.pick("""
         ≈\(Formatting.percent(limitPercent)) недельного лимита
-        Вход \(Formatting.tokens(usage.tokens.input)) · выход \(Formatting.tokens(usage.tokens.output))
-        Кеш: запись \(Formatting.tokens(usage.tokens.cacheWrite)), чтение \(Formatting.tokens(usage.tokens.cacheRead))
-        Ответов \(usage.messages) · условная стоимость \(Formatting.cost(usage.cost))
-        """
+        Вход \(input) · выход \(output)
+        Кеш: запись \(cacheWrite), чтение \(cacheRead)
+        Ответов \(usage.messages) · условная стоимость \(cost)
+        """, """
+        ≈\(Formatting.percent(limitPercent)) of the weekly limit
+        Input \(input) · output \(output)
+        Cache: write \(cacheWrite), read \(cacheRead)
+        Replies \(usage.messages) · weighted cost \(cost)
+        """)
     }
 
     private var voiceOverLabel: String {
-        """
-        \(usage.title), \(Formatting.percent(usage.sharePercent, withSign: false)) процентов \
-        расхода недели, примерно \(Formatting.percent(limitPercent, withSign: false)) процентов \
+        let share = Formatting.percent(usage.sharePercent, withSign: false)
+        let limit = Formatting.percent(limitPercent, withSign: false)
+        return s.pick("""
+        \(usage.title(s.lang)), \(share) процентов расхода недели, примерно \(limit) процентов \
         недельного лимита, ответов \(usage.messages)
-        """
+        """, """
+        \(usage.title(s.lang)), \(share) per cent of the week’s spend, roughly \(limit) per cent \
+        of the weekly limit, \(usage.messages) replies
+        """)
     }
 }

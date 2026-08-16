@@ -342,7 +342,7 @@ func runLocalProviderTests(_ t: Harness) async {
         t.equal(usage.byModel.count, 1, "незнакомая модель тоже строка разбивки")
         t.equal(usage.byModel[0].family, "claude-неизвестно-9",
                 "зовётся своим именем, а не «прочим»")
-        t.equal(usage.byModel[0].title, "claude-неизвестно-9",
+        t.equal(usage.byModel[0].title(), "claude-неизвестно-9",
                 "подпись у неё та же — придумывать семейство нечем")
     }
 

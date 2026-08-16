@@ -133,7 +133,8 @@ public struct KeychainCredentials: CredentialsSource {
         // диалог сам. Оба случая не про «вы не авторизованы», и текст у них
         // отдельный.
         if status == errSecInteractionNotAllowed || status == errSecUserCanceled {
-            throw UsageError.unavailable("доступ к записи Keychain не разрешён")
+            throw UsageError.unavailable(Bilingual("доступ к записи Keychain не разрешён",
+                                                   "access to the Keychain item is not allowed"))
         }
         Log.warn("не нашёл креды: Keychain «\(service)» → \(status), файла \(fileURL.path) тоже нет")
         throw UsageError.unauthorized
