@@ -784,7 +784,20 @@ private struct AboutSettings: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Версия", value: ClaudeWeek.version)
+                LabeledContent("Версия") {
+                    HStack(spacing: 8) {
+                        Text(ClaudeWeek.version)
+                        Text("·").foregroundStyle(.tertiary)
+                        // Ссылка стоит у версии, а не в разделе обновления:
+                        // «что нового» там появляется, только когда есть куда
+                        // обновляться, а прочитать, чем эта версия отличается
+                        // от прошлой, хочется и на самой свежей. Ссылка
+                        // текстом, а не кнопкой: кнопка забирает фокус вкладки
+                        // и открывается с синей рамкой вокруг единственной
+                        // строчки, которую здесь читают.
+                        Text(.init("[журнал изменений](\(ClaudeWeek.changelogURL.absoluteString))"))
+                    }
+                }
                 LabeledContent("Бюджет недели") {
                     Text(model.budgetNote)
                 }
