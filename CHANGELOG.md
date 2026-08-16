@@ -23,6 +23,9 @@ is the place for the shorter, human-facing story.
   which is the size Spotlight and the "Open with" list show. Thresholds of the
   icon are deliberately not the notification defaults (80 / 95): five per cent
   of a circle is one pixel at that size, and red would not be visible at all.
+- Notification screenshots in the README and the guide retaken — the banners
+  carry the app icon, so both showed the old one. The README now opens with the
+  icon as well (`docs/images/app-icon.png`).
 
 ## [0.1.9] — 2026-08-16
 
