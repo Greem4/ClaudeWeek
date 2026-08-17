@@ -23,8 +23,13 @@
 //       как у панели. Отвечает на вопросы, от которых зависит весь показ на
 //       втором мониторе: что говорит `isOnActiveSpace` про окно на соседнем
 //       мониторе, когда столы переключают на этом, и остаётся ли окно на своём
-//       мониторе при показе. Заодно печатает, где лежит окно значка
-//       ClaudeWeek — панель считает место от него.
+//       мониторе при показе. Заодно заводит свой значок в строке меню — панель
+//       считает место от такого же — и печатает про него два ответа: «по рамке»
+//       (так отвечал бы `anchor.screen`) и «по кромке» (так выбирает
+//       `DropdownPanel.screen(for:)`). Расходятся они там, где строка меню
+//       спрятана полноэкранным окном, см. docs/SPACES.md §7. Значок ClaudeWeek
+//       для этого не годится: на macOS 26 окна пунктов строки меню принадлежат
+//       «Пункту управления», и по pid приложения в списке окон их нет.
 //
 // В обоих режимах пройдитесь по рабочим столам — свайпом или ⌃→. Разбор
 // собранного и что с ним делать: docs/SPACES.md.
@@ -203,11 +208,6 @@ func compareBehaviors() -> Never {
 
 // MARK: - Режим --displays
 
-/// Слой окна пункта строки меню: `NSWindow.Level.statusBar`. По нему в списке
-/// окон находится значок ClaudeWeek — панель считает место от его рамки, и на
-/// двух мониторах важно, где эта рамка лежит в момент щелчка.
-let statusLayer = 25
-
 /// Номер монитора под точкой (координаты AppKit, снизу вверх).
 func display(at point: NSPoint) -> String {
     guard let index = NSScreen.screens.firstIndex(where: { $0.frame.contains(point) })
@@ -215,40 +215,28 @@ func display(at point: NSPoint) -> String {
     return "\(index + 1)"
 }
 
-/// Номер монитора под окном из списка окон. Список отдаёт координаты сверху
-/// вниз от главного экрана, NSScreen — снизу вверх; без приведения к одному
-/// виду монитор определяется неверно ровно на втором экране.
-func display(ofListed rect: CGRect) -> String {
-    let top = NSScreen.screens[0].frame.maxY
-    return display(at: NSPoint(x: rect.midX, y: top - rect.midY))
+/// Монитор значка так, как его выбирает панель (`DropdownPanel.screen(for:)`):
+/// строка меню всегда прижата к верхней кромке своего экрана, поэтому значок
+/// принадлежит тому из накрывающих его по горизонтали мониторов, чья верхняя
+/// кромка к нему ближе. Ответ расходится с «по рамке» ровно тогда, когда строку
+/// меню спрятало полноэкранное окно, а сосед стоит вплотную сверху.
+func display(byEdge icon: NSRect) -> String {
+    let covering = NSScreen.screens.filter { $0.frame.minX <= icon.midX && icon.midX <= $0.frame.maxX }
+    guard let screen = (covering.isEmpty ? NSScreen.screens : covering)
+        .min(by: { abs($0.frame.maxY - icon.maxY) < abs($1.frame.maxY - icon.maxY) }),
+        let index = NSScreen.screens.firstIndex(of: screen)
+    else { return "—" }
+    return "\(index + 1)"
 }
 
 /// Монитор, который окно считает своим (`NSWindow.screen` — тот, где лежит
-/// большая часть окна). «нет» у снятого с экрана окна.
+/// большая часть окна). «нет» у снятого с экрана окна и у окна, не попавшего
+/// ни на один экран, — так отвечает и окно значка при спрятанной строке меню.
 func display(ofWindow window: NSWindow) -> String {
     guard let screen = window.screen,
           let index = NSScreen.screens.firstIndex(of: screen)
     else { return "нет" }
     return "\(index + 1)"
-}
-
-func claudeWeekPID() -> pid_t? {
-    NSWorkspace.shared.runningApplications.first {
-        $0.localizedName == "ClaudeWeek" || $0.executableURL?.lastPathComponent == "ClaudeWeek"
-    }?.processIdentifier
-}
-
-/// Рамка окна значка — того самого `anchor`, от которого считается панель.
-func statusItemFrame(pid: pid_t) -> CGRect? {
-    guard let list = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]],
-          let item = list.first(where: {
-              ($0[kCGWindowOwnerPID as String] as? pid_t) == pid
-                  && ($0[kCGWindowLayer as String] as? Int) == statusLayer
-          }),
-          let bounds = item[kCGWindowBounds as String] as? [String: CGFloat]
-    else { return nil }
-    return CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0,
-                  width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
 }
 
 func compareDisplays() -> Never {
@@ -267,13 +255,21 @@ func compareDisplays() -> Never {
             on: screen
         )
     }
-    let pid = claudeWeekPID()
-    if pid == nil { say("ClaudeWeek не запущен — про значок строки меню данных не будет") }
+    // Свой значок в строке меню. Чужой отсюда не измерить: на macOS 26 окна
+    // пунктов строки меню принадлежат «Пункту управления», а не приложению,
+    // и по pid ClaudeWeek в списке окон не находятся вовсе. Свой ведёт себя
+    // так же — он в той же строке меню и прячется вместе с ней, а рамку и
+    // экран отдаёт прямо, без списка окон.
+    let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    item.button?.title = "◱"
 
     func status() -> String {
         var parts = ["активный стол:\(activeSpace())"]
-        if let pid, let rect = statusItemFrame(pid: pid) {
-            parts.append(String(format: "значок: монитор %@ x%.0f", display(ofListed: rect), rect.midX))
+        if let icon = item.button?.window {
+            let frame = icon.frame
+            parts.append(String(format: "значок: по рамке %@ по кромке %@ x%.0f y%.0f…%.0f",
+                                display(ofWindow: icon), display(byEdge: frame),
+                                frame.midX, frame.minY, frame.maxY))
         }
         for (index, strip) in strips.enumerated() {
             parts.append("D\(index + 1): монитор=\(display(ofWindow: strip))"
@@ -285,6 +281,8 @@ func compareDisplays() -> Never {
 
     say("по полоске на каждом мониторе, 70 секунд. Переключайте столы на обоих"
         + " мониторах и щёлкайте по значку — на том мониторе и на соседнем")
+    say("у своего значка смотрите на y и на выбор монитора: по x он стоит там,"
+        + " где нашлось место, а не влезший в строку меню уезжает за левый край")
 
     NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
         let point = NSEvent.mouseLocation

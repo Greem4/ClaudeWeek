@@ -246,12 +246,43 @@ final class DropdownPanel {
             x: anchor.frame.midX - size.width / 2,
             y: anchor.frame.minY - size.height
         )
-        if let screen = (anchor.screen ?? NSScreen.main)?.frame {
+        if let screen = screen(for: anchor)?.frame {
             let margin = Theme.panelScreenMargin
             origin.x = min(max(origin.x, screen.minX + margin), screen.maxX - size.width - margin)
+            // Верхняя кромка — не выше своего экрана. Строка меню в
+            // полноэкранном режиме прячется вместе со значком за верхний край,
+            // и панель, приклеенная к значку, ушла бы туда же — на соседний
+            // монитор, если он стоит сверху.
+            origin.y = min(origin.y, screen.maxY - size.height)
             origin.y = max(origin.y, screen.minY + margin)
         }
         return NSRect(origin: origin, size: size)
+    }
+
+    /// Экран, на строке меню которого стоит значок.
+    ///
+    /// `anchor.screen` на этот вопрос отвечает неверно. В полноэкранном режиме
+    /// строка меню прячется, и её окно вместе со значком уезжает вверх ровно на
+    /// свою высоту — за верхнюю кромку своего экрана. Стоит сверху вплотную
+    /// второй монитор, и значок оказывается уже на его территории: `anchor.screen`
+    /// честно отвечает «второй», панель считается от чужих границ и прижимается
+    /// к его нижнему краю. Так она и висела посреди верхнего монитора, оторванная
+    /// от строки меню. `NSScreen.main` на замену не годится тем более: это экран
+    /// с клавиатурным фокусом, то есть чужого окна, а не нашего значка.
+    ///
+    /// Признак надёжнее: строка меню всегда прижата к верхней кромке своего
+    /// экрана. Значит значок принадлежит тому из накрывающих его по горизонтали
+    /// экранов, чья верхняя кромка к нему ближе, — и спрятанная строка меню
+    /// с её сдвигом на 30 точек этого не меняет.
+    private func screen(for anchor: NSWindow) -> NSScreen? {
+        let icon = anchor.frame
+        let covering = NSScreen.screens.filter {
+            $0.frame.minX <= icon.midX && icon.midX <= $0.frame.maxX
+        }
+        // Значок, не влезший в строку меню, лежит левее всех экранов — по
+        // горизонтали его не накрывает никто, и выбирать приходится из всех.
+        return (covering.isEmpty ? NSScreen.screens : covering)
+            .min { abs($0.frame.maxY - icon.maxY) < abs($1.frame.maxY - icon.maxY) }
     }
 
     /// Содержимое меняет высоту на ходу: приходят данные, появляется строка
