@@ -265,8 +265,39 @@ public struct Thresholds: Codable, Sendable, Equatable {
     }
 }
 
+/// С какого дня недели идёт ряд суток на панели.
+///
+/// К моменту сброса это отношения не имеет: он приходит из `resets_at`
+/// официального ответа, а офлайн проецируется от последнего названного
+/// сервером — настройками его не сдвинуть. Здесь только порядок строк.
+public enum WeekStart: String, Codable, Sendable, CaseIterable {
+    /// Ряд начинается с понедельника — так, как неделя устроена у человека.
+    /// Сутки окна, прошедшие до него (выходные сразу после сброса), уходят
+    /// в конец ряда: они уже позади, и место им внизу.
+    case monday
+    /// Ряд начинается с суток сброса — так неделя катится на самом деле,
+    /// и накопительный план растёт сверху вниз ровно до 100 %.
+    case reset
+
+    public func title(_ lang: Lang) -> String {
+        let l = L10n(lang)
+        switch self {
+        case .monday: return l.pick("Понедельник", "Monday")
+        case .reset: return l.pick("День сброса", "Reset day")
+        }
+    }
+}
+
 public struct Config: Codable, Sendable, Equatable {
+    /// С какого дня недели ряд суток на панели. На цифры не влияет: сдвигается
+    /// только порядок строк.
+    public var weekStart: WeekStart
     /// 1 = воскресенье … 6 = пятница … 7 = суббота (нумерация Calendar).
+    ///
+    /// Догадка последней надежды: окно строится по ней, только если сервер не
+    /// отвечал ещё ни разу и кеш пуст. Настройками не правится намеренно —
+    /// момент сброса задаёт сервер, и поле, которое почти никогда ни на что
+    /// не влияет, в настройках читалось как сломанное.
     public var resetWeekday: Int
     public var resetHour: Int
     public var resetMinute: Int
@@ -306,6 +337,7 @@ public struct Config: Codable, Sendable, Equatable {
     /// обычной жизни момент берётся из `resets_at` официального ответа. Час
     /// привязан к `timeZone` ниже — сменив её, поправьте и его.
     public static let `default` = Config(
+        weekStart: .monday,
         resetWeekday: 6,
         resetHour: 16,
         resetMinute: 0,
@@ -324,6 +356,7 @@ public struct Config: Codable, Sendable, Equatable {
     )
 
     public init(
+        weekStart: WeekStart = .monday,
         resetWeekday: Int,
         resetHour: Int,
         resetMinute: Int,
@@ -340,6 +373,7 @@ public struct Config: Codable, Sendable, Equatable {
         appearance: AppearanceConfig = AppearanceConfig(),
         language: Language = .system
     ) {
+        self.weekStart = weekStart
         self.resetWeekday = resetWeekday
         self.resetHour = resetHour
         self.resetMinute = resetMinute
@@ -363,6 +397,7 @@ public struct Config: Codable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Config.default
         self.init(
+            weekStart: try c.decodeIfPresent(WeekStart.self, forKey: .weekStart) ?? d.weekStart,
             resetWeekday: try c.decodeIfPresent(Int.self, forKey: .resetWeekday) ?? d.resetWeekday,
             resetHour: try c.decodeIfPresent(Int.self, forKey: .resetHour) ?? d.resetHour,
             resetMinute: try c.decodeIfPresent(Int.self, forKey: .resetMinute) ?? d.resetMinute,

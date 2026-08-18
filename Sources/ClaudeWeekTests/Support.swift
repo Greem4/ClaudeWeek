@@ -16,12 +16,17 @@ func at(
     ))!
 }
 
+/// Тестовый конфиг. Неделя здесь по умолчанию начинается днём сброса, а не
+/// понедельником, как в дефолте программы: с этого порядка ряд совпадает с
+/// нумерацией суток окна, и проверки границ читаются без пересчёта позиций.
+/// Порядок от понедельника проверяется отдельно, с явным `weekStart`.
 func config(
     weekday: Int = 6,
     hour: Int = 15,
     minute: Int = 0,
     tz: String = "Europe/Saratov",
-    work: WorkHours = WorkHours.default
+    work: WorkHours = WorkHours.default,
+    weekStart: WeekStart = .reset
 ) -> Config {
     var c = Config.default
     c.resetWeekday = weekday
@@ -29,6 +34,7 @@ func config(
     c.resetMinute = minute
     c.timeZone = tz
     c.workHours = work
+    c.weekStart = weekStart
     return c
 }
 

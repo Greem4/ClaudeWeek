@@ -195,11 +195,19 @@ struct PopoverView: View {
 
     private func days(_ snapshot: UsageSnapshot) -> some View {
         let calendar = snapshot.window.calendar
+        let rows = model.dayRows(snapshot)
         // Строк семь — или одна, текущих суток, если панель настроена
         // компактно. День сброса стоит одной: пока неделя катится — её вечером
         // после сброса, в последние сутки окна — утром перед следующим.
         return VStack(spacing: Theme.rowSpacing) {
-            ForEach(model.dayRows(snapshot), id: \.index) { day in
+            ForEach(Array(rows.enumerated()), id: \.element.index) { position, day in
+                // Неделя, начатая понедельником, кончается сутками, прошедшими
+                // ещё до него, — у них номер меньше, чем у строки выше. Черта
+                // отделяет этот хвост: без неё выходные читались бы как
+                // продолжение недели, а их проценты — как обвал плана.
+                if position > 0, day.index < rows[position - 1].index {
+                    Divider().overlay(palette.separator.color)
+                }
                 DayRow(
                     day: day,
                     label: Formatting.weekdayShort(day.start, calendar: calendar, lang: s.lang),

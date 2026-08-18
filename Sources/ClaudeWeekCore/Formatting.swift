@@ -29,12 +29,6 @@ public enum Formatting {
         return lang == .ru ? fullWeekdays[index] : fullWeekdaysEN[index]
     }
 
-    /// Семь названий подряд, начиная с воскресенья, — нумерация `Calendar`.
-    /// Нужны списку «День сброса» в настройках, где дни выбираются не по дате.
-    public static func weekdayNames(_ lang: Lang) -> [String] {
-        lang == .ru ? fullWeekdays : fullWeekdaysEN
-    }
-
     public static func clock(_ date: Date, calendar: Calendar) -> String {
         let c = calendar.dateComponents([.hour, .minute], from: date)
         return String(format: "%d:%02d", c.hour ?? 0, c.minute ?? 0)

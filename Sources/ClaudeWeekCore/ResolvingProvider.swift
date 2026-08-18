@@ -168,7 +168,8 @@ public extension CachedUsage {
             start: windowStart,
             end: windowEnd,
             calendar: config.calendar,
-            workHours: config.workHours
+            workHours: config.workHours,
+            weekStart: config.weekStart
         )
         // Разбивку берём только если она нарезана так же, как нынешнее окно.
         // Кеш прошлой версии считал сутки от сброса до сброса — наложенный на

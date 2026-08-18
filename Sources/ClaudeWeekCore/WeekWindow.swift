@@ -33,6 +33,9 @@ public struct WeekWindow: Sendable, Equatable {
     public let calendar: Calendar
     /// Часы, в которые план растёт. Всё остальное время он стоит.
     public let workHours: WorkHours
+    /// С какого дня недели ложится ряд строк. Границы окна от этого не
+    /// двигаются: сброс задаёт сервер, а здесь только порядок.
+    public let weekStart: WeekStart
     /// Границы суток окна: старт окна, каждая местная полночь внутри него,
     /// конец окна. Отсюда и число суток, и их план.
     public let dayBounds: [Date]
@@ -72,7 +75,8 @@ public struct WeekWindow: Sendable, Equatable {
             start: start,
             end: calendar.date(byAdding: .day, value: WeekWindow.daysInWeek, to: start) ?? start,
             calendar: calendar,
-            workHours: config.workHours
+            workHours: config.workHours,
+            weekStart: config.weekStart
         )
     }
 
@@ -88,7 +92,8 @@ public struct WeekWindow: Sendable, Equatable {
             start: calendar.date(byAdding: .day, value: -WeekWindow.daysInWeek, to: end) ?? end,
             end: end,
             calendar: calendar,
-            workHours: config.workHours
+            workHours: config.workHours,
+            weekStart: config.weekStart
         )
     }
 
@@ -96,12 +101,14 @@ public struct WeekWindow: Sendable, Equatable {
         start: Date,
         end: Date,
         calendar: Calendar,
-        workHours: WorkHours = WorkHours.default
+        workHours: WorkHours = WorkHours.default,
+        weekStart: WeekStart = .reset
     ) {
         self.start = start
         self.end = end
         self.calendar = calendar
         self.workHours = workHours
+        self.weekStart = weekStart
         self.dayBounds = WeekWindow.bounds(from: start, to: end, calendar: calendar)
         self.workTotal = workHours.seconds(from: start, to: end, calendar: calendar)
     }
@@ -277,13 +284,63 @@ public struct WeekWindow: Sendable, Equatable {
         return offset..<(offset + rowCount)
     }
 
+    /// Номера суток окна в том порядке, в каком они лягут строками панели.
+    ///
+    /// При `weekStart == .reset` это подряд идущие сутки от сброса — как
+    /// неделя и катится. При `.monday` ряд повёрнут к понедельнику, и сутки
+    /// начала окна (выходные сразу после сброса) уезжают вниз: они уже
+    /// прошли, и место им под текущей неделей.
+    public func rowOrder(at date: Date) -> [Int] {
+        switch weekStart {
+        case .reset: return Array(rowSlots(at: date))
+        case .monday: return mondayFirstOrder()
+        }
+    }
+
+    /// Порядок строк от понедельника. Половина дня сброса здесь выбирается
+    /// не по текущему моменту, а по месту в ряду: когда неделя начинается не
+    /// в день сброса, ему достаётся утро перед следующим сбросом — тогда
+    /// план в его строке доходит ровно до 100 %, и ряд от понедельника до
+    /// дня сброса читается сверху вниз. Начнись неделя в сам день сброса —
+    /// наоборот, вечер после него, иначе ряд открывался бы сотней процентов.
+    private func mondayFirstOrder() -> [Int] {
+        var order = Array(0..<slotCount)
+        guard !order.isEmpty else { return [] }
+        if splitsResetDay {
+            order.remove(at: isWeekStart(dayBounds[0]) ? slotCount - 1 : 0)
+        }
+        guard let pivot = order.firstIndex(where: { isWeekStart(dayBounds[$0]) }) else { return order }
+        return Array(order[pivot...] + order[..<pivot])
+    }
+
+    /// Начинается ли с этих суток неделя по настройке. Понедельник — 2
+    /// в нумерации `Calendar`, где 1 — воскресенье.
+    private func isWeekStart(_ date: Date) -> Bool {
+        calendar.component(.weekday, from: date) == 2
+    }
+
     /// Строки панели на момент `date`. Номера суток сохраняются: по ним
     /// подтягивается факт и подсвечивается текущая строка.
     public func rows(at date: Date) -> [WeekDaySlot] {
         let days = days
-        return rowSlots(at: date).compactMap { index in
+        return rowOrder(at: date).compactMap { index in
             days.indices.contains(index) ? days[index] : nil
         }
+    }
+
+    /// Номер суток, чья строка в ряду отвечает за «сегодня».
+    ///
+    /// Обычно это сами текущие сутки, но в день сброса их половина может не
+    /// попасть в ряд: при `.monday` день сброса представлен утренней
+    /// половиной, а человек смотрит на панель вечером того же дня. Строка у
+    /// этого дня недели всё равно одна — её и подсвечиваем, иначе в день
+    /// сброса панель осталась бы вовсе без «сегодня».
+    public func highlightedRow(at date: Date) -> Int? {
+        guard let today = dayIndex(for: date) else { return nil }
+        let order = rowOrder(at: date)
+        if order.contains(today) { return today }
+        let weekday = calendar.component(.weekday, from: dayBounds[today])
+        return order.first { calendar.component(.weekday, from: dayBounds[$0]) == weekday }
     }
 
     public func timeLeft(from date: Date) -> TimeInterval {

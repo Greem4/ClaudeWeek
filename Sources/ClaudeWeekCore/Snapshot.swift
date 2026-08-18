@@ -233,11 +233,11 @@ public struct UsageSnapshot: Sendable {
         )
     }
 
-    /// Строки панели на момент `now`: семь суток, где день сброса представлен
-    /// той своей половиной, которая идёт сейчас. До полуночи последних суток
-    /// окна это вечер после сброса, дальше — утро перед следующим.
+    /// Строки панели на момент `now`: семь суток в порядке, который задаёт
+    /// `weekStart`, — от сброса или от понедельника. День сброса занимает
+    /// одну строку из двух своих половин (см. `WeekWindow.rowOrder(at:)`).
     public func rows(at now: Date) -> [DayUsage] {
-        window.rowSlots(at: now).compactMap { index in
+        window.rowOrder(at: now).compactMap { index in
             byDay.indices.contains(index) ? byDay[index] : nil
         }
     }

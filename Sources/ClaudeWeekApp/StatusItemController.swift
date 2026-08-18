@@ -279,9 +279,7 @@ final class StatusItemController: NSObject {
     private func applyFromSettings(_ config: Config) {
         let providerChanged = config.provider != model.config.provider
             || config.timeZone != model.config.timeZone
-            || config.resetWeekday != model.config.resetWeekday
-            || config.resetHour != model.config.resetHour
-            || config.resetMinute != model.config.resetMinute
+            || config.weekStart != model.config.weekStart
             || config.workHours != model.config.workHours
             || config.weeklyBudget != model.config.weeklyBudget
         // Интервал живёт в таймере, а не в провайдере: не перезапустив таймер,

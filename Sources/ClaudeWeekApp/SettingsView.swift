@@ -113,22 +113,10 @@ private struct GeneralSettings: View {
             }
 
             Section(s.pick("Недельное окно", "Week window")) {
-                Picker(s.pick("День сброса", "Reset day"), selection: config.resetWeekday) {
-                    ForEach(Array(Formatting.weekdayNames(s.lang).enumerated()), id: \.offset) { index, name in
-                        Text(name).tag(index + 1)
+                Picker(s.pick("Начало недели", "Week starts on"), selection: config.weekStart) {
+                    ForEach(WeekStart.allCases, id: \.self) { start in
+                        Text(start.title(s.lang)).tag(start)
                     }
-                }
-                HStack {
-                    Stepper(
-                        s.pick("Час сброса: \(model.config.resetHour)", "Reset hour: \(model.config.resetHour)"),
-                        value: config.resetHour,
-                        in: 0...23
-                    )
-                    Stepper(
-                        s.pick("Минута: \(model.config.resetMinute)", "Minute: \(model.config.resetMinute)"),
-                        value: config.resetMinute,
-                        in: 0...59
-                    )
                 }
                 Picker(s.pick("Таймзона", "Time zone"), selection: config.timeZone) {
                     Text(s.pick("Системная", "System")).tag("")
@@ -136,15 +124,9 @@ private struct GeneralSettings: View {
                         Text(zone).tag(zone)
                     }
                 }
-                Text(s.pick("""
-                При живом официальном источнике момент сброса берётся из ответа \
-                сервера — эти поля нужны только офлайн.
-                """, """
-                While the official source is alive, the reset moment comes from the \
-                server — these fields matter offline only.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(model.weekStartNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(s.pick("Рабочий день", "Working day")) {
