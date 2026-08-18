@@ -236,10 +236,39 @@ public struct UsageSnapshot: Sendable {
     /// Строки панели на момент `now`: семь суток в порядке, который задаёт
     /// `weekStart`, — от сброса или от понедельника. День сброса занимает
     /// одну строку из двух своих половин (см. `WeekWindow.rowOrder(at:)`).
+    ///
+    /// У ряда, открытого понедельником, своя шкала: и план, и факт считаются
+    /// от того, что осталось к его утру, — понедельник начинается с нуля,
+    /// пятница приходит к 100 %. Сутки за скобкой остаются в недельной.
     public func rows(at now: Date) -> [DayUsage] {
-        window.rowOrder(at: now).compactMap { index in
-            byDay.indices.contains(index) ? byDay[index] : nil
+        let base = window.scaleBase(at: now)
+        return window.rowOrder(at: now).compactMap { index in
+            guard byDay.indices.contains(index) else { return nil }
+            let day = byDay[index]
+            guard let base, index >= base else { return day }
+            return DayUsage(
+                index: day.index,
+                start: day.start,
+                end: day.end,
+                planPercent: window.planPercent(forDay: index, from: base),
+                usedPercent: rebased(day.usedPercent, base: base),
+                isPartial: day.isPartial
+            )
         }
+    }
+
+    /// Факт в шкале ряда: какая доля остатка, что был к началу недели, съедена
+    /// к концу этих суток. Знаменатель здесь фактический, а не плановый: план
+    /// раскладывается по тому, что осталось на самом деле, и сравнивать его с
+    /// долей от нетронутого бюджета значило бы мерить их разными линейками.
+    private func rebased(_ used: Double?, base: Int) -> Double? {
+        guard let used else { return nil }
+        // Факт на начало недели — накопительный итог суток перед ней.
+        let spent = byDay.indices.contains(base - 1) ? (byDay[base - 1].usedPercent ?? 0) : 0
+        let left = 100 - spent
+        // Лимит сожжён ещё до понедельника: делить нечего, вся неделя красная.
+        guard left > 0 else { return 100 }
+        return min(max((used - spent) / left * 100, 0), 100)
     }
 
     /// Тот же снимок с другой сессией. Нужна потому, что считает неделю один

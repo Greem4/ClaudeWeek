@@ -319,12 +319,52 @@ public struct WeekWindow: Sendable, Equatable {
         calendar.component(.weekday, from: date) == 2
     }
 
+    /// Первые сутки ряда, когда он живёт в своей шкале, — иначе nil.
+    ///
+    /// Неделя, начатая понедельником, отсчитывает план от него: строка
+    /// понедельника открывается нулём, пятница приходит к 100 % в момент
+    /// сброса. Ряд от дня сброса и ряд, который и так начинается сутками
+    /// сброса, живут в общей с окном шкале — перешкаливать там нечего.
+    public func scaleBase(at date: Date) -> Int? {
+        guard weekStart == .monday else { return nil }
+        guard let first = rowOrder(at: date).first, first > 0 else { return nil }
+        return first
+    }
+
+    /// План к концу суток `index` в шкале ряда, открытого сутками `base`:
+    /// 0 в их полночь, 100 % в момент сброса.
+    ///
+    /// Считается заново по рабочим часам отрезка, а не сжатием недельного
+    /// плана: у выходных, оставшихся за скобкой, свой вес, и вычитать его
+    /// из общей шкалы значило бы гадать, сколько их часов «принадлежит»
+    /// рабочей неделе.
+    public func planPercent(forDay index: Int, from base: Int) -> Double {
+        guard dayBounds.indices.contains(base), dayBounds.indices.contains(index + 1) else { return 0 }
+        let from = dayBounds[base]
+        let total = workHours.seconds(from: from, to: end, calendar: calendar)
+        guard total > 0 else { return 0 }
+        let worked = workHours.seconds(from: from, to: dayBounds[index + 1], calendar: calendar)
+        return min(max(worked / total, 0), 1) * 100
+    }
+
     /// Строки панели на момент `date`. Номера суток сохраняются: по ним
     /// подтягивается факт и подсвечивается текущая строка.
     public func rows(at date: Date) -> [WeekDaySlot] {
         let days = days
+        let base = scaleBase(at: date)
         return rowOrder(at: date).compactMap { index in
-            days.indices.contains(index) ? days[index] : nil
+            guard days.indices.contains(index) else { return nil }
+            let day = days[index]
+            // Сутки за скобкой — те, что прошли до начала недели, — остаются
+            // в недельной шкале: они и правда съели свою долю лимита.
+            guard let base, index >= base else { return day }
+            return WeekDaySlot(
+                index: day.index,
+                start: day.start,
+                end: day.end,
+                planPercent: planPercent(forDay: index, from: base),
+                isPartial: day.isPartial
+            )
         }
     }
 
