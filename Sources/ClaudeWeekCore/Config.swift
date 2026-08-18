@@ -333,15 +333,19 @@ public struct Config: Codable, Sendable, Equatable {
     public static let minimumRefreshInterval: TimeInterval = 30
 
     /// Сброс недельного лимита приходит в 12:00 UTC — в 15:00 по Москве и в
-    /// 16:00 здесь, в UTC+4. Это догадка на случай, когда сервер молчит: в
-    /// обычной жизни момент берётся из `resets_at` официального ответа. Час
-    /// привязан к `timeZone` ниже — сменив её, поправьте и его.
+    /// 16:00 в UTC+4. Час здесь — догадка на случай, когда сервер молчит и
+    /// кеш пуст: в обычной жизни момент берётся из `resets_at` официального
+    /// ответа, а офлайн проецируется от последнего, названного сервером.
+    ///
+    /// Зона по умолчанию — системная: сутки на панели должны переключаться в
+    /// местную полночь у любого, кто поставил программу, а не в полночь той
+    /// зоны, где её писали.
     public static let `default` = Config(
         weekStart: .monday,
         resetWeekday: 6,
         resetHour: 16,
         resetMinute: 0,
-        timeZone: "Europe/Saratov",
+        timeZone: "",
         refreshInterval: 300,
         provider: .auto,
         workHours: WorkHours.default,
