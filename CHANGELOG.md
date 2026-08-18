@@ -16,6 +16,8 @@
 
 ## [Не выпущено]
 
+## [0.1.13] — 2026-08-18
+
 ### Добавлено
 
 - Настройка **«Начало недели»**: ряд суток на панели идёт либо с понедельника
@@ -299,7 +301,8 @@
 локальной оценкой как запасным вариантом, окно настроек, лицензия MIT, CI и
 образ, собираемый по тегу под Apple Silicon.
 
-[Не выпущено]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.12...HEAD
+[Не выпущено]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.13...HEAD
+[0.1.13]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.9...v0.1.10
