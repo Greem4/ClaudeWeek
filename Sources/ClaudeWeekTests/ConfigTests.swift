@@ -11,6 +11,7 @@ private func tempFile(_ contents: String) -> URL {
 func runConfigTests(_ t: Harness) {
     t.suite("конфиг: дефолты") {
         let d = Config.default
+        t.equal(d.weekStart, .monday, "неделя по умолчанию начинается понедельником")
         t.equal(d.resetWeekday, 6, "сброс в пятницу")
         t.equal(d.resetHour, 16, "сброс в 16:00 — это 15:00 по Москве")
         t.equal(d.workHours, WorkHours(start: 11, end: 24), "рабочий день 11–24")
@@ -27,6 +28,7 @@ func runConfigTests(_ t: Harness) {
         let c = ConfigStore.load(from: url)
         t.equal(c.workHours, WorkHours(start: 10, end: 18), "своё значение прочиталось")
         t.equal(c.resetHour, 16, "остальное осталось дефолтным")
+        t.equal(c.weekStart, .monday, "конфиг прошлой версии не знает о начале недели — берётся дефолт")
     }
 
     t.suite("конфиг: комментарии в JSON") {

@@ -349,8 +349,8 @@ final class UpdateController {
         case .checking:
             strings.pick("спрашиваю GitHub…", "asking GitHub…")
         case .upToDate(let at):
-            strings.pick("у вас последняя — \(ClaudeWeek.version), проверено \(Self.checkedAt(at, lang: strings.lang))",
-                         "you are on the latest — \(ClaudeWeek.version), checked \(Self.checkedAt(at, lang: strings.lang))")
+            strings.pick("последняя версия — \(ClaudeWeek.version), проверено \(Self.checkedAt(at, lang: strings.lang))",
+                         "latest version — \(ClaudeWeek.version), checked \(Self.checkedAt(at, lang: strings.lang))")
         case .available(let release):
             strings.pick("доступна \(release.version) — у вас \(ClaudeWeek.version)",
                          "\(release.version) is available — you have \(ClaudeWeek.version)")

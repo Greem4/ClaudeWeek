@@ -288,10 +288,8 @@ enum CLI {
         // он лежит в кеше, а не в конфиге.
         let budget = try? await local.budget(for: usage, override: Store.loadCache()?.weeklyBudget)
         var percent: Output.Percent?
-        var cumulative: [Double?] = usage.costByDay.map { _ in nil }
 
         if let snapshot {
-            cumulative = snapshot.byDay.map(\.usedPercent)
             let metrics = snapshot.metrics(at: now, thresholds: config.thresholds)
             percent = Output.Percent(
                 used: metrics.usedPercent,
@@ -316,18 +314,29 @@ enum CLI {
                 )
             }
 
-        // Те же семь строк, что и на панели: день сброса одной, той его
-        // половиной, что идёт сейчас. `index` — номер суток окна, поэтому
+        // Те же семь строк, что и на панели: день сброса одной, а у ряда от
+        // понедельника — своя шкала процентов. Считает их снимок, чтобы вывод
+        // сходился с панелью до цифры; без снимка остаётся голое окно, и факт
+        // в строках взять неоткуда. `index` — номер суток окна, поэтому
         // у последней пятницы он седьмой, а не шестой.
-        let days = window.rows(at: now).map { slot in
+        let rows: [(index: Int, start: Date, plan: Double, used: Double?, partial: Bool)] =
+            snapshot.map { snapshot in
+                snapshot.rows(at: now).map {
+                    ($0.index, $0.start, $0.planPercent, $0.usedPercent, $0.isPartial)
+                }
+            } ?? window.rows(at: now).map {
+                ($0.index, $0.start, $0.planPercent, nil, $0.isPartial)
+            }
+
+        let days = rows.map { row in
             Output.Day(
-                index: slot.index,
-                label: Formatting.weekdayShort(slot.start, calendar: window.calendar),
-                start: slot.start,
-                planPercent: slot.planPercent,
-                usedPercent: slot.index < cumulative.count ? cumulative[slot.index] : nil,
-                cost: slot.index < usage.costByDay.count ? usage.costByDay[slot.index] : nil,
-                partial: slot.isPartial
+                index: row.index,
+                label: Formatting.weekdayShort(row.start, calendar: window.calendar),
+                start: row.start,
+                planPercent: row.plan,
+                usedPercent: row.used,
+                cost: row.index < usage.costByDay.count ? usage.costByDay[row.index] : nil,
+                partial: row.partial
             )
         }
 

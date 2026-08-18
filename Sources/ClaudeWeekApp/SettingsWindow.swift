@@ -27,6 +27,11 @@ final class SettingsModel {
     /// в кеше, а не в конфиге, поэтому вкладка «О программе» читает его
     /// отдельно — иначе она показывала бы «не подобран» даже после калибровки.
     private(set) var pickedBudget: Double?
+    /// Момент недельного сброса, названный сервером. Живёт в кеше, а не в
+    /// конфиге: настройками его не задать — и именно поэтому его нужно
+    /// показать. Человек, искавший в настройках «день сброса», иначе крутит
+    /// поля и гадает, почему неделя начинается не тогда, когда он поставил.
+    private(set) var officialReset: Date?
     /// Автозапуск тоже мимо конфига: он и есть launchd-агент, и правда о нём
     /// одна — лежит плист или нет.
     private(set) var launchAtLogin = LoginItem.isEnabled
@@ -62,7 +67,11 @@ final class SettingsModel {
     /// перерисовку вкладки незачем, а между показами плист мог снести
     /// `uninstall.sh` или рука.
     func refreshDiagnostics() {
-        pickedBudget = Store.loadCache()?.weeklyBudget
+        let cache = Store.loadCache()
+        pickedBudget = cache?.weeklyBudget
+        // Момент из кеша мог остаться в прошлой неделе — проекция вперёд
+        // целыми неделями даёт тот, который наступит следующим.
+        officialReset = cache?.projectedWindow(at: Date(), config: config)?.end
         launchAtLogin = LoginItem.isEnabled
         // Разрешение на уведомления снимают там же, где выдали, — в системных
         // настройках, мимо этого окна. Спрашиваем систему на каждый показ.
@@ -101,6 +110,25 @@ final class SettingsModel {
             return s.pick("\(cost) ≈ 100 % · подобран сам", "\(cost) ≈ 100 % · worked out by the app")
         }
         return s.pick("не подобран", "not worked out yet")
+    }
+
+    /// Подсказка под «Началом недели»: настройка двигает только порядок строк
+    /// на панели, а сам момент сброса приходит от сервера — тот, что здесь и
+    /// показан, в той же зоне, по которой панель считает сутки.
+    var weekStartNote: String {
+        let s = config.strings
+        guard let officialReset else {
+            return s.pick(
+                "Момент сброса задаёт сервер, а не эта настройка: она двигает только порядок строк на панели.",
+                "The reset moment comes from the server, not from this setting: it only shifts the row order."
+            )
+        }
+        let day = Formatting.weekdayShort(officialReset, calendar: config.calendar, lang: s.lang)
+        let time = Formatting.clock(officialReset, calendar: config.calendar)
+        return s.pick(
+            "Сброс задаёт сервер — \(day) \(time) по выбранной зоне. Эта настройка двигает только порядок строк.",
+            "The reset comes from the server — \(day) \(time) in the zone picked above. This setting only shifts the row order."
+        )
     }
 
     /// «Показать пример» с вкладки уведомлений: тот же баннер, что придёт

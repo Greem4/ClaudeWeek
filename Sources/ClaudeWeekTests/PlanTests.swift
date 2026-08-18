@@ -157,6 +157,46 @@ func runPlanTests(_ t: Harness) {
         t.equal(freshMetrics.state, .normal, "после сброса — спокойно")
     }
 
+    // Ряд от понедельника живёт в своей шкале: 100 % в нём — это не весь
+    // недельный лимит, а то, что осталось к утру понедельника.
+    t.suite("строки дней: шкала от понедельника") {
+        let window = WeekWindow(containing: at(2026, 8, 9, 12, 0), config: config(weekStart: .monday))
+        let now = at(2026, 8, 11, 12, 0)
+        // Факт по суткам окна: к концу воскресенья съедено 45 % недели.
+        let snapshot = UsageSnapshot.make(
+            usedPercent: 52,
+            cumulativeByDay: [10, 25, 45, 52, nil, nil, nil, nil],
+            window: window,
+            source: .local,
+            fetchedAt: now,
+            isEstimate: true
+        )
+        let rows = snapshot.rows(at: now)
+        t.equal(rows.map(\.index), [3, 4, 5, 6, 7, 1, 2], "ряд от понедельника, выходные за скобкой")
+
+        // Остаток к утру понедельника — 55 % недели. Понедельник съел из него
+        // 52 − 45 = 7, то есть 12,7 % остатка.
+        t.close(rows[0].usedPercent ?? 0, 100 * 7 / 55, "факт понедельника — доля остатка")
+        t.close(rows[0].planPercent, 100 * 13 / 56, "и план его суток — тоже")
+        t.equal(rows[1].usedPercent, nil, "будущие сутки по-прежнему без факта")
+
+        // Выходные остались в недельной шкале: они и правда съели свою долю
+        // лимита, и пересчитывать её не на что.
+        t.close(rows[5].usedPercent ?? 0, 25, "суббота — накопительный процент недели")
+        t.close(rows[6].usedPercent ?? 0, 45, "воскресенье — тоже")
+
+        // Лимит, сожжённый до понедельника, делить не на что.
+        let burnt = UsageSnapshot.make(
+            usedPercent: 100,
+            cumulativeByDay: [40, 70, 100, 100, nil, nil, nil, nil],
+            window: window,
+            source: .local,
+            fetchedAt: now,
+            isEstimate: true
+        )
+        t.close(burnt.rows(at: now)[0].usedPercent ?? 0, 100, "неделя без остатка — строка полная")
+    }
+
     t.suite("строки дней") {
         let now = window.start.addingTimeInterval(window.duration / 2)
         let snapshot = UsageSnapshot.make(
