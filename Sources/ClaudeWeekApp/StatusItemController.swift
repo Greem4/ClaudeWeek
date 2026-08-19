@@ -256,7 +256,8 @@ final class StatusItemController: NSObject {
                 update: update,
                 notifications: notifications,
                 apply: { [weak self] config in self?.applyFromSettings(config) },
-                check: { config in await Self.check(config: config) }
+                check: { config in await Self.check(config: config) },
+                reset: { [weak self] in self?.resetCounting() }
             )
             let controller = SettingsWindowController(model: model)
             controller.onPresent = { [weak self] in self?.pinPanel() }
@@ -332,6 +333,23 @@ final class StatusItemController: NSObject {
         } catch {
             Log.warn("не сохранил настройки: \(error)")
         }
+    }
+
+    /// Кнопка «Начать счёт заново» из настроек: ставим отсечку по нынешнему
+    /// моменту и тут же идём за свежими цифрами. Провайдер не пересоздаём —
+    /// отсечку он перечитывает на каждом обходе транскриптов, а вот показать
+    /// панели старый снимок после сброса было бы прямым враньём.
+    private func resetCounting() {
+        let account = (try? KeychainCredentials().load())?.accountMark
+        do {
+            try Store.resetCounting(at: Date(), account: account)
+        } catch {
+            Log.warn("не смог начать счёт заново: \(error)")
+            return
+        }
+        model.snapshot = nil
+        render()
+        refresh()
     }
 
     /// Одна честная попытка сходить в официальный источник — чтобы кнопка

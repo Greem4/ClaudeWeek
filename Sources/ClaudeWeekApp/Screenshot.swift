@@ -250,7 +250,8 @@ enum Screenshot {
             update: UpdateController(bundle: nil),
             notifications: NotificationController(bundled: true),
             apply: { _ in },
-            check: { _ in ("", true) }
+            check: { _ in ("", true) },
+            reset: {}
         )
 
         // Высота больше оконной: в живом окне вкладка прокручивается, а на

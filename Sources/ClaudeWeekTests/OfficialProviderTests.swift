@@ -27,10 +27,17 @@ private actor FakeTransport: UsageTransport {
 private struct FakeCredentials: CredentialsSource {
     var token = "sk-ant-oat01-тест"
     var error: Error?
+    /// Организация: по ней провайдер и отличает вход другим аккаунтом.
+    var organization: String?
 
     func load() throws -> OAuthCredentials {
         if let error { throw error }
-        return OAuthCredentials(accessToken: token, expiresAt: nil, subscriptionType: "max")
+        return OAuthCredentials(
+            accessToken: token,
+            expiresAt: nil,
+            subscriptionType: "max",
+            organizationUuid: organization
+        )
     }
 }
 
@@ -63,6 +70,7 @@ private struct TranscriptSandbox {
     let root: URL
     let indexURL: URL
     let cacheURL: URL
+    let stateURL: URL
 
     init() {
         base = FileManager.default.temporaryDirectory
@@ -70,6 +78,7 @@ private struct TranscriptSandbox {
         root = base.appendingPathComponent("projects")
         indexURL = base.appendingPathComponent("index.json")
         cacheURL = base.appendingPathComponent("cache.json")
+        stateURL = base.appendingPathComponent("state.json")
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
@@ -169,6 +178,7 @@ func runOfficialProviderTests(_ t: Harness) async {
                 cacheURL: sandbox.cacheURL,
                 localRoot: sandbox.root,
                 indexURL: sandbox.indexURL,
+                stateURL: sandbox.stateURL,
                 clock: { now }
             )
         }
@@ -358,6 +368,7 @@ func runOfficialProviderTests(_ t: Harness) async {
                 cacheURL: sandbox.cacheURL,
                 localRoot: sandbox.root,
                 indexURL: sandbox.indexURL,
+                stateURL: sandbox.stateURL,
                 clock: { testNow }
             )
         }
@@ -408,6 +419,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             credentials: FakeCredentials(error: UsageError.unauthorized),
             transport: FakeTransport(answers: [(200, realResponse)]),
             cacheURL: nil,
+            stateURL: nil,
             clock: { testNow }
         )
         do {
@@ -429,6 +441,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             credentials: FakeCredentials(),
             transport: transport,
             cacheURL: nil,
+            stateURL: nil,
             clock: { testNow }
         )
         _ = try? await resolving.fetch()
@@ -548,6 +561,67 @@ func runOfficialProviderTests(_ t: Harness) async {
         t.check(expired.isExpired(at: testNow), "истёкший токен виден")
         t.check(!OAuthCredentials(accessToken: "x", expiresAt: nil, subscriptionType: nil)
             .isExpired(at: testNow), "без срока считаем годным")
+    }
+
+    await t.suite("смена аккаунта: счёт начинается заново") {
+        let sandbox = TranscriptSandbox()
+        defer { sandbox.cleanup() }
+        sandbox.write(cost: 10, at: "2026-08-01T10:00:00.000Z")
+        // Счёт вёлся на прежнем аккаунте, и от него остался снимок.
+        try Store.saveState(CountingState(account: "старая01·max"), to: sandbox.stateURL)
+        try Store.saveCache(
+            CachedUsage(usedPercent: 50, byDay: [], windowStart: testNow, windowEnd: testNow,
+                        source: .official, fetchedAt: testNow),
+            to: sandbox.cacheURL
+        )
+
+        let resolving = ResolvingProvider(
+            config: config(),
+            credentials: FakeCredentials(organization: "новая0123-4567"),
+            transport: FakeTransport(answers: [(200, realResponse)]),
+            cacheURL: sandbox.cacheURL,
+            localRoot: sandbox.root,
+            indexURL: sandbox.indexURL,
+            stateURL: sandbox.stateURL,
+            clock: { testNow }
+        )
+        _ = try? await resolving.fetch()
+
+        let state = Store.loadState(from: sandbox.stateURL)
+        t.equal(state.account, "новая012·max", "запомнен аккаунт, который в ключе сейчас")
+        t.equal(state.countFrom, testNow, "отсечка поставлена моментом, когда заметили смену")
+    }
+
+    await t.suite("первое знакомство сбросом не считается") {
+        let sandbox = TranscriptSandbox()
+        defer { sandbox.cleanup() }
+        sandbox.write(cost: 10, at: "2026-08-01T10:00:00.000Z")
+
+        let resolving = ResolvingProvider(
+            config: config(),
+            credentials: FakeCredentials(organization: "первая01-2345"),
+            transport: FakeTransport(answers: [(200, realResponse)]),
+            cacheURL: sandbox.cacheURL,
+            localRoot: sandbox.root,
+            indexURL: sandbox.indexURL,
+            stateURL: sandbox.stateURL,
+            clock: { testNow }
+        )
+        _ = try? await resolving.fetch()
+
+        let state = Store.loadState(from: sandbox.stateURL)
+        t.equal(state.account, "первая01·max", "аккаунт запомнен")
+        t.check(state.countFrom == nil, "но накопленное не выброшено: сменить было не с чего")
+    }
+
+    t.suite("метка аккаунта") {
+        let creds = OAuthCredentials(
+            accessToken: "x", expiresAt: nil, subscriptionType: "max",
+            organizationUuid: "0123abcd-89ef-4321-0000-000000000000"
+        )
+        t.equal(creds.accountMark, "0123abcd·max", "метка — начало UUID организации и тариф")
+        t.check(OAuthCredentials(accessToken: "x", expiresAt: nil, subscriptionType: "max")
+            .accountMark == nil, "без организации сравнивать не с чем")
     }
 
     t.suite("разбор меток времени") {

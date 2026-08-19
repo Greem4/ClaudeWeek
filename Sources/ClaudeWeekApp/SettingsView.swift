@@ -795,11 +795,63 @@ struct NotificationSettings: View {
 
 private struct AccessSettings: View {
     @Bindable var model: SettingsModel
+    /// Спрашиваем до, а не «отменить» после: отсечку назад не отмотать —
+    /// прежний счёт нигде не сохранён.
+    @State private var confirmingReset = false
 
     private var s: L10n { model.config.strings }
 
     var body: some View {
         Form {
+            Section(s.pick("Аккаунт и счёт", "Account and count")) {
+                LabeledContent(s.pick("Сейчас в ключе", "Currently in the key")) {
+                    Text(model.account ?? s.pick("не читается", "cannot be read"))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(model.account == nil ? .secondary : .primary)
+                        .textSelection(.enabled)
+                }
+                Text(s.pick("""
+                Метка аккаунта из записи Keychain: начало UUID организации и тариф. \
+                Токен обновляется раз в час, а она держится — по ней и видно, тот \
+                же это аккаунт, что вчера, или вошли другим.
+                """, """
+                The account mark from the Keychain item: the start of the \
+                organisation UUID and the plan. The token is refreshed hourly, this \
+                stays — it is what tells yesterday’s account from a new login.
+                """))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                HStack {
+                    Button(s.pick("Начать счёт заново", "Start counting over")) {
+                        confirmingReset = true
+                    }
+                    Spacer()
+                }
+                Text(model.countingNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(s.pick("""
+                Нужно после входа другим аккаунтом. Недельный процент приходит от \
+                сервера и сменится сам, а вот разбивка по суткам считается по \
+                транскриптам в ~/.claude/projects — они пишутся в одни и те же \
+                файлы при любом аккаунте, и различить их по содержимому нельзя. \
+                Смену аккаунта программа замечает и сама, но только пока читает \
+                Keychain.
+                """, """
+                Needed after logging in with a different account. The weekly \
+                percentage comes from the server and changes by itself, but the \
+                daily breakdown is counted from the transcripts in \
+                ~/.claude/projects — they are written to the same files whatever \
+                account is used, and nothing in them tells one from the other. The \
+                app notices a switch on its own too, but only while it can read the \
+                Keychain.
+                """))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
             Section(s.pick("Токен для официального источника", "Token for the official source")) {
                 Text(s.pick("""
                 Берётся из Keychain Claude Code, запись «Claude Code-credentials». \
@@ -905,6 +957,25 @@ private struct AccessSettings: View {
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(
+            s.pick("Начать счёт заново?", "Start counting over?"),
+            isPresented: $confirmingReset
+        ) {
+            Button(s.pick("Начать заново", "Start over"), role: .destructive, action: model.resetCounting)
+            Button(s.pick("Отмена", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(s.pick("""
+            Расход до этой минуты в счёт больше не идёт: снимок, подобранный \
+            бюджет и уже сказанные предупреждения стираются, а суточные полосы \
+            начнутся с нуля. Настройки, транскрипты и сам недельный процент от \
+            сервера остаются на месте.
+            """, """
+            Spending up to this minute stops counting: the snapshot, the worked-out \
+            budget and the warnings already given are erased, and the daily bars \
+            start from zero. Settings, transcripts and the server’s own weekly \
+            percentage stay as they are.
+            """))
+        }
     }
 }
 

@@ -246,17 +246,20 @@ public actor LocalProvider: UsageProvider {
     private let config: Config
     private let root: URL
     private let indexURL: URL
+    private let stateURL: URL
     private let clock: @Sendable () -> Date
 
     public init(
         config: Config,
         root: URL = LocalProvider.defaultRoot,
         indexURL: URL = Store.indexURL,
+        stateURL: URL = Store.stateURL,
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.config = config
         self.root = root
         self.indexURL = indexURL
+        self.stateURL = stateURL
         self.clock = clock
     }
 
@@ -372,14 +375,25 @@ public actor LocalProvider: UsageProvider {
             Log.warn("не сохранил индекс: \(error)")
         }
 
-        return aggregate(index: index, window: window, now: now, filesRead: filesRead)
+        // Отсечку перечитываем на каждом обходе, а не запоминаем в поле:
+        // сброс приходит из окна настроек, и провайдер к этому моменту уже
+        // создан — с запомненной отсечкой он считал бы по-старому до
+        // перезапуска.
+        return aggregate(
+            index: index,
+            window: window,
+            now: now,
+            filesRead: filesRead,
+            countFrom: Store.loadState(from: stateURL).countFrom
+        )
     }
 
     private func aggregate(
         index: UsageIndex,
         window: WeekWindow,
         now: Date,
-        filesRead: Int
+        filesRead: Int,
+        countFrom: Date?
     ) -> LocalUsage {
         var seen: Set<String> = []
         var duplicates = 0
@@ -397,6 +411,10 @@ public actor LocalProvider: UsageProvider {
                 // Записи позже `now` бывают при калибровке: она смотрит
                 // на прошлый момент, а индекс уже знает про более свежие.
                 guard record.timestamp <= now,
+                      // Всё, что раньше отсечки, накоплено прежним аккаунтом:
+                      // в лимит нынешнего оно не идёт, хотя лежит в тех же
+                      // файлах транскриптов.
+                      countFrom.map({ record.timestamp >= $0 }) ?? true,
                       let day = window.dayIndex(for: record.timestamp)
                 else { continue }
                 perDay[day] += record.cost
