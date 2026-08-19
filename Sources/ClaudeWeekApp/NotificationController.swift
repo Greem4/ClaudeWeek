@@ -128,7 +128,13 @@ final class NotificationController {
             threshold: limit.first,
             percent: limit.first,
             resetsAt: resetsAt,
-            isEstimate: false
+            isEstimate: false,
+            // Начало окна настоящее — от него считается и строка статистики, и
+            // модель под ней: пример должен показывать вашу неделю, а не
+            // выдуманную. Выдуман здесь только процент, и он назван порогом.
+            startedAt: kind == .week
+                ? WeekWindow(containing: now, config: config).start
+                : resetsAt.addingTimeInterval(-SessionUsage.length)
         )
         Task {
             await authorize()
@@ -136,10 +142,31 @@ final class NotificationController {
         }
     }
 
+    /// Разбивка по моделям за отрезок. Ставится снаружи: считает её провайдер,
+    /// который живёт в контроллере строки меню, а тащить его целиком сюда ради
+    /// одного вопроса незачем.
+    var models: ((Date, Date) async -> [ModelUsage])?
+
+    /// Модель, на которую ушло больше всего, досчитываем здесь, если ядро её
+    /// не назвало: у пятичасовой сессии разбивки нет вовсе (снимок знает её
+    /// только за неделю), а у примера из настроек нет и снимка. Обход
+    /// транскриптов на этом пути редкий — баннеров единицы в неделю, а не по
+    /// одному на каждое обновление.
     private func send(_ alert: LimitAlert, config: Config, now: Date) {
+        guard center != nil else { return }
+        guard alert.topModel == nil, let models, let startedAt = alert.startedAt
+        else { return deliver(alert, config: config, now: now) }
+
+        Task { [weak self] in
+            let top = await models(startedAt, now).first
+            self?.deliver(alert.with(topModel: top), config: config, now: now)
+        }
+    }
+
+    private func deliver(_ alert: LimitAlert, config: Config, now: Date) {
         guard let center else { return }
 
-        let text = alert.message(now: now)
+        let text = alert.message(now: now, lang: config.strings.lang, calendar: config.calendar)
         let content = UNMutableNotificationContent()
         content.title = text.title
         content.body = text.body
@@ -151,7 +178,8 @@ final class NotificationController {
         if let picture = AlertArtwork.png(
             percent: alert.percent,
             state: state(for: alert, config: config.notifications),
-            kind: alert.kind,
+            window: alert.windowLabel(lang: config.strings.lang, calendar: config.calendar),
+            model: alert.modelLabel(lang: config.strings.lang),
             palette: config.appearance.theme.palette
         ), let attachment = try? UNNotificationAttachment(
             identifier: "ring", url: picture, options: nil

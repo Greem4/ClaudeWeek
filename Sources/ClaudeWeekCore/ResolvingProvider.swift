@@ -104,6 +104,13 @@ public actor ResolvingProvider: UsageProvider {
         return snapshot
     }
 
+    /// Разбивка по моделям за отрезок — для баннера о пятичасовой сессии.
+    /// Пустой ответ здесь не ошибка: транскриптов за эти часы могло не быть
+    /// вовсе, и баннер просто придёт без строки о модели.
+    public func models(from start: Date, to end: Date) async -> [ModelUsage] {
+        (try? await local.models(from: start, to: end)) ?? []
+    }
+
     /// Сверяет аккаунт в Keychain с тем, на котором ведётся счёт, и при
     /// расхождении начинает счёт заново.
     ///

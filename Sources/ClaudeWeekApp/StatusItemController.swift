@@ -54,6 +54,15 @@ final class StatusItemController: NSObject {
         // после установки, читается как выходка, а на первом запуске он
         // ожидаем. Выключенные уведомления не спрашивают ничего.
         notifications.apply(config.notifications)
+        // Разбивку за пятичасовое окно считает провайдер: берём текущий, а не
+        // запомненный, — при смене источника в настройках он пересоздаётся.
+        notifications.models = { [weak self] from, to in
+            // Разбивку умеет считать только `ResolvingProvider` — он и стоит
+            // здесь всегда. Каст на случай подмены дублёром: баннер тогда
+            // придёт без строки о модели, а не упадёт.
+            guard let provider = self?.provider as? ResolvingProvider else { return [] }
+            return await provider.models(from: from, to: to)
+        }
         restoreFromCache()
         render()
         refresh()

@@ -139,22 +139,49 @@ public struct LimitAlert: Sendable, Equatable {
     public let resetsAt: Date
     /// Расход посчитан на месте, а не назван сервером, — в тексте это знак ≈.
     public let isEstimate: Bool
+    /// С какого момента идёт окно этого лимита: у недели — её начало, у сессии
+    /// — пять часов назад от сброса. Отвечает на «а с какого дня это
+    /// накапало», которое по одному проценту не прочитать.
+    public let startedAt: Date?
+    /// Модель, на которую в этом окне ушло больше всего. У недели берётся из
+    /// снимка, у сессии её пока нет: разбивка считается за недельное окно, и
+    /// показать недельную долю в баннере о пятичасовом лимите значило бы
+    /// назвать чужое число своим.
+    public let topModel: ModelUsage?
 
     public init(
         kind: AlertKind,
         threshold: Double,
         percent: Double,
         resetsAt: Date,
-        isEstimate: Bool
+        isEstimate: Bool,
+        startedAt: Date? = nil,
+        topModel: ModelUsage? = nil
     ) {
         self.kind = kind
         self.threshold = threshold
         self.percent = percent
         self.resetsAt = resetsAt
         self.isEstimate = isEstimate
+        self.startedAt = startedAt
+        self.topModel = topModel
     }
 
     public var isExhausted: Bool { percent >= 100 }
+
+    /// Тот же повод, но с досчитанной моделью. Нужен слою приложения: разбивку
+    /// за пятичасовое окно считает провайдер, а он ядру не виден.
+    public func with(topModel: ModelUsage?) -> LimitAlert {
+        LimitAlert(
+            kind: kind,
+            threshold: threshold,
+            percent: percent,
+            resetsAt: resetsAt,
+            isEstimate: isEstimate,
+            startedAt: startedAt,
+            topModel: topModel ?? self.topModel
+        )
+    }
 
     /// Две строки баннера. Живут в ядре вместе с правилами: слова — такая же
     /// часть уведомления, как момент его отправки, и проверяются теми же
@@ -172,15 +199,60 @@ public struct LimitAlert: Sendable, Equatable {
     /// «в воскресенье в 2:10» — одно и то же, сказанное дважды. Точный момент
     /// сброса по-прежнему стоит в панели, где на него смотрят осознанно.
     /// Порога нет по той же причине: человек его сам и задал.
-    public func message(now: Date, lang: Lang = .ru) -> (title: String, body: String) {
+    ///
+    /// Третья строка — статистика этого окна: с какого дня оно идёт и на какую
+    /// модель ушло больше всего. Она нужна там, где картинку не показывают
+    /// вовсе (Центр уведомлений в компактном виде, запрет вложений), и
+    /// повторяет то же, что нарисовано на полосе.
+    public func message(
+        now: Date,
+        lang: Lang = .ru,
+        calendar: Calendar = .current
+    ) -> (title: String, body: String) {
         let l = L10n(lang)
         let spent = (isEstimate ? "≈" : "") + Formatting.percent(percent)
         let title = isExhausted
             ? l.pick("Лимит исчерпан", "Limit reached")
             : l.pick("Израсходовано \(spent)", "\(spent) used")
         let left = Formatting.longDuration(resetsAt.timeIntervalSince(now), lang: lang)
-        let body = l.pick("Сброс через \(left)", "Resets in \(left)")
+        var body = l.pick("Сброс через \(left)", "Resets in \(left)")
+        if let stats = statistics(lang: lang, calendar: calendar) {
+            body += "\n" + stats
+        }
         return (title, body)
+    }
+
+    /// «Неделя с СБ», «Сессия с 17:30». nil — начала окна не знаем, и сказать
+    /// нечего: «неделя с ?» хуже молчания.
+    ///
+    /// У недели опора — день: «с СБ» человек сопоставляет с рядом суток на
+    /// панели. У пятичасовой сессии день не значит ничего (она вся внутри
+    /// одного), и опора у неё — час начала.
+    public func windowLabel(lang: Lang = .ru, calendar: Calendar = .current) -> String? {
+        guard let startedAt else { return nil }
+        let l = L10n(lang)
+        let since = kind == .week
+            ? Formatting.weekdayShort(startedAt, calendar: calendar, lang: lang)
+            : Formatting.clock(startedAt, calendar: calendar)
+        return kind == .week
+            ? l.pick("Неделя с \(since)", "Week since \(since)")
+            : l.pick("Сессия с \(since)", "Session since \(since)")
+    }
+
+    /// «больше всего Opus 62 %». nil — разбивки нет: у сессии её могли не
+    /// досчитать, а у пустого окна и считать нечего.
+    public func modelLabel(lang: Lang = .ru) -> String? {
+        guard let topModel, topModel.sharePercent > 0 else { return nil }
+        let share = Formatting.percent(topModel.sharePercent)
+        return L10n(lang).pick("больше всего \(topModel.title(lang)) \(share)",
+                               "mostly \(topModel.title(lang)) \(share)")
+    }
+
+    /// Обе половины одной строкой — для текста баннера.
+    public func statistics(lang: Lang = .ru, calendar: Calendar = .current) -> String? {
+        guard let window = windowLabel(lang: lang, calendar: calendar) else { return nil }
+        guard let model = modelLabel(lang: lang) else { return window }
+        return "\(window) · \(model)"
     }
 }
 
@@ -264,7 +336,12 @@ public enum AlertPlanner {
                     threshold: point,
                     percent: snapshot.usedPercent,
                     resetsAt: weekEnd,
-                    isEstimate: snapshot.isEstimate
+                    isEstimate: snapshot.isEstimate,
+                    startedAt: snapshot.window.start,
+                    // Разбивка уже отсортирована от дорогого к дешёвому —
+                    // первая строка и есть та модель, на которую ушло больше
+                    // всего.
+                    topModel: snapshot.byModel.first
                 )
             )
         }
@@ -286,7 +363,12 @@ public enum AlertPlanner {
                         resetsAt: session.resetsAt,
                         // Сессию сообщает только сервер, поэтому её число
                         // точное даже тогда, когда неделя посчитана на месте.
-                        isEstimate: false
+                        isEstimate: false,
+                        startedAt: session.startedAt
+                        // Модель за эти пять часов ядру взять неоткуда: она
+                        // считается по транскриптам, а сюда приходит уже
+                        // готовый снимок. Досчитывает её слой приложения —
+                        // `LimitAlert.with(topModel:)` перед самой отправкой.
                     )
                 )
             }

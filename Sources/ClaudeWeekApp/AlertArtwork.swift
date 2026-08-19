@@ -1,19 +1,21 @@
 import AppKit
 import ClaudeWeekCore
 
-/// Картинка к уведомлению. Нужна не для красоты: по ней видно, о каком из двух
-/// лимитов речь, ещё до того, как прочитан текст, — поэтому лимиты нарисованы
-/// по-разному.
+/// Картинка к уведомлению — сводка по тому лимиту, о котором речь: с какого
+/// момента идёт его окно, сколько израсходовано и на какую модель ушло больше
+/// всего.
 ///
-/// Пятичасовая сессия приходит **дугой**, недельный лимит — **числом**. Это тот
-/// же язык, каким говорит значок в строке меню: там дуга по умолчанию отдана
-/// сессии, а цифра в центре — неделе. Один взгляд на баннер — и понятно,
-/// кончается пятичасовое окно или неделя, а текст только уточняет, сколько
-/// именно.
+/// Раньше здесь были дуга у сессии и число у недели — одна крупная форма на
+/// всю плашку. От неё отказались: развёрнутый баннер показывает вложение
+/// большим, и место, где помещается статистика окна, занимала цифра, уже
+/// написанная в первой строке текста. Какой это лимит, теперь говорит подпись
+/// сверху («Неделя с СБ», «Сессия с 17:30»), а цвет полосы остался прежним
+/// языком тревоги.
 ///
-/// Цвет берётся по тем же порогам, что красят значок, а не по порогу
-/// уведомления: человек привык, что жёлтое кольцо у часов означает одно и то
-/// же, и баннер, спорящий с ним цветом, читался бы как второй, другой лимит.
+/// Цвет берётся по порогам самого уведомления, а не по цветовым со вкладки
+/// «Строка меню»: те стоят на своих отметках, и баннер о пробитом пороге
+/// приходил бы со спокойным зелёным числом просто потому, что до окраски
+/// значка не хватило процента.
 ///
 /// Живёт на главном акторе: оформление, в котором разрешаются цвета палитры,
 /// спрашивается у самого приложения.
@@ -31,10 +33,17 @@ enum AlertArtwork {
     /// Не вышло — nil, и уведомление уйдёт без картинки: текст в нём главное,
     /// и терять весь баннер из-за неудавшейся отрисовки незачем.
     static func png(
-        percent: Double, state: LimitState, kind: AlertKind, palette: Palette
+        percent: Double,
+        state: LimitState,
+        window: String?,
+        model: String?,
+        palette: Palette,
+        appearance: NSAppearance? = nil
     ) -> URL? {
-        guard let data = render(percent: percent, state: state, kind: kind, palette: palette)
-        else { return nil }
+        guard let data = render(
+            percent: percent, state: state, window: window, model: model,
+            palette: palette, appearance: appearance
+        ) else { return nil }
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("claudeweek-alert-\(UUID().uuidString).png")
         do {
@@ -47,7 +56,12 @@ enum AlertArtwork {
     }
 
     private static func render(
-        percent: Double, state: LimitState, kind: AlertKind, palette: Palette
+        percent: Double,
+        state: LimitState,
+        window: String?,
+        model: String?,
+        palette: Palette,
+        appearance: NSAppearance? = nil
     ) -> Data? {
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
@@ -61,82 +75,116 @@ enum AlertArtwork {
         // Цвета палитры динамические — их разрешает текущее оформление. У
         // оффскрин-рендера его нет, поэтому берём то, в котором живёт само
         // приложение: баннер ляжет на фон той же системной темы.
-        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
+        //
+        // Явное оформление просит только генератор картинок для документации:
+        // ему нужны обе темы разом, а не та, в которой запущен процесс. Там же
+        // `NSApp` может не оказаться вовсе — под `--screenshot` картинки
+        // рисуются до того, как поднят UI, и запасное оформление здесь честнее
+        // падения на неявной распаковке.
+        let drawing = appearance ?? NSApp?.effectiveAppearance
+            ?? NSAppearance(named: .aqua) ?? NSAppearance()
+        drawing.performAsCurrentDrawingAppearance {
             guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return }
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = context
-            // Цвет один на обе формы и берётся по порогам уведомлений: первый
-            // порог — жёлтый, второй и исчерпанный лимит — красный. Так дуга и
-            // число говорят одно и то же одним языком, а разные красные в паре
-            // баннеров не читаются как два разных смысла.
+            // Цвет берётся по порогам уведомлений: первый порог — жёлтый,
+            // второй и исчерпанный лимит — красный. Чем выше расход, тем
+            // тревожнее полоса, и оба баннера говорят это одним языком.
             let ink = color(for: state, palette: palette)
-            switch kind {
-            case .session: drawArc(percent: percent, color: ink, palette: palette)
-            case .week: drawNumber(percent: percent, color: ink)
-            }
+            drawCard(percent: percent, window: window, model: model, ink: ink, palette: palette)
             NSGraphicsContext.restoreGraphicsState()
             data = rep.representation(using: .png, properties: [:])
         }
         return data
     }
 
-    /// Пятичасовая сессия: кольцо, заполненное израсходованным. Числа внутри
-    /// нет — его говорит первая строка баннера, а пустая середина как раз и
-    /// отличает сессию от недели с одного взгляда.
-    private static func drawArc(percent: Double, color: NSColor, palette: Palette) {
+    /// Сводка окна: подпись сверху, крупный процент с полосой под ним и
+    /// строка о главной модели внизу.
+    ///
+    /// Процент оставлен крупным намеренно. В свёрнутом баннере вложение —
+    /// квадратик в палец шириной, и подписи в нём не читаются вовсе; читается
+    /// только число и цвет. Статистика вокруг него написана для развёрнутого
+    /// вида, где места втрое больше.
+    private static func drawCard(
+        percent: Double, window: String?, model: String?, ink: NSColor, palette: Palette
+    ) {
         let box = NSRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side))
-        let stroke = box.width * 0.14
-        let bounds = box.insetBy(dx: stroke / 2 + box.width * 0.04, dy: stroke / 2 + box.width * 0.04)
-        let center = NSPoint(x: bounds.midX, y: bounds.midY)
-        let radius = bounds.width / 2
+        let margin = box.width * 0.08
 
-        let track = NSBezierPath()
-        track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
-        track.lineWidth = stroke
-        palette.track.nsColor.withAlphaComponent(0.65).setStroke()
-        track.stroke()
+        // Сверху вниз: подпись окна, число, полоса, модель. Координаты AppKit
+        // растут вверх, поэтому кладём с нижнего края.
+        if let window {
+            draw(window, size: box.width * 0.085, weight: .semibold,
+                 color: .secondaryLabelColor, centeredIn: box,
+                 y: box.height - margin - box.width * 0.1)
+        }
+        if let model {
+            draw(model, size: box.width * 0.075, weight: .regular,
+                 color: .secondaryLabelColor, centeredIn: box, y: margin)
+        }
+
+        let number = Formatting.percent(percent, withSign: false)
+        let font = fitted(number, toWidth: box.width * 0.52, maxSize: box.height * 0.42)
+        let label = NSAttributedString(
+            string: number, attributes: [.font: font, .foregroundColor: ink]
+        )
+        let size = label.size()
+        label.draw(at: NSPoint(x: (box.width - size.width) / 2, y: box.midY - size.height * 0.22))
+
+        drawBar(
+            percent: percent,
+            in: NSRect(x: margin, y: box.height * 0.30,
+                       width: box.width - margin * 2, height: box.width * 0.075),
+            ink: ink,
+            palette: palette
+        )
+    }
+
+    /// Полоса расхода: дорожка во всю ширину и залитая часть по проценту.
+    /// Перебор за 100 % не рисуем — полоса и так упёрлась в край, а вылезший
+    /// прямоугольник читался бы как ошибка отрисовки.
+    private static func drawBar(percent: Double, in rect: NSRect, ink: NSColor, palette: Palette) {
+        let radius = rect.height / 2
+        let track = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        palette.track.nsColor.withAlphaComponent(0.65).setFill()
+        track.fill()
 
         let fraction = min(max(percent, 0), 100) / 100
         guard fraction > 0 else { return }
-        // Тот же приём, что в значке: полный круг `appendArc` не рисует,
-        // и на 100 % дуга не замыкается на волос.
-        let arc = NSBezierPath()
-        arc.appendArc(
-            withCenter: center, radius: radius,
-            startAngle: 90, endAngle: 90 - min(360 * fraction, 359.9),
-            clockwise: true
-        )
-        arc.lineWidth = stroke
-        arc.lineCapStyle = .round
-        color.setStroke()
-        arc.stroke()
+        // Совсем узкая заливка выглядит обрубком: держим её не уже высоты,
+        // чтобы скругление осталось скруглением.
+        let width = max(rect.width * fraction, rect.height)
+        let filled = NSRect(x: rect.minX, y: rect.minY, width: width, height: rect.height)
+        let path = NSBezierPath(roundedRect: filled, xRadius: radius, yRadius: radius)
+        ink.setFill()
+        path.fill()
     }
 
-    /// Недельный лимит: одно число во всю плашку — без знака процента. Знак в
-    /// миниатюре съедает половину места и ничего не добавляет: в первой строке
-    /// баннера уже написано «Израсходовано 82 %», а картинка должна читаться
-    /// на бегу, одним крупным числом.
-    ///
-    /// Кегль не задан числом, а подобран под ширину: «7», «82» и «100» —
-    /// строки разной длины, и с постоянным кеглем короткая терялась бы в углу,
+    /// Кегль, при котором строка укладывается в отведённую ширину: «7», «82» и
+    /// «100» — строки разной длины, и с постоянным кеглем короткая терялась бы,
     /// а длинная не влезала.
-    private static func drawNumber(percent: Double, color: NSColor) {
-        let box = NSRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side))
-        let text = Formatting.percent(percent, withSign: false)
-
-        // Меряем пробной строкой и масштабируем: так строка занимает по ширине
-        // ровно то, что ей отведено, какой бы длины ни оказалась.
+    private static func fitted(_ text: String, toWidth width: CGFloat, maxSize: CGFloat) -> NSFont {
         let probe: CGFloat = 100
         let probeWidth = (text as NSString)
             .size(withAttributes: [.font: NSFont.systemFont(ofSize: probe, weight: .bold)]).width
-        let byWidth = probe * (box.width * 0.86) / max(probeWidth, 1)
-        let font = NSFont.systemFont(ofSize: min(byWidth, box.height * 0.78), weight: .bold)
+        return NSFont.systemFont(ofSize: min(probe * width / max(probeWidth, 1), maxSize), weight: .bold)
+    }
 
-        let label = NSAttributedString(
-            string: text, attributes: [.font: font, .foregroundColor: color]
-        )
-        let size = label.size()
-        label.draw(at: NSPoint(x: (box.width - size.width) / 2, y: (box.height - size.height) / 2))
+    /// Строка по центру плашки. Длинную ужимаем по ширине, а не переносим:
+    /// перенос в картинке размером с ноготь превращается в кашу.
+    private static func draw(
+        _ text: String, size: CGFloat, weight: NSFont.Weight,
+        color: NSColor, centeredIn box: NSRect, y: CGFloat
+    ) {
+        let available = box.width * 0.92
+        var font = NSFont.systemFont(ofSize: size, weight: weight)
+        var width = (text as NSString).size(withAttributes: [.font: font]).width
+        if width > available {
+            font = NSFont.systemFont(ofSize: size * available / width, weight: weight)
+            width = (text as NSString).size(withAttributes: [.font: font]).width
+        }
+        NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
+            .draw(at: NSPoint(x: (box.width - width) / 2, y: y))
     }
 
     /// Спокойное состояние здесь зелёное, а не нейтральное, как в строке меню:
