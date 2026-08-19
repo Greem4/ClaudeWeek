@@ -147,8 +147,6 @@ final class NotificationController {
         guard center != nil, config.notifications.update else { return }
         let version = release.version.description
         guard log.updateSaid != version else { return }
-        log.updateSaid = version
-        save()
 
         let s = config.strings
         let content = UNMutableNotificationContent()
@@ -165,6 +163,12 @@ final class NotificationController {
             await authorize()
             do {
                 try await center?.add(request)
+                // Сказанным версия считается только после удачной отправки.
+                // Пометь мы её раньше — отказ системы (нет разрешения, сбой
+                // центра) навсегда съел бы новость: второй раз о ней бы уже
+                // не заговорили.
+                log.updateSaid = version
+                save()
                 Log.info("уведомление: вышла версия \(version)")
             } catch {
                 Log.warn("не показал уведомление об обновлении: \(error)")

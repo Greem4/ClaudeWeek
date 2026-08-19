@@ -71,6 +71,7 @@ private struct TranscriptSandbox {
     let indexURL: URL
     let cacheURL: URL
     let stateURL: URL
+    let alertsURL: URL
 
     init() {
         base = FileManager.default.temporaryDirectory
@@ -79,6 +80,7 @@ private struct TranscriptSandbox {
         indexURL = base.appendingPathComponent("index.json")
         cacheURL = base.appendingPathComponent("cache.json")
         stateURL = base.appendingPathComponent("state.json")
+        alertsURL = base.appendingPathComponent("alerts.json")
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
@@ -179,6 +181,7 @@ func runOfficialProviderTests(_ t: Harness) async {
                 localRoot: sandbox.root,
                 indexURL: sandbox.indexURL,
                 stateURL: sandbox.stateURL,
+                alertsURL: sandbox.alertsURL,
                 clock: { now }
             )
         }
@@ -369,6 +372,7 @@ func runOfficialProviderTests(_ t: Harness) async {
                 localRoot: sandbox.root,
                 indexURL: sandbox.indexURL,
                 stateURL: sandbox.stateURL,
+                alertsURL: sandbox.alertsURL,
                 clock: { testNow }
             )
         }
@@ -474,6 +478,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             localRoot: sandbox.root,
             indexURL: sandbox.indexURL,
             stateURL: sandbox.stateURL,
+            alertsURL: sandbox.alertsURL,
             clock: { testNow }
         )
 
@@ -492,6 +497,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             localRoot: sandbox.root,
             indexURL: sandbox.indexURL,
             stateURL: sandbox.stateURL,
+            alertsURL: sandbox.alertsURL,
             clock: { testNow }
         )
         let fallback = try await offline.fetch()
@@ -585,6 +591,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             localRoot: sandbox.root,
             indexURL: sandbox.indexURL,
             stateURL: sandbox.stateURL,
+            alertsURL: sandbox.alertsURL,
             clock: { testNow }
         )
         _ = try? await resolving.fetch()
@@ -592,6 +599,44 @@ func runOfficialProviderTests(_ t: Harness) async {
         let state = Store.loadState(from: sandbox.stateURL)
         t.equal(state.account, "новая012·max", "запомнен аккаунт, который в ключе сейчас")
         t.equal(state.countFrom, testNow, "отсечка поставлена моментом, когда заметили смену")
+        // Кеш при этом не остаётся пустым: тот же `fetch` тут же кладёт в него
+        // снимок нового аккаунта — стирается прежний, а не сам файл навсегда.
+        t.equal(Store.loadCache(from: sandbox.cacheURL)?.usedPercent, 50,
+                "в кеше уже снимок нынешнего аккаунта")
+    }
+
+    t.suite("сброс счёта стирает только те файлы, которые ему дали") {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-week-reset-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let stateURL = base.appendingPathComponent("state.json")
+        let cacheURL = base.appendingPathComponent("cache.json")
+        let alertsURL = base.appendingPathComponent("alerts.json")
+        try Store.saveCache(
+            CachedUsage(usedPercent: 50, byDay: [], windowStart: testNow, windowEnd: testNow,
+                        source: .official, fetchedAt: testNow),
+            to: cacheURL
+        )
+        try Store.saveAlerts(AlertLog(weekSaid: 80), to: alertsURL)
+
+        // Пути настоящего приложения не должны пострадать — иначе прогон
+        // тестов сносил бы журнал и кеш живого виджета.
+        let liveAlerts = Store.loadAlerts()
+        let liveState = Store.loadState()
+
+        try Store.resetCounting(
+            at: testNow, account: "метка·max",
+            stateURL: stateURL, cacheURL: cacheURL, alertsURL: alertsURL
+        )
+
+        t.check(!FileManager.default.fileExists(atPath: cacheURL.path), "снимок стёрт")
+        t.check(!FileManager.default.fileExists(atPath: alertsURL.path), "журнал стёрт")
+        t.equal(Store.loadState(from: stateURL), CountingState(countFrom: testNow, account: "метка·max"),
+                "отсечка и аккаунт записаны")
+        t.equal(Store.loadAlerts(), liveAlerts, "настоящий журнал пользователя не тронут")
+        t.equal(Store.loadState(), liveState, "и его состояние счёта тоже")
     }
 
     await t.suite("первое знакомство сбросом не считается") {
@@ -607,6 +652,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             localRoot: sandbox.root,
             indexURL: sandbox.indexURL,
             stateURL: sandbox.stateURL,
+            alertsURL: sandbox.alertsURL,
             clock: { testNow }
         )
         _ = try? await resolving.fetch()

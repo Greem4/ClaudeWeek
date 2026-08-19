@@ -20,6 +20,10 @@ public actor ResolvingProvider: UsageProvider {
     private let local: LocalProvider
     private let cacheURL: URL?
     private let stateURL: URL?
+    /// Журнал уведомлений: его тоже стирает сброс счёта. Путь держим полем, а
+    /// не берём у `Store` на месте — иначе провайдер, которому дали файлы
+    /// песочницы, всё равно лез бы в настоящий журнал пользователя.
+    private let alertsURL: URL
     /// Те же креды, что уходят в официальный источник. Держим их и здесь —
     /// чтобы спросить, чей аккаунт, не дожидаясь удачного запроса: смена
     /// аккаунта важна как раз тогда, когда сеть молчит.
@@ -36,13 +40,14 @@ public actor ResolvingProvider: UsageProvider {
         localRoot: URL = LocalProvider.defaultRoot,
         indexURL: URL = Store.indexURL,
         stateURL: URL? = Store.stateURL,
+        alertsURL: URL = Store.alertsURL,
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         let local = LocalProvider(
             config: config,
             root: localRoot,
             indexURL: indexURL,
-            stateURL: stateURL ?? Store.stateURL,
+            stateURL: stateURL,
             clock: clock
         )
         self.config = config
@@ -51,6 +56,7 @@ public actor ResolvingProvider: UsageProvider {
         self.local = local
         self.cacheURL = cacheURL
         self.stateURL = stateURL
+        self.alertsURL = alertsURL
         // В режиме «только локальная оценка» Keychain не трогаем вовсе — это
         // обещание вкладки «Доступ», и ради определения аккаунта нарушать его
         // нельзя. Цена: смену аккаунта там замечает только кнопка в настройках.
@@ -135,8 +141,8 @@ public actor ResolvingProvider: UsageProvider {
                 at: now,
                 account: mark,
                 stateURL: stateURL,
-                cacheURL: cacheURL ?? Store.cacheURL,
-                alertsURL: Store.alertsURL
+                cacheURL: cacheURL,
+                alertsURL: alertsURL
             )
         } catch {
             Log.warn("не смог начать счёт заново после смены аккаунта: \(error)")

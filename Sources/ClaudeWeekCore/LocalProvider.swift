@@ -246,14 +246,14 @@ public actor LocalProvider: UsageProvider {
     private let config: Config
     private let root: URL
     private let indexURL: URL
-    private let stateURL: URL
+    private let stateURL: URL?
     private let clock: @Sendable () -> Date
 
     public init(
         config: Config,
         root: URL = LocalProvider.defaultRoot,
         indexURL: URL = Store.indexURL,
-        stateURL: URL = Store.stateURL,
+        stateURL: URL? = Store.stateURL,
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.config = config
@@ -384,7 +384,9 @@ public actor LocalProvider: UsageProvider {
             window: window,
             now: now,
             filesRead: filesRead,
-            countFrom: Store.loadState(from: stateURL).countFrom
+            // nil-путь — это «состояния не ведём» (так делают тесты), а не
+            // повод залезть в файл пользователя.
+            countFrom: stateURL.flatMap { Store.loadState(from: $0).countFrom }
         )
     }
 

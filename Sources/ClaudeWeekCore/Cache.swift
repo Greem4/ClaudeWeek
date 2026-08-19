@@ -295,12 +295,16 @@ public enum Store {
         at now: Date,
         account: String?,
         stateURL: URL = Store.stateURL,
-        cacheURL: URL = Store.cacheURL,
+        cacheURL: URL? = Store.cacheURL,
         alertsURL: URL = Store.alertsURL
     ) throws {
-        try? FileManager.default.removeItem(at: cacheURL)
-        try? FileManager.default.removeItem(at: alertsURL)
+        // Отсечку записываем первой: не сумей мы её сохранить — снимок и
+        // журнал останутся на месте, и счёт продолжится по-старому. Обратный
+        // порядок оставил бы стёртый кеш без отсечки, то есть счёт с нуля по
+        // чужим транскриптам — худший из трёх исходов.
         try saveState(CountingState(countFrom: now, account: account), to: stateURL)
+        if let cacheURL { try? FileManager.default.removeItem(at: cacheURL) }
+        try? FileManager.default.removeItem(at: alertsURL)
         Log.info("счёт начат заново с \(now)")
     }
 
