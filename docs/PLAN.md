@@ -277,7 +277,7 @@ ClaudeWeek/
 │   │   ├── WorkHours.swift        # рабочий день: сколько рабочего времени в отрезке
 │   │   ├── Snapshot.swift         # модель того, что рисуем, и метрики футера
 │   │   ├── Config.swift           # чтение/дефолты config.json
-│   │   ├── Cache.swift            # index.json + cache.json
+│   │   ├── Cache.swift            # index.json + cache.json + state.json
 │   │   ├── UsageProvider.swift    # protocol UsageProvider, UsageError
 │   │   ├── LocalProvider.swift    # разбор jsonl, веса, инкрементальный индекс
 │   │   ├── OfficialProvider.swift # /api/oauth/usage, декодер, троттлинг, backoff
@@ -653,7 +653,7 @@ assert-хелперов, запускаемый `swift run ClaudeWeekTests`; н�
 = падение. Когда/если появится Xcode, таргет переносится на swift-testing без
 изменения самих проверок.
 
-Что покрыто (439 проверок, `swift run ClaudeWeekTests`):
+Что покрыто (477 проверок, `swift run ClaudeWeekTests`):
 
 1. **Окно недели.** Момент ровно на сбросе; за минуту до и после; полсекунды до;
    воскресный полдень; смена таймзоны между вызовами; другой день сброса.
