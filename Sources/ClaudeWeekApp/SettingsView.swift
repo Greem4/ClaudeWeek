@@ -637,6 +637,9 @@ struct NotificationSettings: View {
                 Toggle(s.pick("Со звуком", "With sound"), isOn: sound)
                     .disabled(isOff)
 
+                Toggle(s.pick("Сообщать о новой версии", "Announce a new version"),
+                       isOn: updates)
+
                 Text(s.pick("""
                 В баннере две строки: сколько израсходовано и через сколько \
                 сброс. Какой это лимит, говорит картинка справа — пятичасовая \
@@ -646,6 +649,22 @@ struct NotificationSettings: View {
                 the reset. Which limit it is comes from the artwork on the \
                 right — the 5-hour session arrives as an arc, the weekly limit \
                 as a red number.
+                """))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Text(s.pick("""
+                О вышедшей версии программа говорит один раз — не каждые сутки, \
+                пока не обновитесь. Кнопки в том баннере нет: установка \
+                перезаписывает приложение и перезапускает его, и делать это \
+                одним щелчком посреди чужой работы неправильно. Ставится \
+                обновление на вкладке «О программе».
+                """, """
+                A released version is announced once — not daily until you \
+                update. That banner has no button: installing replaces the app \
+                and restarts it, and that should not happen on a single click \
+                in the middle of your work. Updates are installed on the About \
+                tab.
                 """))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -733,6 +752,16 @@ struct NotificationSettings: View {
         )
     }
 
+    /// Не гаснет вместе с общим тумблером: тот про разговоры о расходе, а
+    /// новая версия — новость другого рода, и молчать о ней человек просит
+    /// отдельно.
+    private var updates: Binding<Bool> {
+        Binding(
+            get: { notifications.update },
+            set: { model.config.notifications.update = $0 }
+        )
+    }
+
     private var weekEnabled: Binding<Bool> {
         Binding(
             get: { notifications.week.enabled },
@@ -795,11 +824,63 @@ struct NotificationSettings: View {
 
 private struct AccessSettings: View {
     @Bindable var model: SettingsModel
+    /// Спрашиваем до, а не «отменить» после: отсечку назад не отмотать —
+    /// прежний счёт нигде не сохранён.
+    @State private var confirmingReset = false
 
     private var s: L10n { model.config.strings }
 
     var body: some View {
         Form {
+            Section(s.pick("Аккаунт и счёт", "Account and count")) {
+                LabeledContent(s.pick("Сейчас в ключе", "Currently in the key")) {
+                    Text(model.account ?? s.pick("не читается", "cannot be read"))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(model.account == nil ? .secondary : .primary)
+                        .textSelection(.enabled)
+                }
+                Text(s.pick("""
+                Метка аккаунта из записи Keychain: начало UUID организации и тариф. \
+                Токен обновляется раз в час, а она держится — по ней и видно, тот \
+                же это аккаунт, что вчера, или вошли другим.
+                """, """
+                The account mark from the Keychain item: the start of the \
+                organisation UUID and the plan. The token is refreshed hourly, this \
+                stays — it is what tells yesterday’s account from a new login.
+                """))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                HStack {
+                    Button(s.pick("Начать счёт заново", "Start counting over")) {
+                        confirmingReset = true
+                    }
+                    Spacer()
+                }
+                Text(model.countingNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(s.pick("""
+                Нужно после входа другим аккаунтом. Недельный процент приходит от \
+                сервера и сменится сам, а вот разбивка по суткам считается по \
+                транскриптам в ~/.claude/projects — они пишутся в одни и те же \
+                файлы при любом аккаунте, и различить их по содержимому нельзя. \
+                Смену аккаунта программа замечает и сама, но только пока читает \
+                Keychain.
+                """, """
+                Needed after logging in with a different account. The weekly \
+                percentage comes from the server and changes by itself, but the \
+                daily breakdown is counted from the transcripts in \
+                ~/.claude/projects — they are written to the same files whatever \
+                account is used, and nothing in them tells one from the other. The \
+                app notices a switch on its own too, but only while it can read the \
+                Keychain.
+                """))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
             Section(s.pick("Токен для официального источника", "Token for the official source")) {
                 Text(s.pick("""
                 Берётся из Keychain Claude Code, запись «Claude Code-credentials». \
@@ -905,6 +986,25 @@ private struct AccessSettings: View {
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(
+            s.pick("Начать счёт заново?", "Start counting over?"),
+            isPresented: $confirmingReset
+        ) {
+            Button(s.pick("Начать заново", "Start over"), role: .destructive, action: model.resetCounting)
+            Button(s.pick("Отмена", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(s.pick("""
+            Расход до этой минуты в счёт больше не идёт: снимок, подобранный \
+            бюджет и уже сказанные предупреждения стираются, а суточные полосы \
+            начнутся с нуля. Настройки, транскрипты и сам недельный процент от \
+            сервера остаются на месте.
+            """, """
+            Spending up to this minute stops counting: the snapshot, the worked-out \
+            budget and the warnings already given are erased, and the daily bars \
+            start from zero. Settings, transcripts and the server’s own weekly \
+            percentage stay as they are.
+            """))
+        }
     }
 }
 

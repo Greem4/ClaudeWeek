@@ -17,16 +17,38 @@ public struct OAuthCredentials: Sendable, Equatable {
     /// Момент истечения; nil — поля не было.
     public let expiresAt: Date?
     public let subscriptionType: String?
+    /// Организация, которой принадлежит аккаунт. Единственное в записи, что
+    /// переживает обновление токена: сам токен меняется раз в час, и отличить
+    /// по нему рабочий вход от домашнего нельзя, а этот UUID держится, пока
+    /// не вошли другим аккаунтом.
+    public let organizationUuid: String?
 
-    public init(accessToken: String, expiresAt: Date?, subscriptionType: String?) {
+    public init(
+        accessToken: String,
+        expiresAt: Date?,
+        subscriptionType: String?,
+        organizationUuid: String? = nil
+    ) {
         self.accessToken = accessToken
         self.expiresAt = expiresAt
         self.subscriptionType = subscriptionType
+        self.organizationUuid = organizationUuid
     }
 
     public func isExpired(at date: Date) -> Bool {
         guard let expiresAt else { return false }
         return expiresAt <= date
+    }
+
+    /// Чем аккаунт отличают от прошлого — короткая метка организации и тариф.
+    /// В файл кеша идёт она, а не сам UUID: сравнивать хватает и её, а
+    /// писать на диск идентификатор аккаунта без нужды незачем.
+    ///
+    /// nil — в записи не было `organizationUuid`: сравнивать не с чем, и смену
+    /// аккаунта тогда замечает только человек кнопкой в настройках.
+    public var accountMark: String? {
+        guard let organizationUuid, !organizationUuid.isEmpty else { return nil }
+        return "\(organizationUuid.prefix(8))·\(subscriptionType ?? "—")"
     }
 }
 
@@ -70,7 +92,13 @@ public struct KeychainCredentials: CredentialsSource {
         return OAuthCredentials(
             accessToken: token,
             expiresAt: KeychainCredentials.date(from: oauth?["expiresAt"]),
-            subscriptionType: oauth?["subscriptionType"] as? String
+            subscriptionType: oauth?["subscriptionType"] as? String,
+            // Лежит рядом с `claudeAiOauth`, а не внутри него — но искать
+            // будем в обоих местах: форма записи не публичный контракт, и
+            // переезд поля на уровень ниже не должен ронять определение
+            // смены аккаунта молча.
+            organizationUuid: (root["organizationUuid"] as? String)
+                ?? (oauth?["organizationUuid"] as? String)
         )
     }
 

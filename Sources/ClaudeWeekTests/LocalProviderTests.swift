@@ -5,12 +5,14 @@ import ClaudeWeekCore
 private struct Sandbox {
     let root: URL
     let indexURL: URL
+    let stateURL: URL
 
     init() {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-week-fixtures-\(UUID().uuidString)")
         root = base.appendingPathComponent("projects")
         indexURL = base.appendingPathComponent("index.json")
+        stateURL = base.appendingPathComponent("state.json")
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
@@ -67,7 +69,13 @@ private func line(
 private let testNow = at(2026, 8, 4, 12, 0)
 
 private func provider(_ sandbox: Sandbox, config c: Config = config()) -> LocalProvider {
-    LocalProvider(config: c, root: sandbox.root, indexURL: sandbox.indexURL, clock: { testNow })
+    LocalProvider(
+        config: c,
+        root: sandbox.root,
+        indexURL: sandbox.indexURL,
+        stateURL: sandbox.stateURL,
+        clock: { testNow }
+    )
 }
 
 func runLocalProviderTests(_ t: Harness) async {
@@ -360,5 +368,31 @@ func runLocalProviderTests(_ t: Harness) async {
         let index = Store.loadIndex(from: sandbox.indexURL)
         t.equal(index.version, UsageIndex.currentVersion, "индекс прошлой схемы заменён пустым")
         t.equal(index.files.count, 0, "старые записи не подхватываются")
+    }
+
+    await t.suite("отсечка счёта: расход прежнего аккаунта не считается") {
+        let sandbox = Sandbox()
+        defer { sandbox.cleanup() }
+        // Два сообщения одной цены по разные стороны отсечки, оба в сутках
+        // `testNow`: разложи их по разным дням — и проверка спорила бы ещё и
+        // с границей недельного окна, а речь тут не о ней.
+        sandbox.write("сессия.jsonl", lines: [
+            line(uuid: "старое", at: "2026-08-04T05:00:00.000Z", input: 1_000_000),
+            line(uuid: "новое", at: "2026-08-04T07:00:00.000Z", input: 1_000_000),
+        ])
+        let window = WeekWindow(containing: testNow, config: config())
+
+        let whole = try await provider(sandbox).scan(window: window, now: testNow)
+        t.equal(whole.recordCount, 2, "без отсечки считаются оба сообщения")
+
+        try Store.saveState(
+            CountingState(countFrom: ISO8601.parse("2026-08-04T06:00:00.000Z"), account: "org·max"),
+            to: sandbox.stateURL
+        )
+        let after = try await provider(sandbox).scan(window: window, now: testNow)
+        t.equal(after.recordCount, 1, "с отсечкой остаётся только запись после неё")
+        t.close(after.totalCost, 5, "и стоимость считается по ней одной")
+        t.close(after.costByDay.compactMap { $0 }.reduce(0, +), 5,
+                "суточные полосы тоже без прежнего расхода")
     }
 }

@@ -152,6 +152,30 @@ public struct CachedUsage: Codable, Sendable, Equatable {
     }
 }
 
+/// Чем живёт сам счёт, а не последний снимок. Отдельно от кеша по той же
+/// причине, что и журнал уведомлений: кеш перезаписывается каждым обновлением,
+/// а эти два поля обязаны его переживать — иначе отсечка стёрлась бы через
+/// минуту после того, как её поставили.
+public struct CountingState: Codable, Sendable, Equatable {
+    /// Локальный расход считаем только с этого момента. nil — считаем всё
+    /// окно, как раньше.
+    ///
+    /// Нужна при смене аккаунта: транскрипты в `~/.claude/projects` пишутся
+    /// в одни и те же файлы, кто бы ни был залогинен, и различить их по
+    /// содержимому нельзя — маркера аккаунта в записях нет. Единственное, чем
+    /// отделяется чужой расход от своего, — момент, с которого считаем.
+    public var countFrom: Date?
+    /// Метка аккаунта, на котором накоплен нынешний счёт (`OAuthCredentials.accountMark`).
+    /// Разошлась с тем, что в Keychain, — вошли другим аккаунтом, и всё
+    /// накопленное относится к чужому лимиту.
+    public var account: String?
+
+    public init(countFrom: Date? = nil, account: String? = nil) {
+        self.countFrom = countFrom
+        self.account = account
+    }
+}
+
 /// Файлы состояния в `~/.config/claude-week/`. Битый файл — не повод падать:
 /// индекс отстроится заново, кеш просто окажется пустым.
 public enum Store {
@@ -162,6 +186,8 @@ public enum Store {
     /// каждым обновлением и целиком описывает расход, а это — память о
     /// разговоре с человеком, и терять её вместе с протухшим снимком нельзя.
     public static var alertsURL: URL { directory.appendingPathComponent("alerts.json") }
+    /// Отсечка счёта и аккаунт, на котором он ведётся.
+    public static var stateURL: URL { directory.appendingPathComponent("state.json") }
 
     private static func decoder() -> JSONDecoder {
         let d = JSONDecoder()
@@ -236,6 +262,50 @@ public enum Store {
 
     public static func saveAlerts(_ log: AlertLog, to url: URL = Store.alertsURL) throws {
         try write(encoder().encode(log), to: url)
+    }
+
+    /// Битый файл состояния — то же самое, что его отсутствие: счёт пойдёт
+    /// с начала окна, как до появления отсечки. Ронять из-за него панель или
+    /// молча выдумывать отсечку нельзя — первое лишает цифры вовсе, второе
+    /// прячет чужой расход без ведома человека.
+    public static func loadState(from url: URL = Store.stateURL) -> CountingState {
+        guard let data = try? Data(contentsOf: url) else { return CountingState() }
+        do {
+            return try decoder().decode(CountingState.self, from: data)
+        } catch {
+            Log.warn("не разобрал \(url.path): \(error). Считаю с начала окна")
+            return CountingState()
+        }
+    }
+
+    public static func saveState(_ state: CountingState, to url: URL = Store.stateURL) throws {
+        try write(encoder().encode(state), to: url)
+    }
+
+    /// Начать счёт заново: всё накопленное относится к прежнему аккаунту, и
+    /// показывать его дальше — врать про нынешний.
+    ///
+    /// Стирается снимок (в нём процент, бюджет и сессия прошлого аккаунта) и
+    /// журнал уведомлений (о его порогах человеку уже сказали, и говорить о
+    /// них снова, считая с нуля, — шум). Индекс транскриптов остаётся: он
+    /// всего лишь разобранные файлы, и старые записи из него отсечёт
+    /// `countFrom`, а выброшенный он стоил бы полного перечитывания
+    /// `~/.claude/projects` на ровном месте.
+    public static func resetCounting(
+        at now: Date,
+        account: String?,
+        stateURL: URL = Store.stateURL,
+        cacheURL: URL? = Store.cacheURL,
+        alertsURL: URL = Store.alertsURL
+    ) throws {
+        // Отсечку записываем первой: не сумей мы её сохранить — снимок и
+        // журнал останутся на месте, и счёт продолжится по-старому. Обратный
+        // порядок оставил бы стёртый кеш без отсечки, то есть счёт с нуля по
+        // чужим транскриптам — худший из трёх исходов.
+        try saveState(CountingState(countFrom: now, account: account), to: stateURL)
+        if let cacheURL { try? FileManager.default.removeItem(at: cacheURL) }
+        try? FileManager.default.removeItem(at: alertsURL)
+        Log.info("счёт начат заново с \(now)")
     }
 
     private static func write(_ data: Data, to url: URL) throws {

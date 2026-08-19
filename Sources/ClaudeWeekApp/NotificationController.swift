@@ -136,6 +136,46 @@ final class NotificationController {
         }
     }
 
+    /// Баннер о вышедшей версии. О каждой говорим один раз: проверка идёт при
+    /// запуске и раз в сутки, и без памяти о сказанном напоминание приходило бы
+    /// каждый день, пока не обновишься.
+    ///
+    /// Кнопки в баннере нет намеренно: установка перезаписывает приложение и
+    /// перезапускает его, а такому не место за одним щелчком из-под чужой
+    /// работы. Баннер только сообщает, ставит человек — из настроек.
+    func announceUpdate(_ release: Release, config: Config) {
+        guard center != nil, config.notifications.update else { return }
+        let version = release.version.description
+        guard log.updateSaid != version else { return }
+
+        let s = config.strings
+        let content = UNMutableNotificationContent()
+        content.title = s.pick("Вышла версия \(version)", "Version \(version) is out")
+        content.body = s.pick("Обновиться — в настройках, вкладка «О программе»",
+                              "To update, open Settings → About")
+        content.threadIdentifier = "update"
+        if config.notifications.sound { content.sound = .default }
+
+        let request = UNNotificationRequest(
+            identifier: "update-\(version)", content: content, trigger: nil
+        )
+        Task {
+            await authorize()
+            do {
+                try await center?.add(request)
+                // Сказанным версия считается только после удачной отправки.
+                // Пометь мы её раньше — отказ системы (нет разрешения, сбой
+                // центра) навсегда съел бы новость: второй раз о ней бы уже
+                // не заговорили.
+                log.updateSaid = version
+                save()
+                Log.info("уведомление: вышла версия \(version)")
+            } catch {
+                Log.warn("не показал уведомление об обновлении: \(error)")
+            }
+        }
+    }
+
     private func send(_ alert: LimitAlert, config: Config, now: Date) {
         guard let center else { return }
 

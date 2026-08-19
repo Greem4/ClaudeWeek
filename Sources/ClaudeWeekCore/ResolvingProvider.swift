@@ -19,6 +19,15 @@ public actor ResolvingProvider: UsageProvider {
     private let official: OfficialProvider?
     private let local: LocalProvider
     private let cacheURL: URL?
+    private let stateURL: URL?
+    /// Журнал уведомлений: его тоже стирает сброс счёта. Путь держим полем, а
+    /// не берём у `Store` на месте — иначе провайдер, которому дали файлы
+    /// песочницы, всё равно лез бы в настоящий журнал пользователя.
+    private let alertsURL: URL
+    /// Те же креды, что уходят в официальный источник. Держим их и здесь —
+    /// чтобы спросить, чей аккаунт, не дожидаясь удачного запроса: смена
+    /// аккаунта важна как раз тогда, когда сеть молчит.
+    private let credentials: CredentialsSource?
     private let clock: @Sendable () -> Date
 
     /// Креды по умолчанию — из Keychain Claude Code: другого источника у
@@ -30,14 +39,30 @@ public actor ResolvingProvider: UsageProvider {
         cacheURL: URL? = Store.cacheURL,
         localRoot: URL = LocalProvider.defaultRoot,
         indexURL: URL = Store.indexURL,
+        stateURL: URL? = Store.stateURL,
+        alertsURL: URL = Store.alertsURL,
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
-        let local = LocalProvider(config: config, root: localRoot, indexURL: indexURL, clock: clock)
+        let local = LocalProvider(
+            config: config,
+            root: localRoot,
+            indexURL: indexURL,
+            stateURL: stateURL,
+            clock: clock
+        )
         self.config = config
         self.clock = clock
         self.preference = config.provider
         self.local = local
         self.cacheURL = cacheURL
+        self.stateURL = stateURL
+        self.alertsURL = alertsURL
+        // В режиме «только локальная оценка» Keychain не трогаем вовсе — это
+        // обещание вкладки «Доступ», и ради определения аккаунта нарушать его
+        // нельзя. Цена: смену аккаунта там замечает только кнопка в настройках.
+        self.credentials = config.provider == .local
+            ? nil
+            : (credentials ?? KeychainCredentials())
         self.official = config.provider == .local
             ? nil
             : OfficialProvider(
@@ -51,6 +76,8 @@ public actor ResolvingProvider: UsageProvider {
     }
 
     public func fetch() async throws -> UsageSnapshot {
+        syncAccount(at: clock())
+
         if let official {
             do {
                 let snapshot = withStoredSession(try await official.fetch())
@@ -81,6 +108,45 @@ public actor ResolvingProvider: UsageProvider {
         ))
         save(snapshot, weeklyBudget: storedBudget())
         return snapshot
+    }
+
+    /// Сверяет аккаунт в Keychain с тем, на котором ведётся счёт, и при
+    /// расхождении начинает счёт заново.
+    ///
+    /// Без этого вход другим аккаунтом виден не сразу и не весь: официальный
+    /// процент сменится сам с первым же ответом, а локальная оценка — нет.
+    /// Она считает по транскриптам в `~/.claude/projects`, а те пишутся в одни
+    /// и те же файлы при любом аккаунте, и без отсечки виджет показывал бы
+    /// прежнему расходу чужой лимит до конца недели.
+    ///
+    /// Первое знакомство сбросом не считается: метки в состоянии ещё нет,
+    /// накопленное относится к тому же аккаунту, и обнулять тут нечего —
+    /// просто запоминаем, с кем имеем дело.
+    private func syncAccount(at now: Date) {
+        guard let credentials, let stateURL else { return }
+        guard let mark = (try? credentials.load())?.accountMark else { return }
+
+        var state = Store.loadState(from: stateURL)
+        guard state.account != mark else { return }
+
+        guard let previous = state.account else {
+            state.account = mark
+            try? Store.saveState(state, to: stateURL)
+            return
+        }
+
+        Log.info("аккаунт сменился (\(previous) → \(mark)), начинаю счёт заново")
+        do {
+            try Store.resetCounting(
+                at: now,
+                account: mark,
+                stateURL: stateURL,
+                cacheURL: cacheURL,
+                alertsURL: alertsURL
+            )
+        } catch {
+            Log.warn("не смог начать счёт заново после смены аккаунта: \(error)")
+        }
     }
 
     /// Подставляет в снимок последнюю официальную сессию, пока её пятичасовое

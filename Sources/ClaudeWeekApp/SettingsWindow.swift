@@ -35,6 +35,13 @@ final class SettingsModel {
     /// Автозапуск тоже мимо конфига: он и есть launchd-агент, и правда о нём
     /// одна — лежит плист или нет.
     private(set) var launchAtLogin = LoginItem.isEnabled
+    /// Аккаунт, чей токен сейчас в Keychain, — короткой меткой вида
+    /// `7f3a1b2c·max`. Показываем именно её: спрошенный «а по какому ключу оно
+    /// сейчас ходит» иначе не проверить ничем, кроме кнопки «Проверить», а та
+    /// отвечает процентом, в котором аккаунт не виден.
+    private(set) var account: String?
+    /// С какого момента ведётся локальный счёт; nil — с начала окна.
+    private(set) var countingSince: Date?
 
     /// Обновление идёт мимо конфига, и состояние у него общее с панелью и
     /// меню — сюда приходит тот же контроллер, а не его копия.
@@ -46,19 +53,22 @@ final class SettingsModel {
 
     private let apply: (Config) -> Void
     private let check: (Config) async -> (String, Bool)
+    private let reset: () -> Void
 
     init(
         config: Config,
         update: UpdateController,
         notifications: NotificationController,
         apply: @escaping (Config) -> Void,
-        check: @escaping (Config) async -> (String, Bool)
+        check: @escaping (Config) async -> (String, Bool),
+        reset: @escaping () -> Void
     ) {
         self.config = config
         self.update = update
         self.notifications = notifications
         self.apply = apply
         self.check = check
+        self.reset = reset
         refreshDiagnostics()
     }
 
@@ -73,6 +83,13 @@ final class SettingsModel {
         // целыми неделями даёт тот, который наступит следующим.
         officialReset = cache?.projectedWindow(at: Date(), config: config)?.end
         launchAtLogin = LoginItem.isEnabled
+        countingSince = Store.loadState().countFrom
+        // В режиме «только локальная оценка» Keychain не читаем и здесь:
+        // окно настроек — не повод нарушить обещание, данное на этой же
+        // вкладке. Строка про аккаунт тогда просто не показывается.
+        account = config.provider == .local
+            ? nil
+            : (try? KeychainCredentials().load())?.accountMark
         // Разрешение на уведомления снимают там же, где выдали, — в системных
         // настройках, мимо этого окна. Спрашиваем систему на каждый показ.
         notifications.refresh()
@@ -148,6 +165,30 @@ final class SettingsModel {
             self?.checkResult = (text, ok)
             self?.isChecking = false
         }
+    }
+
+    /// Начать счёт заново — после входа другим аккаунтом. Стирает снимок и
+    /// журнал уведомлений, а локальному счёту ставит отсечку по нынешнему
+    /// моменту: транскрипты прежнего аккаунта лежат в тех же файлах, и без
+    /// отсечки его расход считался бы в чужой лимит до конца недели.
+    ///
+    /// Настройки при этом не трогаются вовсе — это разные кнопки и разные
+    /// сожаления: тему вернуть легко, а накопленный счёт не восстановить.
+    func resetCounting() {
+        reset()
+        refreshDiagnostics()
+    }
+
+    /// Подпись под кнопкой сброса: с какого момента идёт счёт.
+    var countingNote: String {
+        let s = config.strings
+        guard let countingSince else {
+            return s.pick("Считается вся неделя целиком.", "The whole week is counted.")
+        }
+        let day = Formatting.weekdayShort(countingSince, calendar: config.calendar, lang: s.lang)
+        let time = Formatting.clock(countingSince, calendar: config.calendar)
+        return s.pick("Локальный счёт идёт с \(day) \(time) — раньше этого момента расход не считается.",
+                      "The local count runs from \(day) \(time) — spending before that is not counted.")
     }
 
     /// Вернуть всё к заводскому — кроме калибровки и бюджета: их подбирала
