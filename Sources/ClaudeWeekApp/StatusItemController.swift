@@ -56,6 +56,10 @@ final class StatusItemController: NSObject {
         notifications.apply(config.notifications)
         // Разбивку за пятичасовое окно считает провайдер: берём текущий, а не
         // запомненный, — при смене источника в настройках он пересоздаётся.
+        update.onFound = { [weak self] release in
+            guard let self else { return }
+            notifications.announceUpdate(release, config: model.config)
+        }
         notifications.models = { [weak self] from, to in
             // Разбивку умеет считать только `ResolvingProvider` — он и стоит
             // здесь всегда. Каст на случай подмены дублёром: баннер тогда

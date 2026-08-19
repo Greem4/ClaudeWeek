@@ -637,15 +637,35 @@ struct NotificationSettings: View {
                 Toggle(s.pick("Со звуком", "With sound"), isOn: sound)
                     .disabled(isOff)
 
+                Toggle(s.pick("Сообщать о новой версии", "Announce a new version"),
+                       isOn: updates)
+
                 Text(s.pick("""
-                В баннере две строки: сколько израсходовано и через сколько \
-                сброс. Какой это лимит, говорит картинка справа — пятичасовая \
-                сессия приходит дугой, недельный лимит красным числом.
+                В баннере три строки: сколько израсходовано, через сколько \
+                сброс и статистика окна — с какого дня оно идёт и на какую \
+                модель ушло больше всего. То же показывает картинка: подпись, \
+                процент, полоса расхода и модель под ней.
                 """, """
-                The banner is two lines: how much is spent and how long until \
-                the reset. Which limit it is comes from the artwork on the \
-                right — the 5-hour session arrives as an arc, the weekly limit \
-                as a red number.
+                The banner is three lines: how much is spent, how long until \
+                the reset, and the window statistics — the day it started and \
+                the model most of it went to. The artwork says the same: the \
+                caption, the percentage, the spend bar and the model below it.
+                """))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Text(s.pick("""
+                О вышедшей версии программа говорит один раз — не каждые сутки, \
+                пока не обновитесь. Кнопки в том баннере нет: установка \
+                перезаписывает приложение и перезапускает его, и делать это \
+                одним щелчком посреди чужой работы неправильно. Ставится \
+                обновление на вкладке «О программе».
+                """, """
+                A released version is announced once — not daily until you \
+                update. That banner has no button: installing replaces the app \
+                and restarts it, and that should not happen on a single click \
+                in the middle of your work. Updates are installed on the About \
+                tab.
                 """))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -730,6 +750,16 @@ struct NotificationSettings: View {
         Binding(
             get: { notifications.sound },
             set: { model.config.notifications.sound = $0 }
+        )
+    }
+
+    /// Не гаснет вместе с общим тумблером: тот про разговоры о расходе, а
+    /// новая версия — новость другого рода, и молчать о ней человек просит
+    /// отдельно.
+    private var updates: Binding<Bool> {
+        Binding(
+            get: { notifications.update },
+            set: { model.config.notifications.update = $0 }
         )
     }
 

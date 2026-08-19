@@ -488,6 +488,14 @@ P12_PASSWORD=… ./scripts/signing-cert.sh --import ~/claudeweek-signing.p12
 
 Ту же сводку показывает картинка, и в развёрнутом уведомлении её видно
 целиком — подпись окна, процент, полоса расхода и главная модель под ней.
+Фон у неё прозрачный, поэтому подписи одинаково читаются на обеих темах:
+
+<p align="center">
+  <img src="images/notification-card-week-dark.png" width="120" alt="Карточка недели, тёмная тема">
+  <img src="images/notification-card-week-light.png" width="120" alt="Карточка недели, светлая тема">
+  <img src="images/notification-card-session-dark.png" width="120" alt="Карточка сессии, тёмная тема">
+  <img src="images/notification-card-session-light.png" width="120" alt="Карточка сессии, светлая тема">
+</p>
 
 Разбивка считается за то окно, о котором речь: недельная берётся из снимка, а
 для сессии её досчитывают по транскриптам ровно за эти пять часов. Если за

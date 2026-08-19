@@ -14,6 +14,11 @@ final class UpdateController {
     /// конфиг.
     var strings = L10n(Lang.ru)
 
+    /// Нашлась новая версия при самостоятельной проверке. Владелец превращает
+    /// это в баннер: сам контроллер обновлений с уведомлениями не знаком —
+    /// он про GitHub и установку, а не про разговоры с человеком.
+    var onFound: ((Release) -> Void)?
+
     enum State: Equatable {
         /// Ни новостей, ни повода что-то показывать.
         case idle
@@ -123,7 +128,10 @@ final class UpdateController {
                 case .available(let release):
                     Log.info("вышла версия \(release.version), у нас \(ClaudeWeek.version)")
                     state = .available(release)
-                    if manually { offer(release) }
+                    // Нажатая кнопка отвечает окном, самостоятельная проверка —
+                    // баннером: строку внизу панели видит только тот, кто её
+                    // открыл, а обновление ждёт как раз тех, кто не открывает.
+                    if manually { offer(release) } else { onFound?(release) }
                 }
             } catch {
                 let text = (error as? UpdateError)?.message(strings.lang) ?? error.localizedDescription

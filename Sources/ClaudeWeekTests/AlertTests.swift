@@ -256,6 +256,29 @@ func runAlertTests(_ t: Harness) {
                 "отсутствующий файл — пустой лог, а не отказ от уведомлений")
     }
 
+    t.suite("уведомления: новая версия") {
+        t.check(NotificationsConfig().update, "по умолчанию о вышедшей версии говорим")
+
+        // Конфиг, написанный до появления настройки, читается как обычно —
+        // недостающий ключ берётся из дефолтов.
+        let old = Data("""
+        {"enabled":true,"sound":false}
+        """.utf8)
+        let decoded = try JSONDecoder().decode(NotificationsConfig.self, from: old)
+        t.check(decoded.update, "старый конфиг не гасит баннер об обновлении")
+        t.check(!decoded.sound, "а свои ключи из него читаются")
+
+        // Память о сказанном — на диске, рядом с лимитными порогами: иначе
+        // после перезапуска о той же версии напомнили бы снова.
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-week-alerts-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Store.saveAlerts(AlertLog(updateSaid: "0.1.14"), to: url)
+        t.equal(Store.loadAlerts(from: url).updateSaid, "0.1.14",
+                "версия, о которой сказали, переживает перезапуск")
+        t.check(AlertLog().updateSaid == nil, "в новом логе о версиях ещё не говорили")
+    }
+
     t.suite("уведомления: статистика окна") {
         let now = at(2026, 8, 4, 12, 0)
         let calendar = config().calendar

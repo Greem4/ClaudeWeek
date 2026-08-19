@@ -82,6 +82,10 @@ public struct NotificationsConfig: Codable, Sendable, Equatable {
     public var sound: Bool
     public var week: LimitNotifications
     public var session: LimitNotifications
+    /// Баннер о вышедшей версии. Отдельно от общего выключателя по смыслу:
+    /// это разговор не про расход, и человек, погасивший разговоры о лимитах,
+    /// не обязательно просил молчать про обновления.
+    public var update: Bool
 
     /// Недельные пороги выше сессионных: неделя не сбросится до конца недели,
     /// и предупреждать о ней надо раньше, чем о пятичасовом окне, которое
@@ -90,12 +94,14 @@ public struct NotificationsConfig: Codable, Sendable, Equatable {
         enabled: Bool = true,
         sound: Bool = true,
         week: LimitNotifications = LimitNotifications(first: 80, second: 95),
-        session: LimitNotifications = LimitNotifications(first: 75, second: 95)
+        session: LimitNotifications = LimitNotifications(first: 75, second: 95),
+        update: Bool = true
     ) {
         self.enabled = enabled
         self.sound = sound
         self.week = week
         self.session = session
+        self.update = update
     }
 
     // Как и во всём конфиге: каждый ключ необязателен, недостающее берётся
@@ -107,7 +113,8 @@ public struct NotificationsConfig: Codable, Sendable, Equatable {
             enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled,
             sound: try c.decodeIfPresent(Bool.self, forKey: .sound) ?? d.sound,
             week: try c.decodeIfPresent(LimitNotifications.self, forKey: .week) ?? d.week,
-            session: try c.decodeIfPresent(LimitNotifications.self, forKey: .session) ?? d.session
+            session: try c.decodeIfPresent(LimitNotifications.self, forKey: .session) ?? d.session,
+            update: try c.decodeIfPresent(Bool.self, forKey: .update) ?? d.update
         )
     }
 
@@ -144,9 +151,9 @@ public struct LimitAlert: Sendable, Equatable {
     /// накапало», которое по одному проценту не прочитать.
     public let startedAt: Date?
     /// Модель, на которую в этом окне ушло больше всего. У недели берётся из
-    /// снимка, у сессии её пока нет: разбивка считается за недельное окно, и
-    /// показать недельную долю в баннере о пятичасовом лимите значило бы
-    /// назвать чужое число своим.
+    /// снимка; у сессии её здесь нет — разбивка в снимке посчитана за неделю,
+    /// и назвать недельную долю в разговоре о пяти часах значило бы выдать
+    /// чужое число за своё. Досчитывает её слой приложения перед отправкой.
     public let topModel: ModelUsage?
 
     public init(
@@ -271,19 +278,25 @@ public struct AlertLog: Codable, Sendable, Equatable {
     public var sessionSaid: Double?
     /// Когда показали последний баннер — на нём держится остывание.
     public var lastSentAt: Date?
+    /// Версия, о выходе которой уже сказали. Про одну и ту же новость
+    /// напоминают ровно раз: проверка обновлений идёт при каждом запуске и раз
+    /// в сутки, и без этой памяти баннер приходил бы каждый день до установки.
+    public var updateSaid: String?
 
     public init(
         weekEnd: Date? = nil,
         weekSaid: Double? = nil,
         sessionEnd: Date? = nil,
         sessionSaid: Double? = nil,
-        lastSentAt: Date? = nil
+        lastSentAt: Date? = nil,
+        updateSaid: String? = nil
     ) {
         self.weekEnd = weekEnd
         self.weekSaid = weekSaid
         self.sessionEnd = sessionEnd
         self.sessionSaid = sessionSaid
         self.lastSentAt = lastSentAt
+        self.updateSaid = updateSaid
     }
 }
 
