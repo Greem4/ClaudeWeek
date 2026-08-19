@@ -473,6 +473,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             cacheURL: cacheURL,
             localRoot: sandbox.root,
             indexURL: sandbox.indexURL,
+            stateURL: sandbox.stateURL,
             clock: { testNow }
         )
 
@@ -490,6 +491,7 @@ func runOfficialProviderTests(_ t: Harness) async {
             cacheURL: cacheURL,
             localRoot: sandbox.root,
             indexURL: sandbox.indexURL,
+            stateURL: sandbox.stateURL,
             clock: { testNow }
         )
         let fallback = try await offline.fetch()

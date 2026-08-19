@@ -324,56 +324,6 @@ public actor LocalProvider: UsageProvider {
     /// следующего запроса. Цена честности — один инкрементальный проход
     /// (0.04 с на прогретом индексе).
     public func scan(window: WeekWindow, now: Date) throws -> LocalUsage {
-        let index = try refreshIndex(from: window.start, now: now)
-        // Отсечку перечитываем на каждом обходе, а не запоминаем в поле:
-        // сброс приходит из окна настроек, и провайдер к этому моменту уже
-        // создан — с запомненной отсечкой он считал бы по-старому до
-        // перезапуска.
-        return aggregate(
-            index: index.index,
-            window: window,
-            now: now,
-            filesRead: index.filesRead,
-            countFrom: Store.loadState(from: stateURL).countFrom
-        )
-    }
-
-    /// Разбивка по моделям за произвольный отрезок — для баннера о
-    /// пятичасовой сессии: недельная доля в разговоре о пяти часах назвала бы
-    /// чужое число своим.
-    ///
-    /// Считается по тому же индексу и тем же ценам, что и недельная, поэтому
-    /// стоит один инкрементальный обход, а зовётся только в момент отправки
-    /// уведомления — то есть несколько раз в неделю, а не каждую минуту.
-    public func models(from start: Date, to end: Date) throws -> [ModelUsage] {
-        let refreshed = try refreshIndex(from: start, now: end)
-        let countFrom = Store.loadState(from: stateURL).countFrom
-        var perModel: [String: (cost: Double, tokens: TokenCounts, messages: Int)] = [:]
-        var seen: Set<String> = []
-        var total = 0.0
-
-        for entry in refreshed.index.files.values {
-            for record in entry.records {
-                guard seen.insert(record.uuid).inserted,
-                      record.timestamp >= start, record.timestamp <= end,
-                      countFrom.map({ record.timestamp >= $0 }) ?? true
-                else { continue }
-                total += record.cost
-                let current = perModel[record.model] ?? (0, TokenCounts(), 0)
-                perModel[record.model] = (
-                    current.cost + record.cost,
-                    current.tokens + record.tokens,
-                    current.messages + 1
-                )
-            }
-        }
-        return LocalProvider.breakdown(perModel, total: total)
-    }
-
-    /// Читает с диска всё, что дописали с прошлого раза, и кладёт индекс
-    /// обратно. `from` — левая граница интереса: файлы, не тронутые с тех пор,
-    /// не открываются вовсе.
-    private func refreshIndex(from start: Date, now: Date) throws -> (index: UsageIndex, filesRead: Int) {
         var index = Store.loadIndex(from: indexURL)
         let cutoff = now.addingTimeInterval(-LocalProvider.retention)
         var seenPaths: Set<String> = []
@@ -385,7 +335,7 @@ public actor LocalProvider: UsageProvider {
             guard let stat = try? fileStat(url) else { continue }
 
             // Файл, дописанный раньше начала окна, целиком вне интереса.
-            if stat.mtime < min(start, cutoff) {
+            if stat.mtime < min(window.start, cutoff) {
                 index.files[path] = nil
                 seenPaths.remove(path)
                 continue
@@ -425,7 +375,17 @@ public actor LocalProvider: UsageProvider {
             Log.warn("не сохранил индекс: \(error)")
         }
 
-        return (index, filesRead)
+        // Отсечку перечитываем на каждом обходе, а не запоминаем в поле:
+        // сброс приходит из окна настроек, и провайдер к этому моменту уже
+        // создан — с запомненной отсечкой он считал бы по-старому до
+        // перезапуска.
+        return aggregate(
+            index: index,
+            window: window,
+            now: now,
+            filesRead: filesRead,
+            countFrom: Store.loadState(from: stateURL).countFrom
+        )
     }
 
     private func aggregate(

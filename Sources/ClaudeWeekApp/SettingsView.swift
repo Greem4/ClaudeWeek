@@ -641,15 +641,14 @@ struct NotificationSettings: View {
                        isOn: updates)
 
                 Text(s.pick("""
-                В баннере три строки: сколько израсходовано, через сколько \
-                сброс и статистика окна — с какого дня оно идёт и на какую \
-                модель ушло больше всего. То же показывает картинка: подпись, \
-                процент, полоса расхода и модель под ней.
+                В баннере две строки: сколько израсходовано и через сколько \
+                сброс. Какой это лимит, говорит картинка справа — пятичасовая \
+                сессия приходит дугой, недельный лимит красным числом.
                 """, """
-                The banner is three lines: how much is spent, how long until \
-                the reset, and the window statistics — the day it started and \
-                the model most of it went to. The artwork says the same: the \
-                caption, the percentage, the spend bar and the model below it.
+                The banner is two lines: how much is spent and how long until \
+                the reset. Which limit it is comes from the artwork on the \
+                right — the 5-hour session arrives as an arc, the weekly limit \
+                as a red number.
                 """))
                 .font(.caption)
                 .foregroundStyle(.secondary)

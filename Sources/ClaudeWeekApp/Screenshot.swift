@@ -142,42 +142,6 @@ enum Screenshot {
         }
         model.showsModels = false
 
-        // Картинка баннера сама по себе: в живом уведомлении её показывает
-        // macOS, снять оттуда её вёрстку нечем, а проверять надо — подписи в
-        // ней ужимаются под ширину, и наезд заметен только глазами.
-        let banners: [(String, AlertKind, Double, String, String?)] = [
-            ("notification-card-week", .week, 81, "Неделя с ПН", "больше всего Opus 62 %"),
-            ("notification-card-session", .session, 95, "Сессия с 17:30", "больше всего Sonnet 71 %"),
-        ]
-        for (file, kind, percent, window, modelLine) in banners {
-            for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-                let limit = kind == .week ? config.notifications.week : config.notifications.session
-                guard let picture = AlertArtwork.png(
-                    percent: percent,
-                    state: LimitState.forPercent(percent, warn: limit.first, critical: limit.second),
-                    window: window,
-                    model: modelLine,
-                    palette: config.appearance.theme.palette,
-                    appearance: NSAppearance(named: appearance)
-                ) else {
-                    FileHandle.standardError.write(Data("не отрисовал баннер \(file)\n".utf8))
-                    return 1
-                }
-                let url = directory.appendingPathComponent("\(file)-\(name).png")
-                do {
-                    // Картинку `AlertArtwork` кладёт во временный файл — она
-                    // предназначена системе, и забрать её оттуда можно только
-                    // переносом.
-                    try? FileManager.default.removeItem(at: url)
-                    try FileManager.default.moveItem(at: picture, to: url)
-                    print(url.path)
-                } catch {
-                    FileHandle.standardError.write(Data("не сохранил \(url.path): \(error)\n".utf8))
-                    return 1
-                }
-            }
-        }
-
         // Вкладка уведомлений: единственная настройка, которую по панели не
         // видно — баннер приходит мимо неё, — и объяснить её в документации
         // без картинки нечем.
