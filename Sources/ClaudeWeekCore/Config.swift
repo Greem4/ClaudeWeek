@@ -135,6 +135,10 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     /// одна полоса на всю неделю — того же вида, что у пятичасовой сессии:
     /// голый факт без сравнения с графиком. `panelLayout` в этом виде
     /// значения не имеет — делить нечего, строка одна.
+    ///
+    /// По умолчанию выключен: панель из двух полос — сессия и неделя —
+    /// отвечает на вопрос «сколько осталось» без разбора по дням, а разбор
+    /// включается тем, кому он нужен.
     public var showsPlan: Bool
 
     // Значения по умолчанию — тот вид, к которому пришла обкатка: плотная
@@ -150,7 +154,7 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         showForecast: Bool = false,
         sessionReset: SessionResetDisplay = .both,
         panelLayout: PanelLayout = .compact,
-        showsPlan: Bool = true
+        showsPlan: Bool = false
     ) {
         self.theme = theme
         self.transparentPanel = transparentPanel
@@ -357,7 +361,11 @@ public struct Config: Codable, Sendable, Equatable {
         timeZone: "",
         refreshInterval: 300,
         provider: .auto,
-        workHours: WorkHours.default,
+        // Не `WorkHours.default` — та (11–24) остаётся запасным значением для
+        // сломанных чисел в `WorkHours.validated()` и опорной точкой во всех
+        // тестах плана, которые не задают часы явно. Свежий же конфиг должен
+        // начинаться с обычного дня: 10–18.
+        workHours: WorkHours(start: 10, end: 18),
         menuBarStyle: .ring,
         ringArc: .session,
         weeklyBudget: 0,

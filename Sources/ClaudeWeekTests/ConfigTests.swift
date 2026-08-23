@@ -14,7 +14,7 @@ func runConfigTests(_ t: Harness) {
         t.equal(d.weekStart, .monday, "неделя по умолчанию начинается понедельником")
         t.equal(d.resetWeekday, 6, "сброс в пятницу")
         t.equal(d.resetHour, 16, "сброс в 16:00 — это 15:00 по Москве")
-        t.equal(d.workHours, WorkHours(start: 11, end: 24), "рабочий день 11–24")
+        t.equal(d.workHours, WorkHours(start: 10, end: 18), "рабочий день 10–18")
         t.equal(ConfigStore.load(from: URL(fileURLWithPath: "/nope/нет-такого.json")),
                 Config.default.validated(), "отсутствующий файл — дефолты")
     }
@@ -225,18 +225,18 @@ func runConfigTests(_ t: Harness) {
     }
 
     t.suite("конфиг: дневной план") {
-        t.check(Config.default.appearance.showsPlan, "по умолчанию дневной план включён")
+        t.check(!Config.default.appearance.showsPlan, "по умолчанию дневной план выключен")
 
-        let url = tempFile(#"{ "appearance": { "showsPlan": false } }"#)
+        let url = tempFile(#"{ "appearance": { "showsPlan": true } }"#)
         defer { try? FileManager.default.removeItem(at: url) }
-        t.check(!ConfigStore.load(from: url).appearance.showsPlan, "выключенный план прочитался")
+        t.check(ConfigStore.load(from: url).appearance.showsPlan, "включённый план прочитался")
 
-        // Ключа showsPlan в конфиге прошлой версии нет, и появиться он должен
-        // включённым — привычный вид не имеет права смениться сам.
+        // Ключа showsPlan в конфиге прошлой версии нет — берётся дефолт,
+        // а всё остальное в том конфиге остаётся как записано.
         let old = tempFile(#"{ "appearance": { "theme": "graphite" } }"#)
         defer { try? FileManager.default.removeItem(at: old) }
         let c = ConfigStore.load(from: old)
-        t.check(c.appearance.showsPlan, "новый ключ взялся из дефолтов")
+        t.check(!c.appearance.showsPlan, "новый ключ взялся из дефолтов")
         t.equal(c.appearance.theme, .graphite, "прежний внешний вид уцелел")
     }
 
