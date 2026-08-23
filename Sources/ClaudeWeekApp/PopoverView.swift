@@ -306,7 +306,7 @@ struct PopoverView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(summary)
-                    .font(Theme.footerFont)
+                    .font(Theme.captionFont)
                     .foregroundStyle(
                         model.resetIsClose ? palette.warning.color : palette.secondaryText.color
                     )
@@ -314,7 +314,7 @@ struct PopoverView: View {
 
                 if appearance.showForecast, let forecast {
                     Text(forecast)
-                        .font(Theme.footerFont)
+                        .font(Theme.captionFont)
                         .foregroundStyle(palette.critical.color)
                 }
             }
