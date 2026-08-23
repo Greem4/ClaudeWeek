@@ -46,7 +46,7 @@ func runWeekWindowTests(_ t: Harness) {
         t.equal(labels, ["ПТ", "СБ", "ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ"], "подписи суток окна")
         t.check(window.days[0].isPartial && window.days[7].isPartial, "крайние сутки обрезаны")
         t.check(window.days[1...6].allSatisfy { !$0.isPartial }, "середина недели — полные сутки")
-        t.equal(Formatting.resetLabel(window), "сброс ПТ 15:00", "подпись сброса в своей зоне")
+        t.equal(Formatting.resetLabel(window), "сброс 14 ПТ 15:00", "подпись сброса в своей зоне")
     }
 
     // Двух пятниц на панели быть не должно: это один день недели, разрезанный
