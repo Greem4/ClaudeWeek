@@ -70,6 +70,13 @@ struct SessionRow: View {
         state != .normal
     }
 
+    /// Лимит на исходе или уже исчерпан — тут краснеют значок и цифры, тем же
+    /// порогом, что и заливка в строке меню (`MenuBarBar.fillColor`). Заливка
+    /// этой полосы красной не станет — та граница проведена в `SessionBar`.
+    private var isCritical: Bool {
+        state == .critical || state == .exhausted
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
@@ -109,7 +116,7 @@ struct SessionRow: View {
             // десять минут до конца окна и 90 % за четыре часа значат разное.
             Text(caption)
                 .font(Theme.captionFont)
-                .foregroundStyle(session.isExhausted ? palette.critical.color : palette.secondaryText.color)
+                .foregroundStyle(isCritical ? palette.critical.color : palette.secondaryText.color)
                 .padding(.leading, Theme.dayLabelWidth + 8)
         }
         .accessibilityElement(children: .ignore)
@@ -123,7 +130,7 @@ struct SessionRow: View {
     @ViewBuilder
     private var percent: some View {
         let column = HStack(spacing: Theme.valueGap) {
-            if session.isExhausted {
+            if isCritical {
                 Text("⚠")
                     .font(Theme.dayFont)
                     .foregroundStyle(palette.critical.color)
@@ -131,7 +138,7 @@ struct SessionRow: View {
             Text(Formatting.percent(session.usedPercent))
                 .font(Theme.dayFont)
                 .fixedSize()
-                .foregroundStyle(session.isExhausted ? palette.critical.color : palette.primaryText.color)
+                .foregroundStyle(isCritical ? palette.critical.color : palette.primaryText.color)
         }
         .frame(width: Theme.valueWidth, alignment: .trailing)
 
