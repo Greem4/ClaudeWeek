@@ -55,11 +55,15 @@ struct PopoverView: View {
             if let snapshot = model.snapshot {
                 // Разбивка встаёт ровно на место дней, в ту же сетку: щелчок
                 // по цифрам меняет содержание строк, а не открывает второе
-                // место, где те же проценты сказаны по-своему.
+                // место, где те же проценты сказаны по-своему. Дневной план
+                // выключен в настройках — дней вовсе нет, и на их месте одна
+                // полоса на всю неделю, тем же видом, что у сессии.
                 if model.showsModels {
                     models(snapshot)
-                } else {
+                } else if appearance.showsPlan {
                     days(snapshot)
+                } else {
+                    weekRow(snapshot)
                 }
             } else {
                 placeholders
@@ -222,6 +226,19 @@ struct PopoverView: View {
                 )
             }
         }
+    }
+
+    // MARK: Неделя без плана
+
+    /// Замена ряда дней, когда дневной план выключен: голый процент недели
+    /// одной полосой.
+    private func weekRow(_ snapshot: UsageSnapshot) -> some View {
+        WeekRow(
+            usedPercent: snapshot.usedPercent,
+            state: model.state,
+            animated: !reduceMotion,
+            onValueTap: toggleModels
+        )
     }
 
     // MARK: Модели

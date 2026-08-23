@@ -493,15 +493,34 @@ private struct AppearanceSettings: View {
             }
 
             Section(s.pick("Суточные полосы", "Day bars")) {
-                Picker(s.pick("Показывать", "Show"), selection: appearance.panelLayout) {
-                    ForEach(PanelLayout.allCases, id: \.self) { layout in
-                        Text(layout.title(s.lang)).tag(layout)
+                Toggle(s.pick("Дневной план", "Daily plan"), isOn: appearance.showsPlan)
+
+                if model.config.appearance.showsPlan {
+                    Picker(s.pick("Показывать", "Show"), selection: appearance.panelLayout) {
+                        ForEach(PanelLayout.allCases, id: \.self) { layout in
+                            Text(layout.title(s.lang)).tag(layout)
+                        }
                     }
-                }
-                .pickerStyle(.segmented)
-                Text(layoutHint)
+                    .pickerStyle(.segmented)
+                    Text(layoutHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(s.pick("""
+                    Дней не видно — панель короче ровно на их разбивку. Вместо \
+                    семи полос с планом одна: голый факт недели, без сравнения \
+                    с графиком, тем же видом, что у пятичасовой сессии. Заливка \
+                    красная на критическом пороге.
+                    """, """
+                    Days are gone — the panel is shorter by exactly their \
+                    breakdown. Instead of seven bars with a plan there is one: \
+                    the week's bare spend, no pacing comparison, the same look \
+                    as the 5-hour session. The fill turns red at the critical \
+                    threshold.
+                    """))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
             }
 
             Section(s.pick("Строки панели", "Panel rows")) {

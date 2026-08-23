@@ -130,6 +130,12 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
     public var sessionReset: SessionResetDisplay
     /// Весь недельный ряд или только текущие сутки.
     public var panelLayout: PanelLayout
+    /// Дневной план недели: семь полос с синей плановой зоной и парой чисел
+    /// «факт / план». Выключенный убирает их совсем, а на их месте встаёт
+    /// одна полоса на всю неделю — того же вида, что у пятичасовой сессии:
+    /// голый факт без сравнения с графиком. `panelLayout` в этом виде
+    /// значения не имеет — делить нечего, строка одна.
+    public var showsPlan: Bool
 
     // Значения по умолчанию — тот вид, к которому пришла обкатка: плотная
     // вуаль поверх материала, контрастная тема, компактная панель. Прогноз
@@ -143,7 +149,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         showSession: Bool = true,
         showForecast: Bool = false,
         sessionReset: SessionResetDisplay = .both,
-        panelLayout: PanelLayout = .compact
+        panelLayout: PanelLayout = .compact,
+        showsPlan: Bool = true
     ) {
         self.theme = theme
         self.transparentPanel = transparentPanel
@@ -153,6 +160,7 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
         self.showForecast = showForecast
         self.sessionReset = sessionReset
         self.panelLayout = panelLayout
+        self.showsPlan = showsPlan
     }
 
     // Как и в `Config`: каждое поле необязательно. Конфиг, записанный прошлой
@@ -172,7 +180,8 @@ public struct AppearanceConfig: Codable, Sendable, Equatable {
             showForecast: try c.decodeIfPresent(Bool.self, forKey: .showForecast) ?? d.showForecast,
             sessionReset: try c.decodeIfPresent(SessionResetDisplay.self, forKey: .sessionReset)
                 ?? d.sessionReset,
-            panelLayout: try c.decodeIfPresent(PanelLayout.self, forKey: .panelLayout) ?? d.panelLayout
+            panelLayout: try c.decodeIfPresent(PanelLayout.self, forKey: .panelLayout) ?? d.panelLayout,
+            showsPlan: try c.decodeIfPresent(Bool.self, forKey: .showsPlan) ?? d.showsPlan
         )
     }
 

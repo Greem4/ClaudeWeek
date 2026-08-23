@@ -224,6 +224,22 @@ func runConfigTests(_ t: Harness) {
                 "непонятное значение — дефолты, а не падение")
     }
 
+    t.suite("конфиг: дневной план") {
+        t.check(Config.default.appearance.showsPlan, "по умолчанию дневной план включён")
+
+        let url = tempFile(#"{ "appearance": { "showsPlan": false } }"#)
+        defer { try? FileManager.default.removeItem(at: url) }
+        t.check(!ConfigStore.load(from: url).appearance.showsPlan, "выключенный план прочитался")
+
+        // Ключа showsPlan в конфиге прошлой версии нет, и появиться он должен
+        // включённым — привычный вид не имеет права смениться сам.
+        let old = tempFile(#"{ "appearance": { "theme": "graphite" } }"#)
+        defer { try? FileManager.default.removeItem(at: old) }
+        let c = ConfigStore.load(from: old)
+        t.check(c.appearance.showsPlan, "новый ключ взялся из дефолтов")
+        t.equal(c.appearance.theme, .graphite, "прежний внешний вид уцелел")
+    }
+
     t.suite("конфиг: старый файл без внешнего вида") {
         // Конфиг, написанный прошлой версией: новых ключей в нём нет,
         // и появиться они должны дефолтными, а не уронить разбор.
