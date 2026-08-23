@@ -269,8 +269,9 @@ enum Theme {
     static let todayFont = Font.system(size: menuFontSize, weight: .semibold).monospacedDigit()
     /// Кнопки футера: глифы ⚙ и ⟳ в кегле сноски становятся неприцельными.
     static let actionFont = Font.system(size: menuFontSize)
-    /// Сводка футера — самая мелкая строка панели: в кегле сноски «осталось
-    /// 42 % · сброс через 3 дн 18 ч» вместе с прогнозом рвётся на два ряда.
+    /// Баннер новой версии над футером — самая мелкая строка панели: в кегле
+    /// сноски «↑ Доступна версия…» вместе с «в настройках →» не помещаются
+    /// рядом при длинном номере версии.
     static let footerFont = Font.system(size: menuFontSize - 3).monospacedDigit()
     static let captionFont = Font.system(size: captionFontSize).monospacedDigit()
 

@@ -9,6 +9,10 @@ import ClaudeWeekCore
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
+    /// Ширина окна: ровно столько, сколько форма отдаёт своим строкам. Шире
+    /// растут только поля по бокам, поэтому вбок окно и не тянется.
+    static let width: CGFloat = 720
+
     private var s: L10n { model.config.strings }
 
     var body: some View {
@@ -31,7 +35,98 @@ struct SettingsView: View {
             AboutSettings(model: model)
                 .tabItem { Label(s.pick("О программе", "About"), systemImage: "info.circle") }
         }
-        .frame(width: 640, height: 580)
+        // Ширина закреплена, высота тянется. Форма `.grouped` в macOS сама
+        // не даёт своим строкам стать шире примерно семисот точек, и лишняя
+        // ширина окна уходила не в настройки, а в пустые поля по бокам —
+        // тянуть вбок было незачем и некрасиво. Высота другое дело: длинные
+        // вкладки прокручиваются, и растянуть окно вниз — единственный способ
+        // увидеть их целиком.
+        //
+        // Высота по умолчанию взята по самой длинной вкладке, а не по средней:
+        // вкладки переключаются в одном окне, и размер под короткую заставлял
+        // бы прокручивать все остальные.
+        .frame(
+            minWidth: Self.width, idealWidth: Self.width, maxWidth: Self.width,
+            minHeight: 460, idealHeight: 780, maxHeight: .infinity
+        )
+    }
+}
+
+/// Пояснение под настройкой — тем же кеглем и цветом во всех шести вкладках.
+///
+/// `maxWidth: .infinity` здесь не украшение: `Form` в macOS кладёт одинокий
+/// `Text` в узкую колонку значений, и растянутое мышью окно оставляло бы
+/// пояснение висеть в прежней ширине, обтекая пустоту справа. С ним текст
+/// перебивается по живой ширине окна, а `fixedSize` по вертикали не даёт
+/// строке обрезаться вместо переноса.
+private extension View {
+    func settingsHint() -> some View {
+        font(.body)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Имя раскрывающейся секции — одно на все вкладки: человек, раскрывший её
+/// однажды, должен узнавать её и на соседней вкладке.
+private extension L10n {
+    var advancedTitle: String { pick("Расширенные настройки", "Advanced settings") }
+}
+
+/// Раскрывающаяся секция «Расширенные настройки» — одна на все вкладки, и
+/// раскрывается везде одинаково.
+///
+/// Заголовок здесь свой, а не встроенный в `Section(isExpanded:)`: у того
+/// нажимается только треугольник размером с букву, и попасть в него стоит
+/// отдельного прицеливания. Кнопка во всю ширину строки принимает щелчок
+/// куда угодно в заголовке — и в текст, и в пустоту справа от него.
+private struct AdvancedSection<Content: View>: View {
+    let title: String
+    @Binding var isExpanded: Bool
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        Section {
+            if isExpanded { content }
+        } header: {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    Text(title)
+                    // Растягивает кнопку до края формы: без него щелчок мимо
+                    // букв уходил бы в пустоту, а целиться в слово из двух
+                    // слогов ровно та же морока, что и в треугольник.
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            // Курсор-палец: заголовок формы сам по себе не выглядит нажимаемым,
+            // и без подсказки о том, что он кнопка, догадываются не сразу.
+            .onHover { inside in
+                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+    }
+}
+
+/// Подзаголовок внутри «Расширенных настроек». Секция там одна на вкладку, а
+/// разговоров в ней бывает два — про недельный лимит и про пятичасовую
+/// сессию, — и без подписей четыре одинаковых ползунка слились бы в один ряд,
+/// где не видно, который к чему.
+private struct GroupTitle: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.headline)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -47,8 +142,8 @@ struct PercentRow: View {
             HStack {
                 Slider(value: $value, in: 0...100, step: 1)
                 Text(Formatting.percent(value))
-                    .font(.caption.monospacedDigit())
-                    .frame(width: 50, alignment: .trailing)
+                    .font(.body.monospacedDigit())
+                    .frame(width: 58, alignment: .trailing)
             }
         }
     }
@@ -59,7 +154,12 @@ struct PercentRow: View {
 private struct GeneralSettings: View {
     @Bindable var model: SettingsModel
 
+    /// Свёрнута при каждом открытии окна, а не запоминается: раскрытая
+    /// секция — то, что человек делает сейчас, а не настройка.
+    @State private var showsAdvanced = false
+
     private var config: Binding<Config> { $model.config }
+    private var appearance: Binding<AppearanceConfig> { $model.config.appearance }
 
     /// Строки на выбранном языке. Читаются из конфига, а не из глобальной
     /// переменной: смена языка меняет конфиг, а по нему SwiftUI перерисует
@@ -74,29 +174,23 @@ private struct GeneralSettings: View {
                         Text(language.title(s.lang)).tag(language)
                     }
                 }
-                Text(s.languageHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section(s.pick("Запуск", "Startup")) {
                 Toggle(s.pick("Запускать при входе в систему", "Launch at login"), isOn: launchAtLogin)
                     .disabled(!LoginItem.isAvailable)
-                Text(launchHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    // Пояснения под галочкой больше нет, а погашенной она
+                    // бывает — у отладочного `swift run` автозапускать нечего.
+                    // Подсказкой при наведении, чтобы не выглядело поломкой.
+                    .help(launchHint)
             }
 
             Section(s.pick("Источник данных", "Data source")) {
                 Picker(s.pick("Откуда брать цифры", "Where the numbers come from"), selection: config.provider) {
-                    Text(s.pick("Официальный, с падением на локальный", "Official, local as fallback"))
-                        .tag(ProviderPreference.auto)
+                    Text(s.pick("Всегда онлайн", "Always online")).tag(ProviderPreference.auto)
                     Text(s.pick("Только официальный", "Official only")).tag(ProviderPreference.official)
                     Text(s.pick("Только локальная оценка", "Local estimate only")).tag(ProviderPreference.local)
                 }
-                Text(providerHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
 
                 LabeledContent(s.pick("Обновлять раз в", "Refresh every")) {
                     HStack {
@@ -106,30 +200,53 @@ private struct GeneralSettings: View {
                             step: 30
                         )
                         Text(Formatting.duration(model.config.refreshInterval, lang: s.lang))
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 70, alignment: .trailing)
+                            .font(.body.monospacedDigit())
+                            .frame(width: 78, alignment: .trailing)
                     }
                 }
             }
 
-            Section(s.pick("Недельное окно", "Week window")) {
-                Picker(s.pick("Начало недели", "Week starts on"), selection: config.weekStart) {
-                    ForEach(WeekStart.allCases, id: \.self) { start in
-                        Text(start.title(s.lang)).tag(start)
+            // Раскрывающаяся секция, а не `DisclosureGroup` внутри обычной:
+            // группа вкладывает свои строки в одну ячейку формы, и они теряют
+            // и колонки, и разделители — треугольник открывался в мелкую кашу
+            // вместо ряда настроек. Здесь же раскрываются полноценные строки
+            // формы.
+            AdvancedSection(title: s.advancedTitle, isExpanded: $showsAdvanced) {
+                // Первым — переключатель суточных полос: он решает судьбу
+                // почти всего, что под ним. Пояснять это текстом больше не
+                // нужно — выключенный план тут же убирает «Показывать» и
+                // «Начало недели», и связь видно глазами.
+                Toggle(s.pick("Дневной план", "Daily plan"), isOn: appearance.showsPlan)
+
+                if model.config.appearance.showsPlan {
+                    Picker(s.pick("Показывать", "Show"), selection: appearance.panelLayout) {
+                        ForEach(PanelLayout.allCases, id: \.self) { layout in
+                            Text(layout.title(s.lang)).tag(layout)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    Text(layoutHint)
+                        .settingsHint()
+
+                    Picker(s.pick("Начало недели", "Week starts on"), selection: config.weekStart) {
+                        ForEach(WeekStart.allCases, id: \.self) { start in
+                            Text(start.title(s.lang)).tag(start)
+                        }
+                    }
+                    Text(model.weekStartNote)
+                        .settingsHint()
+                } else {
+                    Text(noPlanHint)
+                        .settingsHint()
                 }
+
                 Picker(s.pick("Таймзона", "Time zone"), selection: config.timeZone) {
                     Text(s.pick("Системная", "System")).tag("")
                     ForEach(popularZones, id: \.self) { zone in
                         Text(zone).tag(zone)
                     }
                 }
-                Text(model.weekStartNote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
 
-            Section(s.pick("Рабочий день", "Working day")) {
                 Picker(s.pick("Распорядок", "Schedule"), selection: config.workHours) {
                     ForEach(WorkHours.presets, id: \.self) { hours in
                         Text(hours.title(s.lang)).tag(hours)
@@ -144,25 +261,26 @@ private struct GeneralSettings: View {
                 // Границы держат день непустым: вывернутый интервал конфиг
                 // чинит на круглосуточный, и в степпере это выглядело бы как
                 // самовольный сброс настройки.
-                HStack {
-                    Stepper(
-                        s.pick("С \(model.config.workHours.start):00", "From \(model.config.workHours.start):00"),
-                        value: config.workHours.start,
-                        in: 0...(model.config.workHours.end - 1)
-                    )
-                    Stepper(
-                        s.pick("до \(hourLabel(model.config.workHours.end))",
-                               "to \(hourLabel(model.config.workHours.end))"),
-                        value: config.workHours.end,
-                        in: (model.config.workHours.start + 1)...24
-                    )
+                LabeledContent(s.pick("Часы", "Hours")) {
+                    HStack(spacing: 16) {
+                        Stepper(
+                            s.pick("с \(model.config.workHours.start):00",
+                                   "from \(model.config.workHours.start):00"),
+                            value: config.workHours.start,
+                            in: 0...(model.config.workHours.end - 1)
+                        )
+                        Stepper(
+                            s.pick("до \(hourLabel(model.config.workHours.end))",
+                                   "to \(hourLabel(model.config.workHours.end))"),
+                            value: config.workHours.end,
+                            in: (model.config.workHours.start + 1)...24
+                        )
+                    }
                 }
                 LabeledContent(s.pick("Получается", "Adds up to"), value: workHoursSummary)
                 Text(workHoursHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsHint()
             }
-
         }
         .formStyle(.grouped)
     }
@@ -239,17 +357,42 @@ private struct GeneralSettings: View {
         """)
     }
 
-    private var providerHint: String {
-        switch model.config.provider {
-        case .auto:
-            s.pick("Как в /usage; когда сеть или авторизация отваливаются — локальная оценка с пометкой ≈.",
-                   "Same as /usage; when the network or the token gives out, a local estimate marked ≈.")
-        case .official:
-            s.pick("Только цифры сервера. Нет сети — панель честно скажет, что данных нет.",
-                   "Server numbers only. No network — the panel plainly says it has no data.")
-        case .local:
-            s.pick("Считает по транскриптам ~/.claude/projects. Работает офлайн, точность зависит от калибровки.",
-                   "Counted from transcripts in ~/.claude/projects. Works offline; accuracy depends on calibration.")
+    /// Что осталось от суточных полос, когда их выключили. Про рабочие часы
+    /// здесь сказано отдельно: они переживают выключенный план — по ним
+    /// по-прежнему растёт плановая зона в значке строки меню и считается
+    /// прогноз «кончится в …».
+    private var noPlanHint: String {
+        s.pick("""
+        Дней в панели нет — вместо семи полос с планом одна на всю неделю, \
+        голый факт без сравнения с графиком. Начало недели вместе с ними \
+        уходит: переставлять нечего. Рабочие часы остаются в деле — по ним \
+        растёт плановая зона в значке строки меню и считается прогноз \
+        «кончится в …».
+        """, """
+        There are no day rows in the panel — instead of seven bars with a \
+        plan there is one for the whole week, the bare spend with no pacing \
+        comparison. The week start goes with them: there is nothing left to \
+        reorder. Working hours still count — they drive the plan zone in the \
+        menu bar icon and the “runs out at …” forecast.
+        """)
+    }
+
+    private var layoutHint: String {
+        switch model.config.appearance.panelLayout {
+        case .week:
+            s.pick("Семь полос, по дню недели каждая: весь ряд перед глазами.",
+                   "Seven bars, one per weekday: the whole row in front of you.")
+        case .compact:
+            s.pick("""
+            Только текущие сутки — панель короче на шесть строк. Неделя не \
+            потеряна: щёлкните по строке дня, и ряд раскроется целиком, пока \
+            панель открыта. Итог недели и час сброса остаются на месте в любом \
+            случае.
+            """, """
+            Today only — six rows shorter. The week is not lost: click the day \
+            row and the whole row unfolds for as long as the panel stays open. \
+            The week total and the reset time stay put either way.
+            """)
         }
     }
 
@@ -268,6 +411,9 @@ private struct GeneralSettings: View {
 private struct MenuBarSettings: View {
     @Bindable var model: SettingsModel
 
+    /// Свёрнута при каждом открытии окна — как и на соседних вкладках.
+    @State private var showsAdvanced = false
+
     private var thresholds: Thresholds { model.config.thresholds }
 
     private var s: L10n { model.config.strings }
@@ -281,8 +427,7 @@ private struct MenuBarSettings: View {
                     Text(s.pick("Кольцо с процентом", "Ring with percentage")).tag(MenuBarStyle.ring)
                 }
                 Text(styleHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsHint()
 
                 // Расклад кольца спрашиваем только когда оно выбрано: у полосы
                 // второго лимита нет, и пункт стоял бы там без смысла.
@@ -293,8 +438,7 @@ private struct MenuBarSettings: View {
                         }
                     }
                     Text(ringHint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .settingsHint()
                 }
             }
 
@@ -309,16 +453,17 @@ private struct MenuBarSettings: View {
                 from the fill and the number. The panel is coloured either way: \
                 the thresholds below also colour its heading and session bar.
                 """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsHint()
             }
 
-            Section(s.pick("Недельный лимит", "Weekly limit")) {
+            // Пороги — под раскрывающейся секцией: заводские отметки трогают
+            // редко, а места они занимают на пол-вкладки.
+            AdvancedSection(title: s.advancedTitle, isExpanded: $showsAdvanced) {
+                GroupTitle(text: s.pick("Недельный лимит", "Weekly limit"))
                 PercentRow(title: s.pick("Жёлтый после", "Amber after"), value: weekWarn)
                 PercentRow(title: s.pick("Красный после", "Red after"), value: weekCritical)
-            }
 
-            Section(s.pick("Пятичасовая сессия", "5-hour session")) {
+                GroupTitle(text: s.pick("Пятичасовая сессия", "5-hour session"))
                 PercentRow(title: s.pick("Жёлтый после", "Amber after"), value: sessionWarn)
                 PercentRow(title: s.pick("Красный после", "Red after"), value: sessionCritical)
                 Text(s.pick("""
@@ -334,8 +479,7 @@ private struct MenuBarSettings: View {
                 The session comes from the official source only: on a local \
                 estimate its percentage stays at zero.
                 """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsHint()
             }
         }
         .formStyle(.grouped)
@@ -451,8 +595,7 @@ private struct AppearanceSettings: View {
                 .pickerStyle(.segmented)
 
                 Text(themeHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsHint()
             }
 
             Section(s.pick("Фон панели", "Panel background")) {
@@ -463,16 +606,16 @@ private struct AppearanceSettings: View {
                         Slider(value: appearance.panelTintOpacity, in: 0...1, step: 0.01)
                             .disabled(!model.config.appearance.transparentPanel)
                         Text(String(format: "%.0f %%", model.config.appearance.panelTintOpacity * 100))
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 50, alignment: .trailing)
+                            .font(.body.monospacedDigit())
+                            .frame(width: 58, alignment: .trailing)
                     }
                 }
                 LabeledContent(s.pick("Скругление углов", "Corner radius")) {
                     HStack {
                         Slider(value: appearance.cornerRadius, in: 0...24, step: 1)
                         Text("\(Int(model.config.appearance.cornerRadius)) pt")
-                            .font(.caption.monospacedDigit())
-                            .frame(width: 50, alignment: .trailing)
+                            .font(.body.monospacedDigit())
+                            .frame(width: 58, alignment: .trailing)
                     }
                 }
                 Text(s.pick("""
@@ -488,38 +631,7 @@ private struct AppearanceSettings: View {
                 that is a separate mode. The panel itself shows the result: it \
                 hangs by the menu bar while this window is open.
                 """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Section(s.pick("Суточные полосы", "Day bars")) {
-                Picker(s.pick("Показывать", "Show"), selection: appearance.panelLayout) {
-                    ForEach(PanelLayout.allCases, id: \.self) { layout in
-                        Text(layout.title(s.lang)).tag(layout)
-                    }
-                }
-                .pickerStyle(.segmented)
-                Text(layoutHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section(s.pick("Строки панели", "Panel rows")) {
-                Toggle(s.pick("Пятичасовая сессия", "5-hour session"), isOn: appearance.showSession)
-                Toggle(s.pick("Прогноз «кончится в …»", "Forecast “runs out at …”"), isOn: appearance.showForecast)
-                Text(s.pick("""
-                Откуда взяты цифры, говорит кружок рядом с полосой сессии: \
-                залитый зелёный — ответ сервера, залитый жёлтый — он же, но \
-                из кеша, контурный красный — локальная оценка. Наведите на \
-                него, и панель скажет, что именно случилось.
-                """, """
-                Where the numbers come from is told by the dot next to the \
-                session bar: solid green — a live server reply, solid amber — \
-                the same reply from cache, hollow red — a local estimate. Hover \
-                it and the panel says what exactly happened.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsHint()
             }
 
             Section(s.pick("Сброс сессии", "Session reset")) {
@@ -533,7 +645,7 @@ private struct AppearanceSettings: View {
 
                 LabeledContent(s.pick("Выглядит так", "Looks like this")) {
                     Text(sessionResetSample)
-                        .font(.caption.monospacedDigit())
+                        .font(.body.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
 
@@ -548,8 +660,7 @@ private struct AppearanceSettings: View {
                 it to show. An hour past midnight is labelled with the weekday: \
                 a 5-hour window steps over midnight easily.
                 """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsHint()
             }
         }
         .formStyle(.grouped)
@@ -568,25 +679,6 @@ private struct AppearanceSettings: View {
             lang: s.lang
         )
         return s.pick("сброс \(reset)", "resets \(reset)")
-    }
-
-    private var layoutHint: String {
-        switch model.config.appearance.panelLayout {
-        case .week:
-            s.pick("Семь полос, по дню недели каждая: весь ряд перед глазами.",
-                   "Seven bars, one per weekday: the whole row in front of you.")
-        case .compact:
-            s.pick("""
-            Только текущие сутки — панель короче на шесть строк. Неделя не \
-            потеряна: щёлкните по строке дня, и ряд раскроется целиком, пока \
-            панель открыта. Итог недели и час сброса остаются на месте в любом \
-            случае.
-            """, """
-            Today only — six rows shorter. The week is not lost: click the day \
-            row and the whole row unfolds for as long as the panel stays open. \
-            The week total and the reset time stay put either way.
-            """)
-        }
     }
 
     private var themeHint: String {
@@ -612,6 +704,17 @@ private struct AppearanceSettings: View {
 struct NotificationSettings: View {
     @Bindable var model: SettingsModel
 
+    /// Свёрнута при каждом открытии окна — как и на соседних вкладках.
+    /// Параметр, а не всегда `false`, — ради `Screenshot.notificationsTab`:
+    /// картинка в README существует затем, чтобы показать именно пороги,
+    /// и снимать её со свёрнутой секцией было бы бессмысленно.
+    @State private var showsAdvanced: Bool
+
+    init(model: SettingsModel, showsAdvanced: Bool = false) {
+        self.model = model
+        self._showsAdvanced = State(initialValue: showsAdvanced)
+    }
+
     private var notifications: NotificationsConfig { model.config.notifications }
     /// Пороги настраиваются и при выключенных уведомлениях — гасим их только
     /// вместе с самим тумблером, чтобы не пришлось включать баннеры ради того,
@@ -626,8 +729,7 @@ struct NotificationSettings: View {
                 Toggle(s.pick("Предупреждать о приближении к лимиту", "Warn when a limit gets close"),
                        isOn: enabled)
                 Text(model.notifications.summary(s))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsHint()
                 if model.notifications.needsSystemSettings {
                     Button(s.pick("Открыть настройки уведомлений macOS", "Open macOS notification settings")) {
                         model.notifications.openSystemSettings()
@@ -639,90 +741,54 @@ struct NotificationSettings: View {
 
                 Toggle(s.pick("Сообщать о новой версии", "Announce a new version"),
                        isOn: updates)
-
-                Text(s.pick("""
-                В баннере две строки: сколько израсходовано и через сколько \
-                сброс. Какой это лимит, говорит картинка справа — пятичасовая \
-                сессия приходит дугой, недельный лимит красным числом.
-                """, """
-                The banner is two lines: how much is spent and how long until \
-                the reset. Which limit it is comes from the artwork on the \
-                right — the 5-hour session arrives as an arc, the weekly limit \
-                as a red number.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                Text(s.pick("""
-                О вышедшей версии программа говорит один раз — не каждые сутки, \
-                пока не обновитесь. Кнопки в том баннере нет: установка \
-                перезаписывает приложение и перезапускает его, и делать это \
-                одним щелчком посреди чужой работы неправильно. Ставится \
-                обновление на вкладке «О программе».
-                """, """
-                A released version is announced once — not daily until you \
-                update. That banner has no button: installing replaces the app \
-                and restarts it, and that should not happen on a single click \
-                in the middle of your work. Updates are installed on the About \
-                tab.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                Text(s.pick("""
-                Об одном пороге программа говорит один раз за окно лимита и \
-                только на ухудшении: откатившийся расход молчит, а следующая \
-                неделя и следующая сессия начинают отсчёт заново. Два баннера \
-                подряд не приходят ближе, чем через пять минут.
-                """, """
-                A threshold is announced once per limit window and only on the \
-                way up: a spend that fell back stays quiet, while the next week \
-                and the next session start counting afresh. Two banners never \
-                come closer than five minutes apart.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
 
-            Section(s.pick("Недельный лимит", "Weekly limit")) {
-                Toggle(s.pick("Уведомлять о недельном лимите", "Notify about the weekly limit"),
-                       isOn: weekEnabled)
-                PercentRow(title: s.pick("Предупредить после", "Warn after"), value: weekFirst)
-                PercentRow(title: s.pick("И ещё раз после", "And again after"), value: weekSecond)
-                previewButton(.week)
-                Text(s.pick("""
-                Неделя не сбросится до её конца, поэтому предупреждать о ней \
-                стоит раньше: после первого порога расход ещё можно растянуть \
-                на оставшиеся дни.
-                """, """
-                The week will not reset before it ends, so it deserves an \
-                earlier warning: after the first threshold the spend can still \
-                be stretched over the days that are left.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .disabled(isOff)
+            // Пороги обоих лимитов — под раскрывающейся секцией, как пороги
+            // цвета на вкладке «Строка меню». Гасим не саму секцию, а её
+            // содержимое: у выключенной заголовок перестал бы раскрываться,
+            // и посмотреть, на чём стоят отметки, стало бы нельзя, не включив
+            // уведомления.
+            AdvancedSection(title: s.advancedTitle, isExpanded: $showsAdvanced) {
+                Group {
+                    GroupTitle(text: s.pick("Недельный лимит", "Weekly limit"))
+                    Toggle(s.pick("Уведомлять о недельном лимите", "Notify about the weekly limit"),
+                           isOn: weekEnabled)
+                    PercentRow(title: s.pick("Предупредить после", "Warn after"), value: weekFirst)
+                    PercentRow(title: s.pick("И ещё раз после", "And again after"), value: weekSecond)
+                    previewButton(.week)
+                    Text(s.pick("""
+                    Неделя не сбросится до её конца, поэтому предупреждать о ней \
+                    стоит раньше: после первого порога расход ещё можно растянуть \
+                    на оставшиеся дни.
+                    """, """
+                    The week will not reset before it ends, so it deserves an \
+                    earlier warning: after the first threshold the spend can still \
+                    be stretched over the days that are left.
+                    """))
+                    .settingsHint()
+                }
+                .disabled(isOff)
 
-            Section(s.pick("Пятичасовая сессия", "5-hour session")) {
-                Toggle(s.pick("Уведомлять о пятичасовой сессии", "Notify about the 5-hour session"),
-                       isOn: sessionEnabled)
-                PercentRow(title: s.pick("Предупредить после", "Warn after"), value: sessionFirst)
-                PercentRow(title: s.pick("И ещё раз после", "And again after"), value: sessionSecond)
-                previewButton(.session)
-                Text(s.pick("""
-                Сессию сообщает только официальный источник: на локальной \
-                оценке её процент не считается вовсе, и уведомлений о ней \
-                не будет.
-                """, """
-                The session comes from the official source only: a local \
-                estimate does not compute its percentage at all, so there will \
-                be no notifications about it.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Group {
+                    GroupTitle(text: s.pick("Пятичасовая сессия", "5-hour session"))
+                    Toggle(s.pick("Уведомлять о пятичасовой сессии", "Notify about the 5-hour session"),
+                           isOn: sessionEnabled)
+                    PercentRow(title: s.pick("Предупредить после", "Warn after"), value: sessionFirst)
+                    PercentRow(title: s.pick("И ещё раз после", "And again after"), value: sessionSecond)
+                    previewButton(.session)
+                    Text(s.pick("""
+                    Сессию сообщает только официальный источник: на локальной \
+                    оценке её процент не считается вовсе, и уведомлений о ней \
+                    не будет.
+                    """, """
+                    The session comes from the official source only: a local \
+                    estimate does not compute its percentage at all, so there will \
+                    be no notifications about it.
+                    """))
+                    .settingsHint()
+                }
+                .disabled(isOff)
             }
-            .disabled(isOff)
         }
         .formStyle(.grouped)
     }
@@ -835,22 +901,10 @@ private struct AccessSettings: View {
             Section(s.pick("Аккаунт и счёт", "Account and count")) {
                 LabeledContent(s.pick("Сейчас в ключе", "Currently in the key")) {
                     Text(model.account ?? s.pick("не читается", "cannot be read"))
-                        .font(.caption.monospaced())
+                        .font(.body.monospaced())
                         .foregroundStyle(model.account == nil ? .secondary : .primary)
                         .textSelection(.enabled)
                 }
-                Text(s.pick("""
-                Метка аккаунта из записи Keychain: начало UUID организации и тариф. \
-                Токен обновляется раз в час, а она держится — по ней и видно, тот \
-                же это аккаунт, что вчера, или вошли другим.
-                """, """
-                The account mark from the Keychain item: the start of the \
-                organisation UUID and the plan. The token is refreshed hourly, this \
-                stays — it is what tells yesterday’s account from a new login.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
                 HStack {
                     Button(s.pick("Начать счёт заново", "Start counting over")) {
                         confirmingReset = true
@@ -858,105 +912,21 @@ private struct AccessSettings: View {
                     Spacer()
                 }
                 Text(model.countingNote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsHint()
 
-                Text(s.pick("""
-                Нужно после входа другим аккаунтом. Недельный процент приходит от \
-                сервера и сменится сам, а вот разбивка по суткам считается по \
-                транскриптам в ~/.claude/projects — они пишутся в одни и те же \
-                файлы при любом аккаунте, и различить их по содержимому нельзя. \
-                Смену аккаунта программа замечает и сама, но только пока читает \
-                Keychain.
-                """, """
-                Needed after logging in with a different account. The weekly \
-                percentage comes from the server and changes by itself, but the \
-                daily breakdown is counted from the transcripts in \
-                ~/.claude/projects — they are written to the same files whatever \
-                account is used, and nothing in them tells one from the other. The \
-                app notices a switch on its own too, but only while it can read the \
-                Keychain.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(s.pick(
+                    "Нужно после входа другим аккаунтом: суточная разбивка идёт по транскриптам, а в них аккаунт не различить.",
+                    "Needed after logging in with a different account: the daily breakdown comes from transcripts, which do not tell accounts apart."
+                ))
+                .settingsHint()
             }
 
             Section(s.pick("Токен для официального источника", "Token for the official source")) {
-                Text(s.pick("""
-                Берётся из Keychain Claude Code, запись «Claude Code-credentials». \
-                Виджет видит ровно тот аккаунт, что показывает /usage: сервер узнаёт \
-                его по этому токену. Запись только читается — обновляет её сам \
-                Claude Code, и лезть туда вдвоём значит потерять токен.
-                """, """
-                Taken from the Claude Code Keychain item “Claude Code-credentials”. \
-                The widget sees exactly the account /usage shows: the server \
-                recognises it by this token. The item is only ever read — Claude \
-                Code refreshes it itself, and two writers mean a lost token.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                Text(s.pick("""
-                Вставить свой токен нельзя, и это не упущение: /api/oauth/usage \
-                принимает только токен сеанса Claude Code. Ключ API (sk-ant-api…) и \
-                годовой токен от claude setup-token он отвергает с 401 — проверено.
-                """, """
-                Pasting your own token is not possible, and that is not an \
-                oversight: /api/oauth/usage accepts a Claude Code session token \
-                only. An API key (sk-ant-api…) and the year-long token from \
-                claude setup-token are both rejected with 401 — tested.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Section(s.pick("Можно и без токена", "It works without a token too")) {
-                Text(s.pick("""
-                Доступ к записи Keychain можно не давать вовсе: на вкладке «Общие» \
-                выберите «Только локальная оценка» — расход посчитается по вашим же \
-                транскриптам в ~/.claude/projects, без сети и без единого секрета. \
-                Цена отказа — знак ≈ перед процентом.
-                """, """
-                You can withhold Keychain access entirely: pick “Local estimate \
-                only” on the General tab and the spend is counted from your own \
-                transcripts in ~/.claude/projects — no network, not a single \
-                secret. The price of saying no is a ≈ in front of the percentage.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Section(s.pick("Если macOS снова спросила доступ", "If macOS asks for access again")) {
-                Text(s.pick("""
-                Запись читается утилитой /usr/bin/security — той же, которой \
-                пишет токен сам Claude Code, и потому разрешение на неё \
-                восстанавливается при каждом обновлении токена. Прямой запрос \
-                к Keychain остался запасным путём и диалога не показывает: \
-                не пустили — панель уходит на локальную оценку.
-                """, """
-                The item is read through /usr/bin/security — the same tool Claude \
-                Code writes the token with, which is why the permission is \
-                restored every time the token is refreshed. A direct Keychain \
-                query remains as a fallback and shows no dialog: denied, the \
-                panel falls back to a local estimate.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                Text(s.pick("""
-                Вопрос всё же вернулся — значит доступа нет и у security. \
-                Заведите постоянный сертификат подписи: ./scripts/signing-cert.sh \
-                в каталоге исходников, затем ./scripts/install.sh. Он держит \
-                приложение в списке доверенных приложений записи, и обновления \
-                переподписываются им же.
-                """, """
-                The prompt came back anyway — then security has no access either. \
-                Set up a stable signing certificate: ./scripts/signing-cert.sh in \
-                the source directory, then ./scripts/install.sh. It keeps the app \
-                on the item’s trusted list, and updates are re-signed with it.
-                """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(s.pick(
+                    "Берётся из Keychain Claude Code и только читается. Свой вставить нельзя: сервер принимает лишь токен сеанса Claude Code.",
+                    "Taken from the Claude Code Keychain item, read-only. Pasting your own is not possible: the server accepts a Claude Code session token only."
+                ))
+                .settingsHint()
             }
 
             Section(s.pick("Проверка", "Check")) {
@@ -969,7 +939,7 @@ private struct AccessSettings: View {
                     Spacer()
                     if let result = model.checkResult {
                         Text(result.text)
-                            .font(.caption)
+                            .font(.body)
                             .foregroundStyle(result.ok ? .green : .red)
                             .multilineTextAlignment(.trailing)
                     }
@@ -981,8 +951,7 @@ private struct AccessSettings: View {
                 The token goes nowhere but api.anthropic.com, is never written to \
                 config.json and never reaches the log.
                 """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsHint()
             }
         }
         .formStyle(.grouped)
@@ -1060,8 +1029,7 @@ private struct AboutSettings: View {
                     }
                 }
                 Text(updateHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsHint()
             }
 
             Section(s.pick("Файлы", "Files")) {
@@ -1083,8 +1051,7 @@ private struct AboutSettings: View {
                 worked out and the calibration — those the app earned from live \
                 data.
                 """))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsHint()
             }
         }
         .formStyle(.grouped)
@@ -1136,7 +1103,7 @@ private struct AboutSettings: View {
         LabeledContent(title) {
             HStack(spacing: 8) {
                 Text(url.path)
-                    .font(.caption.monospaced())
+                    .font(.body.monospaced())
                     .lineLimit(1)
                     .truncationMode(.head)
                     .textSelection(.enabled)

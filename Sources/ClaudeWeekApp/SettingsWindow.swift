@@ -236,11 +236,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let hosting = NSHostingController(rootView: SettingsView(model: model))
         let window = NSWindow(contentViewController: hosting)
         window.title = model.config.strings.pick("Настройки ClaudeWeek", "ClaudeWeek Settings")
-        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.center()
-        window.setFrameAutosaveName("ClaudeWeekSettings")
+        // Имя со счётчиком: размер по умолчанию сменился, а сохранённый кадр
+        // прошлой версии оказался бы сильнее нового — окно открывалось бы
+        // прежним, и правка размера прошла бы мимо всех, кто уже запускал
+        // программу. Меняем имя вместе с размером — старый кадр забыт один раз.
+        window.setFrameAutosaveName(Self.frameName)
+        // Имя автосохранения само по себе только пишет размер в defaults —
+        // читает его `setFrameUsingName`. Пока окно было нетянущимся, разницы
+        // не было; теперь растянутое окно должно открываться растянутым и в
+        // следующий запуск, а не схлопываться обратно к идеальному размеру.
+        window.setFrameUsingName(Self.frameName)
+        fitToScreen(window)
         // moveToActiveSpace — чтобы окно приходило на тот стол, с которого его
         // позвали, а не утаскивало экран туда, где его открыли в первый раз.
         // fullScreenAuxiliary — чтобы настройки пускали и поверх полноэкранного
@@ -265,6 +275,30 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // неактивному приложению система сначала ищет окну «своё» пространство.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Ключ, под которым размер окна лежит в defaults. Со счётчиком версии:
+    /// смена правил размера иначе не дошла бы до тех, у кого кадр уже
+    /// сохранён, — старый кадр сильнее новых значений по умолчанию.
+    private static let frameName = "ClaudeWeekSettings.v3"
+
+    /// Окно открывается высотой с самую длинную вкладку, а экран бывает
+    /// короче этого — на ноутбуке или на половине вертикального монитора.
+    /// Подрезаем по видимой области и возвращаем в центр: окно, у которого
+    /// нижний край за краем экрана, не изменить размер мышью.
+    ///
+    /// Ширину трогаем на всякий случай тем же движением: она закреплена
+    /// в `SettingsView`, но экран уже её ширины — не выдумка, а альбомный
+    /// монитор, поставленный на бок.
+    private func fitToScreen(_ window: NSWindow) {
+        guard let visible = (window.screen ?? NSScreen.main)?.visibleFrame else { return }
+        var frame = window.frame
+        guard frame.width > visible.width || frame.height > visible.height else { return }
+        frame.size.width = min(frame.width, visible.width)
+        frame.size.height = min(frame.height, visible.height)
+        frame.origin.x = visible.midX - frame.width / 2
+        frame.origin.y = visible.midY - frame.height / 2
+        window.setFrame(frame, display: false)
     }
 
     /// Двигаем окно один раз, при создании: дальше место выбирает человек.

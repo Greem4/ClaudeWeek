@@ -1,16 +1,22 @@
 import SwiftUI
 import ClaudeWeekCore
 
-/// Полоса пятичасовой сессии: одна заливка на общем треке, без плановой зоны.
-/// Плана здесь нет намеренно — пятичасовое окно не обязано расходоваться
-/// равномерно (можно просто закончить работу), и синяя «сколько положено
-/// к этому часу» изображала бы темп, которого у сессии по смыслу нет.
-struct SessionBar: View {
+/// Полоса лимита без плановой зоны: одна заливка на общем треке. Общая для
+/// пятичасовой сессии и — когда дневной план недели выключен в настройках —
+/// для недели целиком. У обоих плана нет по смыслу или его прячут нарочно:
+/// сессия не обязана расходоваться равномерно (можно просто закончить
+/// работу), а голый недельный процент как раз про то, чтобы не сравнивать
+/// факт с графиком.
+///
+/// Заливка красная на критическом пороге — так же, как полоса в строке
+/// меню (`MenuBarBar.fillColor`). У суточных полос это не так: там красный
+/// в заливку нарочно не идёт, потому что рядом с ней всегда стоит плановая
+/// зона того же зелёного ряда, и на дейтеранопии переход в красный от неё
+/// неотличим. Здесь плановой зоны нет, сравнивать заливку не с чем, и красный
+/// однозначно читается как «граница пройдена».
+struct LimitBar: View {
     let usedPercent: Double
-    /// Лимит на исходе — заливка желтеет. Красный в заливку не идёт по той же
-    /// причине, что и в суточных полосах: с зелёным он неразличим при
-    /// дейтеранопии, поэтому тревога живёт в тексте и значке.
-    let isWarning: Bool
+    let state: LimitState
     let animated: Bool
 
     @Environment(\.palette) private var palette
@@ -22,12 +28,20 @@ struct SessionBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(palette.track.color)
                 Capsule()
-                    .fill(isWarning ? palette.warning.color : palette.good.color)
+                    .fill(fillColor)
                     .frame(width: filled)
             }
             .animation(animated ? .easeOut(duration: Theme.fillAnimation) : nil, value: usedPercent)
         }
         .frame(height: Theme.barHeight)
+    }
+
+    private var fillColor: Color {
+        switch state {
+        case .normal: palette.good.color
+        case .warning: palette.warning.color
+        case .critical, .exhausted: palette.critical.color
+        }
     }
 }
 
@@ -66,8 +80,10 @@ struct SessionRow: View {
     @Environment(\.palette) private var palette
     @Environment(\.strings) private var s
 
-    private var isWarning: Bool {
-        state != .normal
+    /// Лимит на исходе или уже исчерпан — тут краснеют значок, цифры и сама
+    /// заливка полосы, все по одному порогу (см. `LimitBar`).
+    private var isCritical: Bool {
+        state == .critical || state == .exhausted
     }
 
     var body: some View {
@@ -83,9 +99,9 @@ struct SessionRow: View {
                 // панель от клика по кружку не меняют размера. Отсюда и одна
                 // строка текста — второй ряд раздвинул бы строку по высоте, а
                 // за ней и всю панель. Длинный отказ дочитывается подсказкой.
-                SessionBar(
+                LimitBar(
                     usedPercent: session.usedPercent,
-                    isWarning: isWarning,
+                    state: state,
                     animated: animated
                 )
                 .opacity(showsSourceText ? 0 : 1)
@@ -109,7 +125,7 @@ struct SessionRow: View {
             // десять минут до конца окна и 90 % за четыре часа значат разное.
             Text(caption)
                 .font(Theme.captionFont)
-                .foregroundStyle(session.isExhausted ? palette.critical.color : palette.secondaryText.color)
+                .foregroundStyle(isCritical ? palette.critical.color : palette.secondaryText.color)
                 .padding(.leading, Theme.dayLabelWidth + 8)
         }
         .accessibilityElement(children: .ignore)
@@ -123,7 +139,7 @@ struct SessionRow: View {
     @ViewBuilder
     private var percent: some View {
         let column = HStack(spacing: Theme.valueGap) {
-            if session.isExhausted {
+            if isCritical {
                 Text("⚠")
                     .font(Theme.dayFont)
                     .foregroundStyle(palette.critical.color)
@@ -131,7 +147,7 @@ struct SessionRow: View {
             Text(Formatting.percent(session.usedPercent))
                 .font(Theme.dayFont)
                 .fixedSize()
-                .foregroundStyle(session.isExhausted ? palette.critical.color : palette.primaryText.color)
+                .foregroundStyle(isCritical ? palette.critical.color : palette.primaryText.color)
         }
         .frame(width: Theme.valueWidth, alignment: .trailing)
 

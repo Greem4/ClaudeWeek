@@ -99,16 +99,6 @@ public struct L10n: Sendable, Equatable {
 
 extension L10n {
     public var languageTitle: String { pick("Язык", "Language") }
-
-    public var languageHint: String {
-        pick("""
-        «Как в системе» — русский на русской macOS и английский на любой другой. \
-        Выбор применяется сразу, перезапускать не нужно.
-        """, """
-        “System” means Russian on a Russian macOS and English on any other. \
-        The choice applies immediately — no restart needed.
-        """)
-    }
 }
 
 /// Строка, у которой есть обе версии сразу.

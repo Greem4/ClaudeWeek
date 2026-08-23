@@ -133,8 +133,12 @@ final class PanelModel {
 
     /// Сколько строк рисовать до прихода данных: столько же, сколько потом,
     /// иначе панель дёрнется в высоте, когда данные наконец придут.
+    ///
+    /// Дневной план выключен — на месте дней всегда одна полоса недели, и
+    /// плейсхолдер-заглушка тоже одна: считать дни окна незачем.
     var placeholderRows: Int {
-        showsWholeWeek ? WeekWindow(containing: now, config: config).rowCount : 1
+        guard config.appearance.showsPlan else { return 1 }
+        return showsWholeWeek ? WeekWindow(containing: now, config: config).rowCount : 1
     }
 
     /// Пятичасовая сессия — только пока её окно не истекло. После сброса от
