@@ -575,9 +575,21 @@ public actor CodexProvider: UsageProvider {
         )
     }
 
+    /// Зона биллинга OpenAI: сутки токенной статистики (`startDate` бакета)
+    /// нарезаны по её полуночи, а не по местной и не по UTC. Проверено на
+    /// живом ответе — обмен в 05:53 UTC попал в бакет предыдущего дня, что
+    /// сходится только с тихоокеанским временем.
+    private static let codexBillingZone = TimeZone(identifier: "America/Los_Angeles")
+
     /// Дневные токены задают только форму: точный недельный процент остаётся
-    /// знаменателем сервера. Первый неполный день приблизительно режется по
-    /// доле суток, потому что API отдаёт бакет целиком, включая часы до сброса.
+    /// знаменателем сервера.
+    ///
+    /// `startDate` бакета — календарный день тихоокеанской зоны, а окно живёт
+    /// в зоне конфига, поэтому бакет раскладывается по суткам окна по
+    /// настоящему перекрытию во времени, а не сопоставлением дат. Иначе в
+    /// первые местные сутки недельного окна единственный бакет уезжает за его
+    /// левую границу, `total` выходит нулевым, и дневная форма пропадает
+    /// целиком — хотя точный расход недели сервер уже сообщил.
     private func cumulativeByDay(
         _ buckets: [CodexDailyUsage]?,
         totalPercent: Double,
@@ -588,28 +600,40 @@ public actor CodexProvider: UsageProvider {
             return Array(repeating: nil, count: window.slotCount)
         }
 
-        let calendar = window.calendar
-        var byDate: [Date: Double] = [:]
-        for bucket in buckets {
-            guard let date = calendarDate(bucket.startDate, calendar: calendar) else { continue }
-            byDate[calendar.startOfDay(for: date), default: 0] += Double(max(bucket.tokens, 0))
+        var billing = Calendar(identifier: .gregorian)
+        if let zone = CodexProvider.codexBillingZone { billing.timeZone = zone }
+
+        // Настоящие интервалы бакетов: [полночь дня биллинга, +сутки).
+        // Календарный шаг, а не «+86400», — на переводе часов сутки короче
+        // или длиннее, и знаменатель доли должен это учитывать.
+        let spans: [(start: Date, end: Date, tokens: Double)] = buckets.compactMap { bucket in
+            guard let day = calendarDate(bucket.startDate, calendar: billing) else { return nil }
+            let start = billing.startOfDay(for: day)
+            guard let end = billing.date(byAdding: .day, value: 1, to: start), end > start else { return nil }
+            return (start, end, Double(max(bucket.tokens, 0)))
         }
 
         let amounts: [Double?] = window.days.map { day in
             guard day.start < now else { return nil }
-            let dayStart = calendar.startOfDay(for: day.start)
-            var value = byDate[dayStart, default: 0]
-            if day.start > dayStart,
-               let next = calendar.date(byAdding: .day, value: 1, to: dayStart) {
-                let full = next.timeIntervalSince(dayStart)
-                if full > 0 { value *= day.end.timeIntervalSince(day.start) / full }
+            return spans.reduce(0.0) { sum, span in
+                let lo = max(span.start, day.start)
+                let hi = min(span.end, day.end)
+                guard hi > lo else { return sum }
+                return sum + span.tokens * hi.timeIntervalSince(lo) / span.end.timeIntervalSince(span.start)
             }
-            return value
         }
+
         let total = amounts.compactMap { $0 }.reduce(0, +)
-        // Нули токенов не задают форму расхода: рисовать по ним семь точных
-        // нулей рядом с ненулевым итогом означало бы выдумать противоречие.
-        guard total > 0 else { return Array(repeating: nil, count: window.slotCount) }
+        guard total > 0 else {
+            // Бакеты есть, но ни один не перекрыл прошедшую часть окна
+            // (первые сутки недели, редкий сдвиг зоны). Точный недельный
+            // процент известен — относим его к последним прошедшим суткам,
+            // а не прячем весь расход за прочерками.
+            guard totalPercent > 0, let last = amounts.lastIndex(where: { $0 != nil }) else {
+                return Array(repeating: nil, count: window.slotCount)
+            }
+            return amounts.indices.map { $0 == last ? totalPercent : nil }
+        }
 
         var running = 0.0
         return amounts.map { value in

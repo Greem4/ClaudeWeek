@@ -207,6 +207,73 @@ func runCodexProviderTests(_ t: Harness) async {
                 "без дневных бакетов форма не выдумывается")
     }
 
+    await t.suite("Codex: первый день недели — дневной факт не теряется") {
+        // Недельное окно открылось сразу после местной полуночи, а
+        // единственный дневной бакет датирован по тихоокеанской зоне
+        // вчерашним числом. По датам он выпадает за левую границу окна —
+        // но по времени перекрывает его первые часы.
+        let now = at(2026, 8, 30, 9, 0)
+        let weekReset = at(2026, 9, 6, 0, 25)
+        func answer(bucketDate: String) -> CodexAccountUsage {
+            CodexAccountUsage(
+                limits: CodexRateLimits(rateLimits: CodexRateLimitBucket(
+                    limitId: "codex",
+                    primary: CodexRateLimitWindow(
+                        usedPercent: 36, windowDurationMinutes: 300,
+                        resetsAt: at(2026, 8, 30, 13, 0)
+                    ),
+                    secondary: CodexRateLimitWindow(
+                        usedPercent: 21, windowDurationMinutes: 7 * 24 * 60,
+                        resetsAt: weekReset
+                    )
+                )),
+                tokens: CodexTokenUsage(dailyUsageBuckets: [
+                    CodexDailyUsage(startDate: bucketDate, tokens: 36_854_107),
+                ])
+            )
+        }
+
+        let overlapping = try await CodexProvider(
+            config: config(), transport: FakeCodexTransport(answer(bucketDate: "2026-08-29")),
+            cacheURL: nil, clock: { now }
+        ).fetch()
+        t.close(overlapping.byDay.first(where: { $0.usedPercent != nil })?.usedPercent ?? -1, 21,
+                "бакет за пределами дат окна разложен по перекрытию во времени")
+        t.close(overlapping.byDay.compactMap(\.usedPercent).last ?? -1, 21,
+                "накопительная форма приходит ровно к недельному итогу")
+
+        let disjoint = try await CodexProvider(
+            config: config(), transport: FakeCodexTransport(answer(bucketDate: "2026-08-20")),
+            cacheURL: nil, clock: { now }
+        ).fetch()
+        t.check(disjoint.byDay.contains { $0.usedPercent != nil },
+                "без единого перекрытия точный процент всё равно виден в строке дня")
+        t.close(disjoint.byDay.compactMap(\.usedPercent).last ?? -1, 21,
+                "запасной путь вешает недельный итог на последние прошедшие сутки")
+
+        // Несколько суток позади, несколько бакетов — форма должна
+        // распределиться по перекрытию, а не осесть одним числом.
+        let midWeek = try await CodexProvider(
+            config: config(),
+            transport: FakeCodexTransport(CodexAccountUsage(
+                limits: answer(bucketDate: "x").limits,
+                tokens: CodexTokenUsage(dailyUsageBuckets: [
+                    CodexDailyUsage(startDate: "2026-08-29", tokens: 1_000),
+                    CodexDailyUsage(startDate: "2026-08-30", tokens: 1_000),
+                    CodexDailyUsage(startDate: "2026-08-31", tokens: 1_000),
+                ])
+            )),
+            cacheURL: nil,
+            clock: { at(2026, 9, 2, 12, 0) }
+        ).fetch()
+        let shape = midWeek.byDay.compactMap(\.usedPercent)
+        t.check(shape.count >= 3 && zip(shape, shape.dropFirst()).allSatisfy { $0 <= $1 },
+                "накопительная форма растёт по дням, а не скачком")
+        t.check(shape.first.map { $0 > 0 && $0 < 21 } ?? false,
+                "первые сутки получили свою долю, а не весь итог")
+        t.close(shape.last ?? -1, 21, "и всё равно приходит ровно к недельному проценту")
+    }
+
     await t.suite("Codex: необязательный сброс одного окна") {
         let bucket = CodexRateLimitBucket(
             primary: CodexRateLimitWindow(
