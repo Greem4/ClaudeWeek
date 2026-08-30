@@ -6,6 +6,22 @@ public enum ProviderPreference: String, Codable, Sendable, CaseIterable {
     case auto
 }
 
+/// Какой сервис сейчас показан в панели. Это не выбор источника внутри Claude:
+/// `provider` по-прежнему решает, брать ли его процент с сервера или считать
+/// локально. Здесь переключаются два независимых аккаунта и два набора
+/// лимитов — Claude Code и Codex.
+public enum UsageAccount: String, Codable, Sendable, CaseIterable, Hashable {
+    case claude
+    case codex
+
+    public func title(_ lang: Lang) -> String {
+        switch self {
+        case .claude: "Claude"
+        case .codex: "Codex"
+        }
+    }
+}
+
 public enum MenuBarStyle: String, Codable, Sendable, CaseIterable {
     case percent
     case compact
@@ -318,6 +334,8 @@ public struct Config: Codable, Sendable, Equatable {
     public var timeZone: String
     /// Секунды между опросами, не меньше `minimumRefreshInterval`.
     public var refreshInterval: TimeInterval
+    /// Последний аккаунт, выбранный кнопками в заголовке панели.
+    public var activeAccount: UsageAccount
     public var provider: ProviderPreference
     /// Часы, между которыми растёт план. Вне их он стоит: недельный лимит
     /// раскладывается по рабочему времени, а не по астрономическому.
@@ -360,6 +378,7 @@ public struct Config: Codable, Sendable, Equatable {
         resetMinute: 0,
         timeZone: "",
         refreshInterval: 300,
+        activeAccount: .claude,
         provider: .auto,
         // Не `WorkHours.default` — та (11–24) остаётся запасным значением для
         // сломанных чисел в `WorkHours.validated()` и опорной точкой во всех
@@ -383,6 +402,7 @@ public struct Config: Codable, Sendable, Equatable {
         resetMinute: Int,
         timeZone: String,
         refreshInterval: TimeInterval,
+        activeAccount: UsageAccount = .claude,
         provider: ProviderPreference,
         workHours: WorkHours = WorkHours.default,
         menuBarStyle: MenuBarStyle,
@@ -400,6 +420,7 @@ public struct Config: Codable, Sendable, Equatable {
         self.resetMinute = resetMinute
         self.timeZone = timeZone
         self.refreshInterval = refreshInterval
+        self.activeAccount = activeAccount
         self.provider = provider
         self.workHours = workHours
         self.menuBarStyle = menuBarStyle
@@ -424,6 +445,7 @@ public struct Config: Codable, Sendable, Equatable {
             resetMinute: try c.decodeIfPresent(Int.self, forKey: .resetMinute) ?? d.resetMinute,
             timeZone: try c.decodeIfPresent(String.self, forKey: .timeZone) ?? d.timeZone,
             refreshInterval: try c.decodeIfPresent(TimeInterval.self, forKey: .refreshInterval) ?? d.refreshInterval,
+            activeAccount: try c.decodeIfPresent(UsageAccount.self, forKey: .activeAccount) ?? d.activeAccount,
             provider: try c.decodeIfPresent(ProviderPreference.self, forKey: .provider) ?? d.provider,
             workHours: try c.decodeIfPresent(WorkHours.self, forKey: .workHours) ?? d.workHours,
             menuBarStyle: try c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle) ?? d.menuBarStyle,

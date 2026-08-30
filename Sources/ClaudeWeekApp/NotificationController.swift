@@ -8,8 +8,8 @@ import ClaudeWeekCore
 /// с системой — разрешение, отправка, память о сказанном на диске.
 ///
 /// Всё, что связано с уведомлениями, идёт через один экземпляр: и панель, и
-/// окно настроек смотрят на его состояние, а лог сказанного существует в
-/// единственном числе — две копии разошлись бы и объявили один порог дважды.
+/// окно настроек смотрят на его состояние. Логи сервисов раздельны, но владеет
+/// ими один контроллер — две копии разошлись бы и объявили порог дважды.
 @MainActor
 @Observable
 final class NotificationController {
@@ -29,17 +29,25 @@ final class NotificationController {
     private let center: UNUserNotificationCenter?
     private let delegate = BannerDelegate()
     private let logURL: URL
+    private let codexLogURL: URL
     private var log: AlertLog
+    private var codexLog: AlertLog
     /// Каким контроллер показывает себя настройкам. Совпадает с `isAvailable`
     /// везде, кроме отрисовки картинок для документации: `--screenshot` идёт
     /// из отладочного бинаря, и вкладка на снимке иначе объясняла бы, почему
     /// уведомления недоступны, — при том что у собранного приложения они есть.
     private let bundled: Bool
 
-    init(logURL: URL = Store.alertsURL, bundled: Bool = NotificationController.isAvailable) {
+    init(
+        logURL: URL = Store.alertsURL,
+        codexLogURL: URL = Store.codexAlertsURL,
+        bundled: Bool = NotificationController.isAvailable
+    ) {
         self.logURL = logURL
+        self.codexLogURL = codexLogURL
         self.bundled = bundled
         log = Store.loadAlerts(from: logURL)
+        codexLog = Store.loadAlerts(from: codexLogURL)
         // Центр спрашиваем только у настоящего бандла, чем бы ни было `bundled`:
         // без Info.plist обращение к нему роняет процесс.
         center = NotificationController.isAvailable ? .current() : nil
@@ -89,16 +97,23 @@ final class NotificationController {
     func consider(_ snapshot: UsageSnapshot, config: Config, now: Date = Date()) {
         guard center != nil else { return }
 
-        var updated = log
+        let account = config.activeAccount
+        let old = account == .codex ? codexLog : log
+        var updated = old
         let alerts = AlertPlanner.alerts(
             for: snapshot, config: config.notifications, log: &updated, now: now
         )
         // Лог меняется и без единого баннера — на смене окна лимита, — и
         // записать это надо тоже: иначе после перезапуска программа объявит
         // прошлонедельные пороги как сегодняшние.
-        if updated != log {
-            log = updated
-            save()
+        if updated != old {
+            if account == .codex {
+                codexLog = updated
+                save(codexLog, to: codexLogURL)
+            } else {
+                log = updated
+                save(log, to: logURL)
+            }
         }
 
         for alert in alerts {
@@ -179,13 +194,14 @@ final class NotificationController {
     private func send(_ alert: LimitAlert, config: Config, now: Date) {
         guard let center else { return }
 
-        let text = alert.message(now: now)
+        let text = alert.message(now: now, lang: config.strings.lang)
         let content = UNMutableNotificationContent()
         content.title = text.title
+        content.subtitle = config.activeAccount.title(config.strings.lang)
         content.body = text.body
         // Своя нить на каждый лимит: неделя и сессия копятся в Центре
         // уведомлений двумя стопками, а не вперемешку.
-        content.threadIdentifier = alert.kind.rawValue
+        content.threadIdentifier = "\(config.activeAccount.rawValue)-\(alert.kind.rawValue)"
         if config.notifications.sound { content.sound = .default }
 
         if let picture = AlertArtwork.png(
@@ -202,7 +218,12 @@ final class NotificationController {
         // Идентификатор собран из повода: пришедший дважды один и тот же
         // порог заменит прежний баннер, а не ляжет вторым. По-настоящему это
         // случается только с примером из настроек — остальное отсекают правила.
-        let id = "\(alert.kind.rawValue)-\(Int(alert.threshold))-\(Int(alert.resetsAt.timeIntervalSince1970))"
+        let id = [
+            config.activeAccount.rawValue,
+            alert.kind.rawValue,
+            String(Int(alert.threshold)),
+            String(Int(alert.resetsAt.timeIntervalSince1970)),
+        ].joined(separator: "-")
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
 
         Task {
@@ -230,8 +251,12 @@ final class NotificationController {
     }
 
     private func save() {
+        save(log, to: logURL)
+    }
+
+    private func save(_ value: AlertLog, to url: URL) {
         do {
-            try Store.saveAlerts(log, to: logURL)
+            try Store.saveAlerts(value, to: url)
         } catch {
             Log.warn("не сохранил историю уведомлений: \(error)")
         }
