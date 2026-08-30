@@ -11,7 +11,8 @@ let package = Package(
 
         .executableTarget(
             name: "ClaudeWeekApp",
-            dependencies: ["ClaudeWeekCore"]
+            dependencies: ["ClaudeWeekCore"],
+            resources: [.process("Assets")]
         ),
 
         // XCTest и swift-testing без Xcode недоступны, поэтому проверки —

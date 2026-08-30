@@ -12,6 +12,12 @@ final class StatusItemController: NSObject {
     /// у AppKit-частей нет окружения SwiftUI, но конфиг у них общий.
     private var s: L10n { model.strings }
     private var provider: any UsageProvider
+    /// Снимок каждого аккаунта живёт отдельно: переключение не должно на
+    /// мгновение подписывать цифры Claude именем Codex и наоборот.
+    private var snapshots: [UsageAccount: UsageSnapshot] = [:]
+    /// Ответ старого провайдера может прийти уже после переключения аккаунта.
+    /// Поколение делает такой ответ безвредным, не отменяя сетевой запрос.
+    private var refreshGeneration = 0
     private let update = UpdateController()
     private let notifications = NotificationController()
 
@@ -38,7 +44,7 @@ final class StatusItemController: NSObject {
     init(config: Config = ConfigStore.load(), configURL: URL = ConfigStore.fileURL) {
         self.configURL = configURL
         model = PanelModel(config: config)
-        provider = ResolvingProvider(config: config)
+        provider = Self.makeProvider(config: config)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -67,8 +73,15 @@ final class StatusItemController: NSObject {
     /// секунду-другую, и всё это время строка меню иначе висела бы пустой.
     /// Возраст подписывает сама модель — правило свежести одно на всех.
     private func restoreFromCache() {
-        guard let cache = Store.loadCache(), cache.isFresh(at: Date()) else { return }
-        let snapshot = cache.snapshot(config: model.config)
+        let now = Date()
+        if let cache = Store.loadCache(), cache.isFresh(at: now), cache.source != .codex {
+            snapshots[.claude] = cache.snapshot(config: model.config)
+        }
+        if let cache = Store.loadCache(from: Store.codexCacheURL),
+           cache.isFresh(at: now), cache.source == .codex {
+            snapshots[.codex] = cache.snapshot(config: model.config)
+        }
+        guard let snapshot = snapshots[model.config.activeAccount] else { return }
         model.apply(snapshot)
         // Кеш — такой же повод сказать про лимит, как свежий ответ: машину
         // перезагрузили посреди недели, и до первого ответа сервера человек
@@ -102,6 +115,7 @@ final class StatusItemController: NSObject {
                 model: model,
                 update: update,
                 onRefresh: { [weak self] in self?.refresh() },
+                onAccountChange: { [weak self] account in self?.selectAccount(account) },
                 onSettings: { [weak self] in self?.openSettings() },
                 onQuit: { NSApp.terminate(nil) }
             )
@@ -121,8 +135,9 @@ final class StatusItemController: NSObject {
 
         button.image = menuBarImage(palette: model.config.appearance.theme.palette)
         // Без текстового заголовка кнопку нечего озвучивать — даём подпись сами.
-        button.setAccessibilityLabel(s.pick("ClaudeWeek — потрачено \(model.menuBarTitle)",
-                                            "ClaudeWeek — \(model.menuBarTitle) spent"))
+        let account = model.config.activeAccount.title(s.lang)
+        button.setAccessibilityLabel(s.pick("ClaudeWeek, \(account) — потрачено \(model.menuBarTitle)",
+                                            "ClaudeWeek, \(account) — \(model.menuBarTitle) spent"))
         button.toolTip = tooltip
     }
 
@@ -174,7 +189,9 @@ final class StatusItemController: NSObject {
         var lines = [s.pick("Неделя — \(used) из лимита", "Week — \(used) of the limit")]
         if let session = model.session {
             let spent = Formatting.percent(session.usedPercent)
-            lines.append(s.pick("Сессия 5 ч — \(spent) из лимита", "5-hour session — \(spent) of the limit"))
+            let window = Formatting.limitWindowSpoken(session.windowDurationMinutes, lang: s.lang)
+            lines.append(s.pick("\(window) — \(spent) из лимита",
+                                "\(window) — \(spent) of the limit"))
         }
         let plan = Formatting.percent(metrics.planNowPercent)
         lines.append(s.pick("План на сейчас — \(plan)", "Plan for now — \(plan)"))
@@ -213,6 +230,44 @@ final class StatusItemController: NSObject {
         model.now = Date()
         model.expandsWeek = false
         model.showsModels = false
+    }
+
+    /// Меняет источник панели целиком. Предыдущий снимок запоминаем, чтобы
+    /// обратный щелчок был мгновенным, а отсутствующие данные не подменяем
+    /// цифрами другого аккаунта даже на время запуска нового запроса.
+    private func selectAccount(_ account: UsageAccount) {
+        let previous = model.config.activeAccount
+        guard account != previous else { return }
+
+        if let snapshot = model.snapshot {
+            snapshots[previous] = snapshot
+        }
+
+        refreshGeneration += 1
+        model.isRefreshing = false
+        model.expandsWeek = false
+        model.showsModels = false
+
+        var config = model.config
+        config.activeAccount = account
+        model.config = config
+        provider = Self.makeProvider(config: config)
+
+        let now = Date()
+        if let snapshot = snapshots[account], snapshot.window.contains(now) {
+            model.apply(snapshot, at: now)
+        } else {
+            snapshots[account] = nil
+            model.snapshot = nil
+            model.status = .loading
+            model.now = now
+        }
+
+        settings?.adopt(config)
+        queueConfigWrite(config)
+        render()
+        scheduleResetRefresh()
+        refresh()
     }
 
     /// Три группы: что сделать сейчас, как программа заведена, справка и
@@ -281,7 +336,11 @@ final class StatusItemController: NSObject {
         dropdown.pin(from: button)
     }
 
-    private func applyFromSettings(_ config: Config) {
+    private func applyFromSettings(_ incoming: Config) {
+        // Окно настроек не управляет аккаунтом. Пока оно открыто, переключатель
+        // панели мог измениться, поэтому не позволяем старой копии вернуть его.
+        var config = incoming
+        config.activeAccount = model.config.activeAccount
         let providerChanged = config.provider != model.config.provider
             || config.timeZone != model.config.timeZone
             || config.weekStart != model.config.weekStart
@@ -301,8 +360,23 @@ final class StatusItemController: NSObject {
         render()
         if notificationsEnabled { notifications.apply(config.notifications) }
 
-        // Ползунок шлёт по десятку изменений в секунду — на диск ходим
-        // с задержкой, применяя к панели каждое сразу.
+        queueConfigWrite(config)
+
+        guard providerChanged else {
+            if intervalChanged { startTimers() }
+            return
+        }
+        refreshGeneration += 1
+        model.isRefreshing = false
+        provider = Self.makeProvider(config: config)
+        startTimers()
+        refresh()
+    }
+
+    /// Ползунок шлёт по десятку изменений в секунду — на диск ходим с
+    /// задержкой, применяя к панели каждое сразу. Тем же путём сохраняется и
+    /// выбранный аккаунт, поэтому конкурирующих записей конфига нет.
+    private func queueConfigWrite(_ config: Config) {
         saveTask?.cancel()
         pendingConfigWrite = config
         saveTask = Task { [weak self] in
@@ -310,14 +384,6 @@ final class StatusItemController: NSObject {
             guard !Task.isCancelled else { return }
             self?.flushConfigWrite()
         }
-
-        guard providerChanged else {
-            if intervalChanged { startTimers() }
-            return
-        }
-        provider = ResolvingProvider(config: config)
-        startTimers()
-        refresh()
     }
 
     /// Пишет отложенную правку немедленно, если она ещё не легла на диск.
@@ -351,6 +417,8 @@ final class StatusItemController: NSObject {
             Log.warn("не смог начать счёт заново: \(error)")
             return
         }
+        snapshots[.claude] = nil
+        guard model.config.activeAccount == .claude else { return }
         model.snapshot = nil
         render()
         refresh()
@@ -378,7 +446,7 @@ final class StatusItemController: NSObject {
         let alert = NSAlert()
         alert.messageText = "ClaudeWeek \(ClaudeWeek.version)"
         alert.informativeText = """
-        Недельный лимит Claude Code одним взглядом.
+        Лимиты Claude Code и Codex одним взглядом.
         Конфигурация: \(configURL.path)
         """
         alert.runModal()
@@ -512,13 +580,31 @@ final class StatusItemController: NSObject {
         guard config != model.config else { return }
         Log.info("конфиг изменился, применяю")
         let notificationsEnabled = config.notifications.enabled && !model.config.notifications.enabled
+        let previousAccount = model.config.activeAccount
+        if let snapshot = model.snapshot {
+            snapshots[previousAccount] = snapshot
+        }
         model.config = config
+        if config.activeAccount != previousAccount {
+            let now = Date()
+            if let snapshot = snapshots[config.activeAccount], snapshot.window.contains(now) {
+                model.apply(snapshot, at: now)
+            } else {
+                model.snapshot = nil
+                model.status = .loading
+                model.now = now
+            }
+        }
         update.strings = config.strings
         if notificationsEnabled { notifications.apply(config.notifications) }
         settings?.adopt(config)
         applyAppearance()
-        provider = ResolvingProvider(config: config)
+        refreshGeneration += 1
+        model.isRefreshing = false
+        provider = Self.makeProvider(config: config)
         startTimers()
+        render()
+        scheduleResetRefresh()
         refresh()
     }
 
@@ -528,22 +614,45 @@ final class StatusItemController: NSObject {
         guard !model.isRefreshing else { return }
         model.isRefreshing = true
         let provider = provider
+        let account = model.config.activeAccount
+        let generation = refreshGeneration
 
         Task { [weak self] in
+            let result: Result<UsageSnapshot, Error>
             do {
-                let snapshot = try await provider.fetch()
-                self?.model.apply(snapshot)
-                if let self { notifications.consider(snapshot, config: model.config) }
+                result = .success(try await provider.fetch())
             } catch {
-                Log.warn("не смог обновить данные: \(error)")
-                self?.model.apply(error: error)
+                result = .failure(error)
             }
-            self?.model.isRefreshing = false
-            self?.render()
+
+            guard let self,
+                  generation == refreshGeneration,
+                  account == model.config.activeAccount else { return }
+
+            switch result {
+            case .success(let snapshot):
+                snapshots[account] = snapshot
+                model.apply(snapshot)
+                notifications.consider(snapshot, config: model.config)
+            case .failure(let error):
+                Log.warn("не смог обновить данные: \(error)")
+                model.apply(error: error)
+            }
+            model.isRefreshing = false
+            render()
             // Окно снимка могло смениться — переставляем будильник под него.
             // Отсюда же он ставится и в первый раз: `init` заканчивается
             // обновлением, а до его ответа окна может не быть вовсе.
-            self?.scheduleResetRefresh()
+            scheduleResetRefresh()
+        }
+    }
+
+    private static func makeProvider(config: Config) -> any UsageProvider {
+        switch config.activeAccount {
+        case .claude:
+            return ResolvingProvider(config: config)
+        case .codex:
+            return CodexProvider(config: config)
         }
     }
 }

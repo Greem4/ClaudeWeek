@@ -23,8 +23,15 @@ LocalProvider  ────┘            │                                   
    │                            ▼
 ~/.claude/projects/*.jsonl   cache.json (кеш + подобранный бюджет + сессия)
                              state.json (отсечка счёта + метка аккаунта)
-                                ▲
-config.json ────────────────────┴──► StatusItemController ◄──► SettingsView (окно настроек)
+
+авторизация Codex ─► codex app-server ─► CodexProvider ─► UsageSnapshot
+                                              │
+                                              ▼
+                                      codex-cache.json
+
+config.json ─────────────────────► StatusItemController ◄──► SettingsView (окно настроек)
+                                           │
+                                           └── AccountPicker выбирает ветку
 ```
 
 Правило разделения: **`ClaudeWeekCore` не импортирует ни AppKit, ни SwiftUI.**
@@ -46,15 +53,16 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 
 | Файл | Отвечает за | Ключевые типы |
 |---|---|---|
-| `Config.swift` | все настройки, чтение и запись `config.json`, починка недопустимых значений | `Config`, `AppearanceConfig`, `ThemeKind`, `Thresholds`, `NotificationsConfig`, `ConfigStore` |
+| `Config.swift` | все настройки, выбранный сервис, чтение и запись `config.json`, починка недопустимых значений | `Config`, `UsageAccount`, `AppearanceConfig`, `ThemeKind`, `Thresholds`, `NotificationsConfig`, `ConfigStore` |
 | `WorkHours.swift` | рабочий день: сколько рабочего времени в отрезке | `WorkHours` |
 | `WeekWindow.swift` | границы недельного окна, нарезка на календарные сутки, план на момент и на строку | `WeekWindow`, `WeekDaySlot` |
 | `Snapshot.swift` | что показываем: итог, дни, сессия, производные метрики | `UsageSnapshot`, `DayUsage`, `SessionUsage`, `UsageMetrics`, `LimitState` |
 | `UsageProvider.swift` | протокол источника и типы ошибок | `UsageProvider`, `UsageError` |
 | `OfficialProvider.swift` | запрос к `/api/oauth/usage`, разбор ответа, паузы после отказов | `OfficialProvider`, `OfficialUsage`, `UsageTransport` |
+| `CodexProvider.swift` | JSON-RPC с официальным `codex app-server`, короткое и недельное окна, дневная токенная форма, паузы после отказов | `CodexProvider`, `CodexAppServerTransport`, `CodexRateLimits` |
 | `LocalProvider.swift` | расчёт по транскриптам, цены моделей, инкрементальное чтение файлов | `LocalProvider`, `LocalUsage`, `ModelPricing` |
 | `ResolvingProvider.swift` | выбор источника, падение на запасной, калибровка, запись кеша, сверка аккаунта | `ResolvingProvider` |
-| `Cache.swift` | `cache.json`, индекс прочитанных транскриптов, лог сказанного уведомлениями и состояние счёта (`state.json`) | `CachedUsage`, `UsageIndex`, `CountingState`, `Store` |
+| `Cache.swift` | раздельные кеши Claude/Codex, индекс прочитанных транскриптов, логи уведомлений и состояние счёта (`state.json`) | `CachedUsage`, `UsageIndex`, `CountingState`, `Store` |
 | `Alerts.swift` | уведомления: пороги, правила «когда сказать» и слова баннера | `NotificationsConfig`, `LimitNotifications`, `LimitAlert`, `AlertLog`, `AlertPlanner` |
 | `Keychain.swift` | чтение OAuth-кредов Claude Code и метка аккаунта, по которой видно смену | `KeychainCredentials`, `OAuthCredentials`, `CredentialsSource` |
 | `Formatting.swift` | «3 дн 6 ч», проценты, дни недели, часы | `Formatting` |
@@ -68,6 +76,8 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 
 - **«Откуда берётся 64 %»** → `OfficialProvider.usage(at:)`, поле
   `seven_day.utilization`; форма недели — `shapeByDay`.
+- **«Откуда берутся проценты Codex»** → `CodexProvider.selectLimits`, методы
+  app-server `account/rateLimits/read` и `account/usage/read`.
 - **«Почему полосы такие»** → `WeekWindow.planPercent(forDay:)`
   и `UsageSnapshot.make(...)`.
 - **«Почему суток восемь, а строк семь»** → `WeekWindow.bounds(...)`: сутки
@@ -162,6 +172,14 @@ SwiftUI` — значит, расчёт просочился в UI или нао
    WorkHours(start: 10, end: 18)`), а не через `WorkHours.default`: поменяй
    там — и разъедутся ожидания полусотни тестов плана, которые вообще не про
    заводской день.
+17. **Аккаунты не делят снимок и побочные файлы.** В памяти ключом служит
+   `UsageAccount`, на диске у Codex свои `codex-cache.json` и
+   `codex-alerts.json`. Запоздалый ответ старого провайдера отсекает поколение
+   обновления в `StatusItemController`.
+18. **Codex `primary` не называют неделей только потому, что оно единственное.**
+   Недельным считается `secondary` либо окно длительностью не меньше шести
+   суток. Если сервер сообщил лишь 15 минут, панель показывает ошибку, а не
+   ложный «недельный лимит».
 
 ---
 
@@ -174,6 +192,7 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 | `PanelModel.swift` | состояние для SwiftUI: снимок, статус, текущий момент, производные подписи |
 | `DropdownPanel.swift` | окно панели: форма как у системного меню, материал, обводка, позиция под строкой меню своего монитора, закрытие по клику мимо, закрепление на время настроек |
 | `PopoverView.swift` | вёрстка панели: заголовок, сессия, ряд дней (семь строк или одни текущие сутки — `appearance.panelLayout`) либо, при выключенном `appearance.showsPlan`, одна полоса недели вместо ряда, футер |
+| `AccountPicker.swift` | переключатель Claude/Codex в заголовке: знаки сервисов из ресурсного бандла (`Sources/ClaudeWeekApp/Assets`) — шаблонные PNG без рамок и подложек, выделение — цвет знака (`iconColor`). Выбор поступает из `Config.activeAccount`, собственного расходящегося состояния нет |
 | `DayBar.swift` | одна двухцветная полоса и строка дня; в компактном виде строка ещё и раскрывает неделю кликом (`DayRowTap`), а цифры справа открывают разбивку по моделям (`valueTap`) |
 | `SessionRow.swift` | полоса пятичасовой сессии (`LimitBar` — общая с недельной полосой ниже); её процент нажимается так же, как цифры дня |
 | `WeekRow.swift` | недельный итог одной `LimitBar` без плановой зоны — на месте `DayBar`-ряда, когда `appearance.showsPlan == false` |
@@ -191,7 +210,7 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 | `AlertArtwork.swift` | картинка баннера: дуга для сессии, красное число для недели |
 | `Screenshot.swift` | `--screenshot`: панель во всех темах, она же в разбивке по моделям, вкладка уведомлений, иконка в PNG |
 | `AppIcon.swift` | `--icon`: кольцо недели по порогам, `.iconset` для сборки бандла |
-| `CLI.swift` | `--json`, `--calibrate` и `--update` |
+| `CLI.swift` | `--json` для выбранного `--account`, `--calibrate` и `--update` |
 
 ### Потоки данных
 
@@ -201,6 +220,12 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 кружок желтеет, не было — краснеет пустым контуром. Причина остаётся в логе,
 куда её пишет сам `refresh()`; панель называет только состояние — «данные
 online», «данные offline», «данные недоступны», «данные загружаются».
+
+**Переключение сервиса.** `AccountPicker` → `selectAccount(_:)`: текущий
+снимок кладётся в словарь по `UsageAccount`, провайдер меняется между
+`ResolvingProvider` и `CodexProvider`, а из кеша другого сервиса ничего не
+подставляется. `refreshGeneration` не даёт ответу прежней ветки примениться
+после щелчка.
 
 **Свежесть — одно правило на всех.** Решает `PanelModel.apply(_:at:)`: снимок
 старше `freshFor` (2 минуты) переводит статус в `.stale`. Так подписывается и
@@ -237,7 +262,9 @@ online», «данные offline», «данные недоступны», «д�
 с порогами, помнит через `AlertLog`, о чём уже говорили, и отдаёт список
 поводов — обычно пустой. Контроллеру остаётся системная часть: разрешение
 macOS, сборка `UNNotificationRequest` с картинкой от `AlertArtwork` и запись
-лога в `alerts.json`.
+лога в `alerts.json` или `codex-alerts.json`. Подзаголовок баннера называет
+сервис, а идентификатор содержит аккаунт, поэтому два одинаковых порога не
+заменяют друг друга в Центре уведомлений.
 
 Правила живут в ядре именно затем, чтобы их гоняли тесты: «один порог — один
 раз за окно», «только на ухудшении», остывание. Уведомление, показанное дважды
@@ -413,7 +440,7 @@ swift build                     # оба таргета
 # объявления: ключи kSecUseAuthenticationUI в Keychain.swift оставлены
 # намеренно, замены им нет, и группа понижена обратно до предупреждения.
 swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
-swift run ClaudeWeekTests       # 477 проверок, без сети и без UI
+swift run ClaudeWeekTests       # 528 проверок, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/signing-cert.sh       # один раз: постоянный сертификат подписи
 ./scripts/make-app.sh           # собрать dist/ClaudeWeek.app
@@ -579,6 +606,11 @@ Intel — собирает у себя, `install.sh` соберёт нативн
 - **`--screenshot` рисует выдуманный момент**, а не текущий: демо-снимок
   подаётся через `model.apply(_:at:)` вместе со своим «сейчас». Забыть `at:` —
   значит получить на картинке для README подпись «данные 1 дн 15 ч назад».
+- **Подписка на `didResizeNotification` — без очереди.** `queue: .main`
+  откладывает блок до следующего прохода цикла, и панель успевает отрисоваться
+  новой высоты по старому месту: полосы видно выше их места, следующим кадром
+  они съезжают вниз. Заметнее всего на смене содержимого — неделя ↔ разбивка
+  по моделям. Кромку правит `pinToAnchor`, и звать его надо синхронно.
 - **Версия живёт в `Version.swift`.** В `Info.plist` бандла её кладёт
   `make-app.sh`; править её во втором месте руками не нужно.
 
@@ -590,7 +622,9 @@ Intel — собирает у себя, `install.sh` соберёт нативн
 |---|---|
 | `~/.config/claude-week/config.json` | настройки (пишет и окно настроек, и вы сами) |
 | `~/.config/claude-week/cache.json` | последний снимок, подобранный бюджет, момент сброса, сессия |
+| `~/.config/claude-week/codex-cache.json` | последний снимок Codex: проценты, границы окон и дневная форма |
 | `~/.config/claude-week/alerts.json` | о каких порогах уведомления уже говорили: окна лимитов, последние объявленные проценты, момент последнего баннера. Удаление безопасно — вернётся одно повторное уведомление |
+| `~/.config/claude-week/codex-alerts.json` | то же для Codex; хранится отдельно, чтобы переключение не повторяло и не подавляло пороги Claude |
 | `~/.config/claude-week/state.json` | с какого момента считается локальный расход и на каком аккаунте: `countFrom` и метка организации. Отдельно от кеша намеренно — тот перезаписывается каждым обновлением, а отсечка обязана его пережить. Удаление вернёт в счёт расход прежнего аккаунта |
 | `~/.config/claude-week/index.json` | индекс прочитанных транскриптов (инкрементальное чтение); схема 2 — записи хранят семейство модели и токены, из них считается разбивка. Индекс прошлой схемы не переносится, а отстраивается заново: версия проверяется до разбора записей |
 | `~/.claude/projects/**/*.jsonl` | транскрипты Claude Code — вход локального источника |
@@ -598,3 +632,4 @@ Intel — собирает у себя, `install.sh` соберёт нативн
 | `~/Library/LaunchAgents/com.greem4.claudeweek.plist` | автозапуск |
 | `~/Applications/ClaudeWeek.app` | установленная копия |
 | Keychain `Claude Code-credentials` | токен Claude Code (только читаем) |
+| авторизация Codex CLI / app | читается самим `codex app-server`; ClaudeWeek токен не открывает и не сохраняет |

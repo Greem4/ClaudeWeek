@@ -6,11 +6,12 @@ import ClaudeWeekCore
 /// даже когда калибровки ещё нет.
 enum CLI {
     static let usage = """
-    ClaudeWeek \(ClaudeWeek.version) — недельный лимит Claude Code в строке меню.
+    ClaudeWeek \(ClaudeWeek.version) — лимиты Claude Code и Codex в строке меню.
 
     Использование:
       ClaudeWeek                 запустить приложение в строке меню
       ClaudeWeek --json          напечатать состояние недели в JSON и выйти
+      ClaudeWeek --account=X     сервис: claude или codex
       ClaudeWeek --provider=X    источник данных: official, local или auto
       ClaudeWeek --config=ПУТЬ   свой файл конфигурации
       ClaudeWeek --calibrate=N   подогнать локальную оценку под официальные N %
@@ -26,7 +27,7 @@ enum CLI {
     /// Флаги без значения и префиксы флагов со значением. По ним же отличаем
     /// опечатку от каталога у `--icon` и `--screenshot`: те не начинаются с «-».
     static let flags = ["--help", "-h", "--verbose", "--json", "--icon", "--screenshot", "--update"]
-    static let flagPrefixes = ["--config=", "--provider=", "--calibrate=", "--lang="]
+    static let flagPrefixes = ["--config=", "--account=", "--provider=", "--calibrate=", "--lang="]
 
     static func isKnown(_ argument: String) -> Bool {
         flags.contains(argument) || flagPrefixes.contains { argument.hasPrefix($0) }
@@ -51,6 +52,7 @@ enum CLI {
     }
 
     struct Output: Encodable {
+        let account: String
         let source: String
         let isEstimate: Bool
         let generatedAt: Date
@@ -59,9 +61,9 @@ enum CLI {
         /// Пятичасовой лимит; ключа нет, когда его не сообщили или окно уже
         /// истекло — как и в панели, просроченный процент не показываем.
         let session: Session?
-        let cost: Cost
+        let cost: Cost?
         let days: [Day]
-        let scan: Scan
+        let scan: Scan?
         let note: String?
 
         struct Window: Encodable {
@@ -86,6 +88,7 @@ enum CLI {
 
         struct Session: Encodable {
             let usedPercent: Double
+            let windowDurationMinutes: Int
             let resetsAt: Date
             let timeLeft: String
             let exhausted: Bool
@@ -249,6 +252,9 @@ enum CLI {
         if snapshot?.isEstimate == true {
             return "локальная оценка: официальный источник недоступен"
         }
+        if snapshot?.source == .codex, snapshot?.shapeIsEstimate == true {
+            return "итог Codex официальный; разбивка по суткам восстановлена по дневным токенам"
+        }
         return snapshot?.shapeIsEstimate == true
             ? "итог официальный; разбивка по суткам восстановлена по транскриптам"
             : nil
@@ -258,13 +264,18 @@ enum CLI {
         let now = Date()
         let started = Date()
 
-        // Снимок берём тем же путём, что и приложение: официальный источник
-        // с падением на локальную оценку. Иначе `--json` показывал бы не то,
-        // что видно в строке меню.
+        // Снимок берём тем же путём, что и приложение. Для Claude это
+        // официальный источник с падением на локальную оценку, для Codex —
+        // app-server. Иначе `--json` показывал бы не то, что видно в панели.
         var snapshot: UsageSnapshot?
         var failure: Error?
         do {
-            snapshot = try await ResolvingProvider(config: config).fetch()
+            switch config.activeAccount {
+            case .claude:
+                snapshot = try await ResolvingProvider(config: config).fetch()
+            case .codex:
+                snapshot = try await CodexProvider(config: config).fetch()
+            }
         } catch {
             failure = error
         }
@@ -272,21 +283,29 @@ enum CLI {
 
         // Окно официального источника, а без него — рассчитанное по конфигу.
         let window = snapshot?.window ?? WeekWindow(containing: now, config: config)
-        let local = LocalProvider(config: config)
-
-        // Локальный скан нужен и при официальном источнике: он даёт стоимость
-        // и диагностику обхода, которых в ответе API нет.
-        let usage: LocalUsage
-        do {
-            usage = try await local.scan(window: window, now: now)
-        } catch {
-            FileHandle.standardError.write(Data("не смог прочитать транскрипты: \(error)\n".utf8))
-            return 1
+        let usage: LocalUsage?
+        let budget: Double?
+        if config.activeAccount == .claude {
+            let local = LocalProvider(config: config)
+            do {
+                let scanned = try await local.scan(window: window, now: now)
+                usage = scanned
+                // Бюджет мог быть подобран автоматически по официальному
+                // проценту — он лежит в кеше, а не в конфиге.
+                budget = try? await local.budget(
+                    for: scanned,
+                    override: Store.loadCache()?.weeklyBudget
+                )
+            } catch {
+                FileHandle.standardError.write(Data("не смог прочитать транскрипты: \(error)\n".utf8))
+                return 1
+            }
+        } else {
+            // Транскрипты Claude ничего не говорят о расходе Codex. Нули здесь
+            // выглядели бы измерением, поэтому стоимость и скан не выводятся.
+            usage = nil
+            budget = nil
         }
-
-        // Бюджет мог быть подобран автоматически по официальному проценту —
-        // он лежит в кеше, а не в конфиге.
-        let budget = try? await local.budget(for: usage, override: Store.loadCache()?.weeklyBudget)
         var percent: Output.Percent?
 
         if let snapshot {
@@ -308,6 +327,7 @@ enum CLI {
             .map {
                 Output.Session(
                     usedPercent: $0.usedPercent,
+                    windowDurationMinutes: $0.windowDurationMinutes,
                     resetsAt: $0.resetsAt,
                     timeLeft: Formatting.duration($0.timeLeft(from: now)),
                     exhausted: $0.isExhausted
@@ -335,13 +355,16 @@ enum CLI {
                 start: row.start,
                 planPercent: row.plan,
                 usedPercent: row.used,
-                cost: row.index < usage.costByDay.count ? usage.costByDay[row.index] : nil,
+                cost: usage.flatMap {
+                    row.index < $0.costByDay.count ? $0.costByDay[row.index] : nil
+                },
                 partial: row.partial
             )
         }
 
         let output = Output(
-            source: (snapshot?.source ?? .local).rawValue,
+            account: config.activeAccount.rawValue,
+            source: (snapshot?.source ?? (config.activeAccount == .codex ? .codex : .local)).rawValue,
             isEstimate: snapshot?.isEstimate ?? true,
             generatedAt: now,
             window: Output.Window(
@@ -353,14 +376,18 @@ enum CLI {
             ),
             percent: percent,
             session: session,
-            cost: Output.Cost(total: usage.totalCost, weeklyBudget: budget, currency: "USD"),
+            cost: usage.map {
+                Output.Cost(total: $0.totalCost, weeklyBudget: budget, currency: "USD")
+            },
             days: days,
-            scan: Output.Scan(
-                filesRead: usage.filesRead,
-                records: usage.recordCount,
-                duplicatesSkipped: usage.duplicatesSkipped,
-                elapsedSeconds: elapsed
-            ),
+            scan: usage.map {
+                Output.Scan(
+                    filesRead: $0.filesRead,
+                    records: $0.recordCount,
+                    duplicatesSkipped: $0.duplicatesSkipped,
+                    elapsedSeconds: elapsed
+                )
+            },
             note: note(percent: percent, snapshot: snapshot, failure: failure)
         )
 
