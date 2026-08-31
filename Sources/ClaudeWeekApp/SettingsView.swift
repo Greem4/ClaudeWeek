@@ -924,24 +924,6 @@ private struct AccessSettings: View {
                 }
 
                 Text(s.pick(
-                    """
-                    Второй аккаунт — это отдельный конфиг-дом Claude Code. \
-                    Запустите Claude Code с CLAUDE_CONFIG_DIR, указывающим на путь выше, \
-                    и войдите там своим вторым аккаунтом: переключатель в заголовке \
-                    панели появится сам, как только каталог возникнет. Путь меняется \
-                    ключом accounts в config.json.
-                    """,
-                    """
-                    The second account is a separate Claude Code config home. \
-                    Start Claude Code with CLAUDE_CONFIG_DIR pointing at the path above \
-                    and sign in there with your second account: the switch in the panel \
-                    header appears on its own once the directory exists. The path is set \
-                    by the accounts key in config.json.
-                    """
-                ))
-                .settingsHint()
-
-                Text(s.pick(
                     "У каждого аккаунта свой лимит, свой снимок и своя отсечка счёта — переключатель меняет их все разом.",
                     "Each account has its own limit, its own snapshot and its own counting cut-off — the switch changes all of them at once."
                 ))
