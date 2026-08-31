@@ -260,7 +260,7 @@ Keychain с той, на которой ведётся счёт, и при ра�
 
 ```bash
 swift build                  # обе цели
-swift run ClaudeWeekTests    # 534 проверки: без сети, без UI, свой раннер
+swift run ClaudeWeekTests    # 538 проверок: без сети, без UI, свой раннер
 ./scripts/make-app.sh        # dist/ClaudeWeek.app — бандл, ничего не устанавливая
 ARCH=arm64 ./scripts/make-dmg.sh    # dist/ClaudeWeek-<версия>-arm64.dmg
 ```

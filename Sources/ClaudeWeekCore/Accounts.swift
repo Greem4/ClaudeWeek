@@ -59,6 +59,18 @@ public struct AccountLocation: Sendable, Equatable {
     public var countingStateURL: URL { stateFile("state.json") }
     public var indexURL: URL { stateFile("index.json") }
 
+    /// Дом, который Claude Code берёт сам, когда `CLAUDE_CONFIG_DIR` не задан.
+    /// Значим не только как путь: спрашивать про него надо именно без
+    /// переменной — см. `AccountDirectory.read(home:)`.
+    public static var defaultHome: URL {
+        URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude", isDirectory: true)
+    }
+
+    /// Дом стандартный — тот, что достаётся установке Claude Code из коробки.
+    public var isDefaultHome: Bool {
+        home.standardizedFileURL.path == AccountLocation.defaultHome.standardizedFileURL.path
+    }
+
     /// `~` в пути конфига раскрываем сами: путь пишет человек, а `URL` тильду
     /// не понимает и молча заводит каталог с именем «~».
     public static func expand(_ path: String) -> URL {
@@ -150,7 +162,22 @@ public actor AccountDirectory {
         process.executableURL = executable
         process.arguments = ["auth", "status"]
         var environment = ProcessInfo.processInfo.environment
-        environment["CLAUDE_CONFIG_DIR"] = home.path
+        // Переменную ставим только для нестандартного дома, и это не
+        // придирка. `CLAUDE_CONFIG_DIR=~/.claude` — тот же самый путь, что
+        // берётся по умолчанию, — даёт `loggedIn: false`, тогда как без
+        // переменной тот же дом отвечает `true` (проверено на 2.1.251).
+        // Значит ячейку учётных данных выбирает не путь сам по себе, а факт
+        // установки переменной. Ставя её всегда, мы объявляли бы невошедшим
+        // аккаунт, в котором человек сидит прямо сейчас.
+        //
+        // Унаследованное значение при этом обязательно убрать: приложение
+        // могли запустить из оболочки, где оно уже выставлено, — например из
+        // сеанса под вторым аккаунтом.
+        if AccountLocation(account: .primary, home: home).isDefaultHome {
+            environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
+        } else {
+            environment["CLAUDE_CONFIG_DIR"] = home.path
+        }
         process.environment = environment
 
         let pipe = Pipe()
@@ -174,7 +201,9 @@ public actor AccountDirectory {
         process.waitUntilExit()
         timeout.cancel()
 
-        guard process.terminationStatus == 0 else { return .signedOut }
+        // Код возврата не проверяем: у невошедшего аккаунта он единица, но
+        // ответ при этом осмысленный и разбирается тем же путём. Судим по
+        // содержимому, а не по коду.
         return parse(output)
     }
 

@@ -40,6 +40,22 @@ func runAccountTests(_ t: Harness) {
             "запасной файл кредов у каждого аккаунта свой"
         )
 
+        // Стандартный дом надо уметь отличать: про него `claude auth status`
+        // спрашивают БЕЗ CLAUDE_CONFIG_DIR. С переменной, выставленной в тот
+        // же самый путь, он отвечает «не вошли» — ячейку учётных данных
+        // выбирает не путь, а факт установки переменной (проверено на 2.1.251).
+        t.check(primary.isDefaultHome, "~/.claude опознан как стандартный дом")
+        t.check(!secondary.isDefaultHome, "~/.claude-b стандартным не считается")
+        t.equal(
+            AccountLocation.defaultHome.path,
+            NSHomeDirectory() + "/.claude",
+            "стандартный дом — тот, что Claude Code берёт сам"
+        )
+        // Путь с хвостовым слешем — тот же дом: сравнение идёт по
+        // приведённому виду, иначе запись в конфиге решала бы, вошли мы или нет.
+        let slashed = AccountLocation(account: .primary, home: AccountLocation.expand("~/.claude/"))
+        t.check(slashed.isDefaultHome, "хвостовой слеш не делает дом нестандартным")
+
         // Пустой путь не должен превращаться в каталог с именем «~» или в
         // корень: такой дом просто не существует, и переключатель не покажем.
         let empty = AccountLocation(account: .secondary, home: AccountLocation.expand("  "))
