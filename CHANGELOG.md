@@ -16,6 +16,8 @@
 
 ## [Не выпущено]
 
+## [0.2.2] — 2026-08-31
+
 ### Исправлено
 
 - **Обновление больше не оставляет приложение мёртвым.** 0.2.1 из релиза
@@ -458,7 +460,8 @@
 локальной оценкой как запасным вариантом, окно настроек, лицензия MIT, CI и
 образ, собираемый по тегу под Apple Silicon.
 
-[Не выпущено]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.1...HEAD
+[Не выпущено]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.14...v0.2.0
 [0.1.14]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.13...v0.1.14
