@@ -72,7 +72,7 @@ private struct AccountButton: View {
     /// его `iconColor`, поэтому знак живёт в любой теме.
     @ViewBuilder
     private var providerIcon: some View {
-        if let url = Bundle.module.url(forResource: "Claude", withExtension: "png"),
+        if let url = Self.claudeMark,
            let image = NSImage(contentsOf: url) {
             // Шаблонным знак делает сама картинка: SwiftUI на macOS красит
             // `Image(nsImage:)` по `foregroundStyle` только тогда, когда
@@ -89,6 +89,29 @@ private struct AccountButton: View {
                 .frame(width: 13, height: 13)
         }
     }
+
+    /// Где лежит знак. Ищем руками, а не через `Bundle.module`: генерируемый
+    /// SwiftPM аксессор смотрит ровно в два места — корень `.app`, куда
+    /// `make-app.sh` ресурсы не кладёт (в бандле macOS всё живёт под
+    /// `Contents/`), и абсолютный путь в `.build` той машины, где собирали.
+    /// На машине сборщика второй путь есть, и подмены не видно; в образе из
+    /// релиза его нет ни у кого, и `Bundle.module` роняет приложение
+    /// `fatalError`'ом при первой отрисовке панели — ровно так умирала 0.2.1
+    /// сразу после установки, оставляя человека на прежней версии.
+    ///
+    /// Порядок: собранный бандл — `Contents/Resources`; отладочный
+    /// `swift run` — ресурсный бандл SwiftPM рядом с бинарём. Не нашлось ни
+    /// там, ни там — `nil`, и знак заменит вопросительный знак: из-за
+    /// пропавшей картинки приложение падать не должно.
+    private static let claudeMark: URL? = {
+        if let url = Bundle.main.url(forResource: "Claude", withExtension: "png") {
+            return url
+        }
+        let beside = Bundle.main.bundleURL
+            .appendingPathComponent("ClaudeWeek_ClaudeWeekApp.bundle", isDirectory: true)
+            .appendingPathComponent("Claude.png")
+        return FileManager.default.fileExists(atPath: beside.path) ? beside : nil
+    }()
 
     private func template(_ image: NSImage) -> NSImage {
         image.isTemplate = true

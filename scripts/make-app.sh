@@ -67,18 +67,65 @@ fi
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-# Ресурсный бандл SwiftPM со знаком Claude для переключателя аккаунтов. Без
-# него `Bundle.module` в приложении обрывается fatalError'ом ещё до отрисовки
-# панели, поэтому его отсутствие — ошибка сборки, а не пропущенное украшение.
+# Ресурсы SwiftPM (знак Claude для переключателя аккаунтов) кладём поштучно в
+# Contents/Resources, а сам ресурсный бандл в .app не переносим. Причина —
+# 0.2.1: код читал знак через `Bundle.module`, а генерируемый SwiftPM аксессор
+# ищет бандл ровно в двух местах — в корне .app, куда мы ничего не кладём (в
+# бандле macOS всё живёт под Contents/), и по абсолютному пути в .build той
+# машины, где собирали. На машине сборщика второй путь есть, и подмена не
+# видна; в образе из релиза он вёл в /Users/runner/work/… — приложение
+# падало fatalError'ом сразу после обновления. Теперь ресурс лежит там, где
+# его берёт `Bundle.main`, и путь не зависит от того, кто собирал.
 # У универсального бандла срезы кладут одинаковые ресурсы, хватает любого из
 # проходов.
 RES_BUNDLE="$BIN_DIR/ClaudeWeek_ClaudeWeekApp.bundle"
-if [ -d "$RES_BUNDLE" ]; then
-    rm -rf "$APP/Contents/Resources/$(basename "$RES_BUNDLE")"
-    cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
-    echo "==> ресурсы: $(basename "$RES_BUNDLE")"
-else
+if [ ! -d "$RES_BUNDLE" ]; then
     echo "не нашёл ресурсный бандл: $RES_BUNDLE" >&2
+    exit 1
+fi
+
+# Info.plist ресурсного бандла — служебный, приложению он не нужен и затёр бы
+# Info.plist самого .app, окажись он рядом.
+ASSETS=()
+while IFS= read -r asset; do
+    name="$(basename "$asset")"
+    # `[ … ] && continue` здесь нельзя: при несовпадении список вернёт 1, и
+    # `set -e` погасит скрипт на первом же ресурсе, который не Info.plist.
+    if [ "$name" = "Info.plist" ]; then
+        continue
+    fi
+    cp "$asset" "$APP/Contents/Resources/"
+    ASSETS+=("$name")
+done < <(find "$RES_BUNDLE" -type f)
+
+# Проверяет машина, а не человек на слово: до этой проверки сборка убеждалась
+# только в том, что ресурсный бандл есть в .build, — он был на месте всё то
+# время, пока приложение падало. Годность — ресурс читается там, откуда его
+# возьмёт `Bundle.main` у собранного бандла.
+if [ "${#ASSETS[@]}" -eq 0 ]; then
+    echo "в ресурсном бандле нет ни одного ресурса: $RES_BUNDLE" >&2
+    exit 1
+fi
+for asset in "${ASSETS[@]}"; do
+    if [ ! -f "$APP/Contents/Resources/$asset" ]; then
+        echo "ресурс не лёг в бандл: Contents/Resources/$asset" >&2
+        exit 1
+    fi
+done
+echo "==> ресурсы в Contents/Resources: ${ASSETS[*]}"
+
+# `Bundle.module` в приложении запрещён по той же причине: он снова уведёт
+# сборку на путь машины сборщика, а заметит это не тот, кто собирал, — а тот,
+# кто обновился. Ресурсы читаются через `Bundle.main` (см. AccountPicker).
+# Строки-комментарии пропускаем: разбор этих самых грабель написан в коде
+# рядом с заменой, и запрещать себе объяснять причину — перебор.
+MODULE_USES="$(grep -rn "Bundle\.module" "$ROOT/Sources/ClaudeWeekApp" --include="*.swift" \
+    | grep -vE ':[[:space:]]*//' || true)"
+if [ -n "$MODULE_USES" ]; then
+    echo "$MODULE_USES" >&2
+    echo "выше — Bundle.module в приложении: он ищет ресурсы по абсолютному" >&2
+    echo "пути .build машины сборщика и падает у всех остальных." >&2
+    echo "Читайте ресурс через Bundle.main из Contents/Resources." >&2
     exit 1
 fi
 
