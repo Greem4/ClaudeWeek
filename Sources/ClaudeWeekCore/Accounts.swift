@@ -253,24 +253,30 @@ public extension ResolvingProvider {
     /// Откуда берётся токен аккаунта. Отдельно от фабрики, потому что тем же
     /// ответом подписывается отсечка счёта: спрашивать «чей это аккаунт» надо
     /// у того же источника, из которого потом читают токен.
+    ///
+    /// Оба аккаунта ходят одной дорогой — за записью, названной по их дому.
+    /// Стандартному дому та же формула отдаёт имя, которое Claude Code завёл
+    /// при установке, так что первому аккаунту отдельная ветка не нужна; зато
+    /// первый с переставленным домом перестал читать чужую запись.
     static func credentials(
         for account: UsageAccount,
         config: Config,
         status: AccountStatus
     ) -> CredentialsSource {
         let location = AccountLocation(account: account, config: config)
-        switch account {
-        case .primary:
-            // Первый аккаунт живёт в записи с известным именем — той самой,
-            // которую Claude Code завёл при установке.
-            return KeychainCredentials(fileURL: location.credentialsFileURL)
-        case .secondary:
-            return status.organizationId.map {
-                ResolvedKeychainCredentials(
-                    organizationId: $0,
-                    fileURL: location.credentialsFileURL
-                ) as CredentialsSource
-            } ?? SignedOutCredentials()
-        }
+        // Второй аккаунт без входа не читает ничего. Его дом можно вписать в
+        // конфиг руками, в том числе тот же, что у первого, — и тогда он
+        // показал бы чужие цифры под своим именем. Первого такой проверкой не
+        // ограничиваем: без найденного `claude` состояние домов неизвестно, а
+        // гасить из-за этого панель, работавшую до всякой второй учётки, — хуже.
+        if account == .secondary, !status.loggedIn { return SignedOutCredentials() }
+
+        return HomeKeychainCredentials(
+            home: location.home,
+            fileURL: location.credentialsFileURL,
+            // Принадлежность приписываем снаружи: в записи Keychain её с
+            // 2.1.251 нет, а без неё отсечка счёта не заметит смены аккаунта.
+            organizationUuid: status.organizationId
+        )
     }
 }

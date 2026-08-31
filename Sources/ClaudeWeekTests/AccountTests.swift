@@ -79,7 +79,7 @@ func runAccountTests(_ t: Harness) {
         t.equal(signedOut.title(fallback: "Второй"), "Второй", "без адреса подпись порядковая")
 
         // Мусор вместо ответа не должен читаться как удачный вход: иначе
-        // второй аккаунт пошёл бы искать запись Keychain с организацией nil.
+        // второй аккаунт полез бы в Keychain, ничего не зная о своём доме.
         t.check(!AccountDirectory.parse(Data("не json".utf8)).loggedIn, "мусор — не вход")
         t.check(!AccountDirectory.parse(Data()).loggedIn, "пустой ответ — не вход")
 
@@ -88,25 +88,49 @@ func runAccountTests(_ t: Harness) {
         t.equal(noEmail.title(fallback: "Второй"), "max", "без адреса подписью служит тариф")
     }
 
-    t.suite("поиск записи Keychain") {
-        // Форма вывода `security dump-keychain`: имя сервиса среди прочих
-        // атрибутов. Берём только записи Claude Code — в связке пользователя
-        // лежат сотни чужих.
-        let dump = """
-            "svce"<blob>="Claude Code-credentials"
-            "acct"<blob>="greem4"
-            "svce"<blob>="Claude Safe Storage"
-            "svce"<blob>="GitHub-credentials"
-            "svce"<blob>="Claude Code-a1b2c3-credentials"
-            "svce"<blob>="Claude Code-credentials"
-        """
-        let found = ResolvedKeychainCredentials.services(in: dump)
-        t.equal(found.count, 2, "нашлись обе записи Claude Code и ни одной лишней")
-        t.check(found.contains("Claude Code-credentials"), "запись первого аккаунта найдена")
-        t.check(found.contains("Claude Code-a1b2c3-credentials"), "запись второго аккаунта найдена")
-        t.check(!found.contains("Claude Safe Storage"), "запись без -credentials отброшена")
-        t.check(!found.contains("GitHub-credentials"), "чужая запись отброшена")
-        t.equal(ResolvedKeychainCredentials.services(in: "").count, 0, "пустой вывод — пустой список")
+    t.suite("имя записи Keychain") {
+        // Вектор снят с живой машины на Claude Code 2.1.251: дом
+        // /Users/greem4/.claude-b держит токен в записи
+        // «Claude Code-credentials-034e8c6f». Тест сторожит ровно это
+        // соответствие — разойдётся наша формула с тем, как называет записи
+        // CLI, и мы узнаем здесь, а не по надписи «в этот аккаунт ещё не
+        // вошли» у аккаунта, в который человек вошёл.
+        t.equal(
+            HomeKeychainCredentials.service(for: URL(fileURLWithPath: "/Users/greem4/.claude-b")),
+            "Claude Code-credentials-034e8c6f",
+            "имя записи выведено из пути дома"
+        )
+        t.equal(
+            HomeKeychainCredentials.service(for: AccountLocation.defaultHome),
+            KeychainCredentials.defaultService,
+            "стандартному дому достаётся имя, которое Claude Code завёл при установке"
+        )
+
+        let second = AccountLocation.expand("~/.claude-b")
+        t.equal(
+            HomeKeychainCredentials.service(for: AccountLocation.expand("~/.claude-b/")),
+            HomeKeychainCredentials.service(for: second),
+            "хвостовой слеш не уводит к несуществующей записи"
+        )
+        t.check(
+            HomeKeychainCredentials.service(for: second)
+                != HomeKeychainCredentials.service(for: AccountLocation.expand("~/.claude-c")),
+            "разным домам достаются разные записи"
+        )
+    }
+
+    t.suite("метка аккаунта") {
+        // Организация в записи Keychain больше не лежит, и метку собирает то,
+        // что сказал `claude auth status`. Форма при этом обязана остаться
+        // прежней: в state.json работающих установок записано «2a420a73·pro»,
+        // и смена источника не должна сойти за смену аккаунта — иначе счёт
+        // обнулился бы у всех разом на первом же обновлении.
+        let bare = OAuthCredentials(accessToken: "t", expiresAt: nil, subscriptionType: "pro")
+        t.equal(bare.accountMark, nil, "без организации метки нет")
+
+        let marked = bare.attributed(to: "2a420a73-2872-4640-a99e-ed027d474338")
+        t.equal(marked.accountMark, "2a420a73·pro", "метка собрана из организации и тарифа")
+        t.equal(marked.accessToken, "t", "токен пережил приписывание")
     }
 
     t.suite("креды аккаунта") {
@@ -135,14 +159,24 @@ func runAccountTests(_ t: Harness) {
             config: config,
             status: AccountStatus(loggedIn: true, organizationId: "org-2")
         )
-        t.check(signedIn is ResolvedKeychainCredentials, "вошедший второй ищет свою запись по организации")
+        t.check(signedIn is HomeKeychainCredentials, "вошедший второй читает запись своего дома")
+        t.check(
+            HomeKeychainCredentials.service(for: AccountLocation(account: .secondary, config: config).home)
+                != KeychainCredentials.defaultService,
+            "и это не запись первого аккаунта"
+        )
 
         let primary = ResolvingProvider.credentials(
             for: .primary,
             config: config,
             status: .signedOut
         )
-        t.check(primary is KeychainCredentials, "первый аккаунт читает запись с известным именем")
+        t.check(primary is HomeKeychainCredentials, "первый аккаунт читает запись своего дома")
+        t.equal(
+            HomeKeychainCredentials.service(for: AccountLocation(account: .primary, config: config).home),
+            KeychainCredentials.defaultService,
+            "и у стандартного дома это прежнее имя записи"
+        )
     }
 
     t.suite("аккаунт в конфиге") {

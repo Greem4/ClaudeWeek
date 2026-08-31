@@ -82,9 +82,10 @@ SwiftUI` — значит, расчёт просочился в UI или нао
 - **«Откуда программа знает про второй аккаунт»** → `Accounts.swift`:
   `AccountLocation` раскладывает конфиг-дом на пути (транскрипты, кеш, отсечка,
   индекс), `AccountDirectory` спрашивает `claude auth status`, кто в этот дом
-  вошёл. Имя записи Keychain второго дома Claude Code нигде не публикует,
-  поэтому оно не выводится формулой, а находится по организации —
-  `ResolvedKeychainCredentials`. Аккаунту без входа достаётся
+  вошёл. Токен берёт `HomeKeychainCredentials`: имя записи Keychain Claude Code
+  собирает из пути дома, и мы собираем так же — стандартному дому
+  `Claude Code-credentials`, прочим то же имя с приставкой из первых восьми
+  hex-символов sha256 пути. Аккаунту без входа достаётся
   `SignedOutCredentials`, а не `nil`: `nil` в `ResolvingProvider` означает
   «Keychain по умолчанию», то есть запись первого аккаунта.
 
@@ -421,7 +422,7 @@ swift build                     # оба таргета
 # объявления: ключи kSecUseAuthenticationUI в Keychain.swift оставлены
 # намеренно, замены им нет, и группа понижена обратно до предупреждения.
 swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
-swift run ClaudeWeekTests       # 538 проверок, без сети и без UI
+swift run ClaudeWeekTests       # 541 проверка, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/signing-cert.sh       # один раз: постоянный сертификат подписи
 ./scripts/make-app.sh           # собрать dist/ClaudeWeek.app
@@ -619,4 +620,5 @@ Intel — собирает у себя, `install.sh` соберёт нативн
 | `~/Library/LaunchAgents/com.greem4.claudeweek.plist` | автозапуск |
 | `~/Applications/ClaudeWeek.app` | установленная копия |
 | Keychain `Claude Code-credentials` | токен Claude Code первого аккаунта (только читаем) |
-| Keychain, запись второго аккаунта | имя Claude Code собирает внутри себя и не публикует. Не угадываем: среди записей `*-credentials` берём ту, чей `organizationUuid` совпал с `orgId` из `claude auth status` для этого дома. Совпадений не одно — читаем «нет доступа», а не выбираем наугад |
+| Keychain, запись второго аккаунта | имя Claude Code собирает из пути конфиг-дома и не публикует: `Claude Code-credentials-<первые 8 hex sha256 пути>` (2.1.251). Собираем так же и сторожим тестом с живым вектором. Прежний способ — искать запись по `organizationUuid` внутри неё — умер вместе с полем: в 2.1.251 запись состоит из одного `claudeAiOauth` |
+| Принадлежность токена | из записи Keychain она пропала (см. выше), и называет её только `claude auth status` — `orgId` для этого дома. Из него и `subscriptionType` собирается метка, по которой замечают вход другим аккаунтом |

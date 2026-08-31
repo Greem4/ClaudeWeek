@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Security
 
@@ -5,22 +6,27 @@ import Security
 /// токен, которым уже пользуется Claude Code на этой машине, и потому видит
 /// ровно тот аккаунт, что показывает `/usage`.
 ///
-/// Форма записи (проверено на 2.1.221, 2026-08-04):
+/// Форма записи (проверено на 2.1.251, 2026-08-31):
 /// ```
-/// { "claudeAiOauth": { "accessToken": "sk-ant-oat01-…", "expiresAt": 1786…,
-///                      "refreshToken": …, "scopes": […],
-///                      "subscriptionType": … },
-///   "organizationUuid": … }
+/// { "claudeAiOauth": { "accessToken": "sk-ant-oat01-…", "expiresAt": 1788…,
+///                      "refreshToken": …, "refreshTokenExpiresAt": …,
+///                      "scopes": […], "subscriptionType": …,
+///                      "rateLimitTier": … } }
 /// ```
+/// На 2.1.221 рядом с `claudeAiOauth` лежал ещё и `organizationUuid`; в 2.1.251
+/// его нет ни на одном уровне. Кому принадлежит токен, запись больше не
+/// говорит — это знает только `claude auth status`.
 public struct OAuthCredentials: Sendable, Equatable {
     public let accessToken: String
     /// Момент истечения; nil — поля не было.
     public let expiresAt: Date?
     public let subscriptionType: String?
-    /// Организация, которой принадлежит аккаунт. Единственное в записи, что
-    /// переживает обновление токена: сам токен меняется раз в час, и отличить
-    /// по нему рабочий вход от домашнего нельзя, а этот UUID держится, пока
-    /// не вошли другим аккаунтом.
+    /// Организация, которой принадлежит аккаунт. Отличить аккаунт по самому
+    /// токену нельзя — он меняется раз в час, — а этот UUID держится, пока не
+    /// вошли другим аккаунтом.
+    ///
+    /// В записи Keychain его с 2.1.251 нет, поэтому приходит он обычно
+    /// снаружи, от `claude auth status`, — см. `attributed(to:)`.
     public let organizationUuid: String?
 
     public init(
@@ -49,6 +55,17 @@ public struct OAuthCredentials: Sendable, Equatable {
     public var accountMark: String? {
         guard let organizationUuid, !organizationUuid.isEmpty else { return nil }
         return "\(organizationUuid.prefix(8))·\(subscriptionType ?? "—")"
+    }
+
+    /// Те же креды, но с проставленной принадлежностью. Нужно там, где
+    /// организацию назвал не Keychain, а `claude auth status`.
+    public func attributed(to organizationUuid: String) -> OAuthCredentials {
+        OAuthCredentials(
+            accessToken: accessToken,
+            expiresAt: expiresAt,
+            subscriptionType: subscriptionType,
+            organizationUuid: organizationUuid
+        )
     }
 }
 
@@ -246,110 +263,72 @@ public struct KeychainCredentials: CredentialsSource {
     }
 }
 
-/// Креды аккаунта, имя записи которого заранее не известно.
+/// Креды конфиг-дома, чья запись Keychain названа не по умолчанию.
 ///
-/// У второго конфиг-дома Claude Code заводит свою запись Keychain, но её имя
-/// собирает внутри себя и нигде не публикует. Выводить его формулой значило бы
-/// закрепить догадку о чужой внутренней детали: она сменится с обновлением
-/// CLI, и виджет молча покажет цифры не того аккаунта — худший исход из
-/// возможных. Поэтому имя не выводится, а находится: среди записей Claude Code
-/// берётся та, чей `organizationUuid` совпал с тем, что назвал
-/// `claude auth status` для этого дома. Совпадение проверяет машина, а
-/// неоднозначность честно оборачивается «нет доступа», а не случайным выбором.
-public struct ResolvedKeychainCredentials: CredentialsSource {
-    /// Организация нужного аккаунта — из `claude auth status`.
-    private let organizationId: String
+/// Аккаунты Claude Code различает конфиг-дом, и токен каждого дома лежит в
+/// своей записи. Имя записи Claude Code собирает из пути дома:
+/// `Claude Code-credentials-<первые 8 hex sha256 пути>`, а стандартному дому
+/// оставляет имя без приставки (наблюдалось на 2.1.251:
+/// `sha256("/Users/greem4/.claude-b")` начинается на `034e8c6f`, и запись
+/// второго дома называется `Claude Code-credentials-034e8c6f`).
+///
+/// Раньше запись искали иначе — перебором всех записей Claude Code со
+/// сверкой `organizationUuid` внутри каждой. Способ умер вместе с полем:
+/// в 2.1.251 запись состоит из одного `claudeAiOauth`, и `organizationUuid`
+/// в ней нет ни на одном уровне. Сверять стало нечем, и сопоставление по
+/// организации молча переставало находить хоть что-нибудь — второй аккаунт
+/// показывал «в этот аккаунт ещё не вошли», хотя вход был.
+///
+/// Имя по формуле — догадка о чужой внутренней детали, и это осознанная
+/// цена. Опасность, из-за которой формулу отвергали раньше, здесь не
+/// возникает: имя выводится из **дома**, а не из аккаунта, поэтому смена
+/// схемы именования в CLI даёт «записи нет» — честное «нет доступа», — а не
+/// чужой токен под нашим именем.
+public struct HomeKeychainCredentials: CredentialsSource {
+    /// Конфиг-дом аккаунта — то же, что уходит в `CLAUDE_CONFIG_DIR`.
+    private let home: URL
     /// Запасной путь: креды файлом в самом доме аккаунта.
     private let fileURL: URL
+    /// Чей это дом — организация из `claude auth status`.
+    ///
+    /// Приписывается снаружи, потому что в самой записи принадлежности
+    /// больше нет, а `accountMark` без неё не собрать: отсечка счёта
+    /// перестала бы замечать вход другим аккаунтом.
+    private let organizationUuid: String?
 
-    public init(organizationId: String, fileURL: URL) {
-        self.organizationId = organizationId
+    public init(home: URL, fileURL: URL, organizationUuid: String? = nil) {
+        self.home = home
         self.fileURL = fileURL
+        self.organizationUuid = organizationUuid
     }
 
     public func load() throws -> OAuthCredentials {
-        if let data = try? Data(contentsOf: fileURL),
-           let credentials = try? ResolvedKeychainCredentials.parse(data),
-           credentials.organizationUuid == organizationId {
-            return credentials
-        }
-        guard let service = ResolvedKeychainCredentials.service(for: organizationId) else {
-            throw UsageError.unauthorized
-        }
-        return try KeychainCredentials(service: service, fileURL: fileURL).load()
+        let credentials = try KeychainCredentials(
+            service: HomeKeychainCredentials.service(for: home),
+            fileURL: fileURL
+        ).load()
+        // Своё в записи всегда важнее приписанного: вернётся поле в запись —
+        // возьмём его, и приписывать станет нечего.
+        guard credentials.organizationUuid == nil, let organizationUuid else { return credentials }
+        return credentials.attributed(to: organizationUuid)
     }
 
-    /// Имя записи, принадлежащей этой организации. nil — записи нет, читать её
-    /// не дают или подходящих оказалось несколько.
-    public static func service(for organizationId: String) -> String? {
-        let matching = candidates().filter { service in
-            guard let data = KeychainCredentials.readViaSecurityTool(service: service),
-                  let credentials = try? parse(data)
-            else { return false }
-            return credentials.organizationUuid == organizationId
-        }
-        guard matching.count == 1 else {
-            if matching.count > 1 {
-                Log.warn("записей Keychain с организацией \(organizationId) больше одной — не выбираю наугад")
-            }
-            return nil
-        }
-        return matching[0]
-    }
-
-    /// Имена записей Claude Code в связке. Перечисление атрибутов пароля не
-    /// открывает, поэтому диалога доступа здесь не бывает.
-    static func candidates() -> [String] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["dump-keychain"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-        } catch {
-            Log.debug("security dump-keychain не запустился: \(error.localizedDescription)")
-            return []
-        }
-        let output = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return [] }
-        return services(in: String(decoding: output, as: UTF8.self))
-    }
-
-    /// Имена записей Claude Code в выводе `security dump-keychain`.
+    /// Имя записи Keychain, в которой Claude Code держит токен этого дома.
     ///
-    /// Вынесено отдельно от запуска процесса, чтобы разбор проверялся тестом:
-    /// формат вывода — чужой и недокументированный, и ошибка в нём означала бы
-    /// не пустой список, а взятую наугад чужую запись.
-    public static func services(in output: String) -> [String] {
-        var names: [String] = []
-        for line in output.split(separator: "\n") {
-            guard let open = line.range(of: "\"svce\"<blob>=\"")?.upperBound,
-                  let close = line.lastIndex(of: "\""),
-                  open < close
-            else { continue }
-            let name = String(line[open..<close])
-            if name.hasSuffix("-credentials"), name.contains("Claude"), !names.contains(name) {
-                names.append(name)
-            }
-        }
-        return names
+    /// Путь берётся приведённым: `~/.claude-b` и `~/.claude-b/` — один дом, и
+    /// хвостовой слеш в конфиге не должен уводить нас к несуществующей записи.
+    public static func service(for home: URL) -> String {
+        let base = KeychainCredentials.defaultService
+        let path = home.standardizedFileURL.path
+        guard path != AccountLocation.defaultHome.standardizedFileURL.path else { return base }
+        return "\(base)-\(digest(path))"
     }
 
-    static func parse(_ data: Data) throws -> OAuthCredentials {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = KeychainCredentials.findToken(root), !token.isEmpty
-        else { throw UsageError.unauthorized }
-        let oauth = root["claudeAiOauth"] as? [String: Any]
-        return OAuthCredentials(
-            accessToken: token,
-            expiresAt: KeychainCredentials.date(from: oauth?["expiresAt"]),
-            subscriptionType: oauth?["subscriptionType"] as? String,
-            organizationUuid: (root["organizationUuid"] as? String)
-                ?? (oauth?["organizationUuid"] as? String)
-        )
+    /// Первые четыре байта sha256 пути, шестнадцатеричной строкой.
+    static func digest(_ path: String) -> String {
+        SHA256.hash(data: Data(path.utf8))
+            .prefix(4)
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 }
