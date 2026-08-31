@@ -37,6 +37,18 @@ final class PanelModel {
     var snapshot: UsageSnapshot?
     var status: PanelStatus = .loading
     var isRefreshing = false
+    /// Чем подписан каждый аккаунт в подсказке переключателя — адрес из
+    /// `claude auth status`. Пусто, пока ответ не получен: подписи тогда
+    /// берутся порядковые.
+    var accountTitles: [UsageAccount: String] = [:]
+    /// Переключатель показываем, только когда второй дом заведён. Признак
+    /// вычисляет контроллер по файловой системе — держать под это настройку
+    /// значило бы завести вторую копию того же факта.
+    var showsAccountPicker = false
+    /// Почему смотреть не на что. Ставится там, где причина известна заранее
+    /// и точнее общего отказа: в аккаунт просто не вошли, и ждать данных
+    /// бессмысленно — серые заглушки читались бы как вечная загрузка.
+    var notice: String?
     /// Тикает раз в минуту, чтобы «до сброса» не врало.
     var now: Date = Date()
 
@@ -198,6 +210,7 @@ final class PanelModel {
     /// свой, иначе демо-снимок «протухал» бы прямо на картинке для README.
     func apply(_ snapshot: UsageSnapshot, at moment: Date = Date()) {
         self.snapshot = snapshot
+        notice = nil
         now = moment
         let age = moment.timeIntervalSince(snapshot.fetchedAt)
         status = age > PanelModel.freshFor ? .stale : .ready

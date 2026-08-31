@@ -896,8 +896,58 @@ private struct AccessSettings: View {
 
     private var s: L10n { model.config.strings }
 
+    /// Три разных положения, и путать их нельзя: каталога нет — аккаунт не
+    /// заводили, каталог есть и выхода нет — в него не вошли, вход есть —
+    /// показываем, кто именно. Советы человеку в первых двух случаях разные.
+    private func state(of row: AccountRow) -> String {
+        guard row.exists else { return s.pick("дом не заведён", "no config home") }
+        guard row.status.loggedIn else { return s.pick("не вошли", "not signed in") }
+        return row.status.title(fallback: s.pick("вошли", "signed in"))
+    }
+
     var body: some View {
         Form {
+            Section(s.pick("Аккаунты", "Accounts")) {
+                ForEach(model.accountRows) { row in
+                    LabeledContent(row.account.fallbackTitle(s.lang)) {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(state(of: row))
+                                .foregroundStyle(row.status.loggedIn ? .primary : .secondary)
+                                .textSelection(.enabled)
+                            Text(row.home)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .multilineTextAlignment(.trailing)
+                    }
+                }
+
+                Text(s.pick(
+                    """
+                    Второй аккаунт — это отдельный конфиг-дом Claude Code. \
+                    Запустите Claude Code с CLAUDE_CONFIG_DIR, указывающим на путь выше, \
+                    и войдите там своим вторым аккаунтом: переключатель в заголовке \
+                    панели появится сам, как только каталог возникнет. Путь меняется \
+                    ключом accounts в config.json.
+                    """,
+                    """
+                    The second account is a separate Claude Code config home. \
+                    Start Claude Code with CLAUDE_CONFIG_DIR pointing at the path above \
+                    and sign in there with your second account: the switch in the panel \
+                    header appears on its own once the directory exists. The path is set \
+                    by the accounts key in config.json.
+                    """
+                ))
+                .settingsHint()
+
+                Text(s.pick(
+                    "У каждого аккаунта свой лимит, свой снимок и своя отсечка счёта — переключатель меняет их все разом.",
+                    "Each account has its own limit, its own snapshot and its own counting cut-off — the switch changes all of them at once."
+                ))
+                .settingsHint()
+            }
+
             Section(s.pick("Аккаунт и счёт", "Account and count")) {
                 LabeledContent(s.pick("Сейчас в ключе", "Currently in the key")) {
                     Text(model.account ?? s.pick("не читается", "cannot be read"))

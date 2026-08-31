@@ -17,6 +17,7 @@ struct PopoverView: View {
     @State private var showsSourceText = false
 
     var onRefresh: () -> Void = {}
+    var onAccountChange: (UsageAccount) -> Void = { _ in }
     var onSettings: () -> Void = {}
     var onQuit: () -> Void = {}
 
@@ -65,6 +66,8 @@ struct PopoverView: View {
                 } else {
                     weekRow(snapshot)
                 }
+            } else if let notice = model.notice {
+                noticeRow(notice)
             } else {
                 placeholders
             }
@@ -143,6 +146,14 @@ struct PopoverView: View {
                             ? palette.critical.color
                             : palette.primaryText.color
                     )
+
+                if model.showsAccountPicker {
+                    AccountPicker(
+                        selection: model.config.activeAccount,
+                        titles: model.accountTitles,
+                        onSelect: onAccountChange
+                    )
+                }
 
                 Spacer(minLength: 4)
 
@@ -295,6 +306,17 @@ struct PopoverView: View {
         return DayRowTap(expands: !model.expandsWeek) {
             model.expandsWeek.toggle()
         }
+    }
+
+    /// Причина известна — говорим её словами и на месте строк, а не рисуем
+    /// заглушки: серые полосы обещают данные, которых не будет.
+    private func noticeRow(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.captionFont)
+            .foregroundStyle(palette.secondaryText.color)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
     }
 
     /// Первый запуск без кеша: те же семь строк, чтобы панель не прыгала,

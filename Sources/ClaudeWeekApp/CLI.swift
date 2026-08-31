@@ -12,6 +12,7 @@ enum CLI {
       ClaudeWeek                 запустить приложение в строке меню
       ClaudeWeek --json          напечатать состояние недели в JSON и выйти
       ClaudeWeek --provider=X    источник данных: official, local или auto
+      ClaudeWeek --account=X     чей лимит: primary или secondary
       ClaudeWeek --config=ПУТЬ   свой файл конфигурации
       ClaudeWeek --calibrate=N   подогнать локальную оценку под официальные N %
                                  (число берётся из /usage внутри Claude Code)
@@ -26,7 +27,9 @@ enum CLI {
     /// Флаги без значения и префиксы флагов со значением. По ним же отличаем
     /// опечатку от каталога у `--icon` и `--screenshot`: те не начинаются с «-».
     static let flags = ["--help", "-h", "--verbose", "--json", "--icon", "--screenshot", "--update"]
-    static let flagPrefixes = ["--config=", "--provider=", "--calibrate=", "--lang="]
+    static let flagPrefixes = [
+        "--config=", "--provider=", "--account=", "--calibrate=", "--lang=",
+    ]
 
     static func isKnown(_ argument: String) -> Bool {
         flags.contains(argument) || flagPrefixes.contains { argument.hasPrefix($0) }
@@ -264,7 +267,17 @@ enum CLI {
         var snapshot: UsageSnapshot?
         var failure: Error?
         do {
-            snapshot = try await ResolvingProvider(config: config).fetch()
+            // Тем же путём, что и приложение: у аккаунта свой дом, свои
+            // транскрипты и своя запись Keychain, и `--json` обязан показывать
+            // ровно то же, что видно в строке меню.
+            let status = await AccountDirectory.shared.status(
+                of: AccountLocation(account: config.activeAccount, config: config)
+            )
+            snapshot = try await ResolvingProvider.forAccount(
+                config.activeAccount,
+                config: config,
+                status: status
+            ).fetch()
         } catch {
             failure = error
         }
@@ -272,7 +285,13 @@ enum CLI {
 
         // Окно официального источника, а без него — рассчитанное по конфигу.
         let window = snapshot?.window ?? WeekWindow(containing: now, config: config)
-        let local = LocalProvider(config: config)
+        let location = AccountLocation(account: config.activeAccount, config: config)
+        let local = LocalProvider(
+            config: config,
+            root: location.projectsRoot,
+            indexURL: location.indexURL,
+            stateURL: location.countingStateURL
+        )
 
         // Локальный скан нужен и при официальном источнике: он даёт стоимость
         // и диагностику обхода, которых в ответе API нет.
@@ -286,7 +305,10 @@ enum CLI {
 
         // Бюджет мог быть подобран автоматически по официальному проценту —
         // он лежит в кеше, а не в конфиге.
-        let budget = try? await local.budget(for: usage, override: Store.loadCache()?.weeklyBudget)
+        let budget = try? await local.budget(
+            for: usage,
+            override: Store.loadCache(from: location.cacheURL)?.weeklyBudget
+        )
         var percent: Output.Percent?
 
         if let snapshot {

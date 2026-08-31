@@ -4,6 +4,7 @@ import ClaudeWeekCore
 let t = Harness()
 
 runConfigTests(t)
+runAccountTests(t)
 runWeekWindowTests(t)
 runPlanTests(t)
 runFormattingTests(t)

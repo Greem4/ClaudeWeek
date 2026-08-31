@@ -6,6 +6,57 @@ public enum ProviderPreference: String, Codable, Sendable, CaseIterable {
     case auto
 }
 
+/// Какой из двух аккаунтов Claude сейчас показан в панели. Это не выбор
+/// источника внутри аккаунта: `provider` по-прежнему решает, брать процент у
+/// сервера или считать локально. Здесь переключаются два независимых входа в
+/// Claude Code — у каждого свой конфиг-дом, своя запись Keychain, свои
+/// транскрипты и свой недельный лимит.
+public enum UsageAccount: String, Codable, Sendable, CaseIterable, Hashable {
+    case primary
+    case secondary
+
+    /// Подпись, когда живого адреса аккаунта ещё нет: до входа спрашивать
+    /// `claude auth status` не о чем, а назвать аккаунт в подсказке надо.
+    public func fallbackTitle(_ lang: Lang) -> String {
+        let l = L10n(lang)
+        switch self {
+        case .primary: return l.pick("Первый аккаунт", "First account")
+        case .secondary: return l.pick("Второй аккаунт", "Second account")
+        }
+    }
+}
+
+/// Где живут аккаунты Claude Code.
+///
+/// Конфиг-дом — единственное, что про аккаунт нужно знать: из него берутся и
+/// транскрипты, и запись Keychain с токеном, и ответ `claude auth status`.
+/// Имя записи Keychain здесь не хранится намеренно — оно выводилось бы вторым
+/// экземпляром той же правды и разошлось бы с домом молча; как его находят,
+/// описано в `KeychainCredentials.resolveService`.
+public struct AccountsConfig: Codable, Sendable, Equatable {
+    /// Дом первого аккаунта; у установки Claude Code по умолчанию `~/.claude`.
+    public var primaryHome: String
+    /// Дом второго — то же значение, что уходит в `CLAUDE_CONFIG_DIR`.
+    /// Несуществующий каталог значит «второго аккаунта нет»: переключатель
+    /// тогда не показывается вовсе, и настраивать его для этого не нужно.
+    public var secondaryHome: String
+
+    public init(
+        primaryHome: String = "~/.claude",
+        secondaryHome: String = "~/.claude-b"
+    ) {
+        self.primaryHome = primaryHome
+        self.secondaryHome = secondaryHome
+    }
+
+    public func home(_ account: UsageAccount) -> String {
+        switch account {
+        case .primary: primaryHome
+        case .secondary: secondaryHome
+        }
+    }
+}
+
 public enum MenuBarStyle: String, Codable, Sendable, CaseIterable {
     case percent
     case compact
@@ -318,6 +369,10 @@ public struct Config: Codable, Sendable, Equatable {
     public var timeZone: String
     /// Секунды между опросами, не меньше `minimumRefreshInterval`.
     public var refreshInterval: TimeInterval
+    /// Аккаунт, выбранный кнопками в заголовке панели.
+    public var activeAccount: UsageAccount
+    /// Дома аккаунтов Claude Code.
+    public var accounts: AccountsConfig
     public var provider: ProviderPreference
     /// Часы, между которыми растёт план. Вне их он стоит: недельный лимит
     /// раскладывается по рабочему времени, а не по астрономическому.
@@ -360,6 +415,8 @@ public struct Config: Codable, Sendable, Equatable {
         resetMinute: 0,
         timeZone: "",
         refreshInterval: 300,
+        activeAccount: .primary,
+        accounts: AccountsConfig(),
         provider: .auto,
         // Не `WorkHours.default` — та (11–24) остаётся запасным значением для
         // сломанных чисел в `WorkHours.validated()` и опорной точкой во всех
@@ -383,6 +440,8 @@ public struct Config: Codable, Sendable, Equatable {
         resetMinute: Int,
         timeZone: String,
         refreshInterval: TimeInterval,
+        activeAccount: UsageAccount = .primary,
+        accounts: AccountsConfig = AccountsConfig(),
         provider: ProviderPreference,
         workHours: WorkHours = WorkHours.default,
         menuBarStyle: MenuBarStyle,
@@ -400,6 +459,8 @@ public struct Config: Codable, Sendable, Equatable {
         self.resetMinute = resetMinute
         self.timeZone = timeZone
         self.refreshInterval = refreshInterval
+        self.activeAccount = activeAccount
+        self.accounts = accounts
         self.provider = provider
         self.workHours = workHours
         self.menuBarStyle = menuBarStyle
@@ -424,6 +485,13 @@ public struct Config: Codable, Sendable, Equatable {
             resetMinute: try c.decodeIfPresent(Int.self, forKey: .resetMinute) ?? d.resetMinute,
             timeZone: try c.decodeIfPresent(String.self, forKey: .timeZone) ?? d.timeZone,
             refreshInterval: try c.decodeIfPresent(TimeInterval.self, forKey: .refreshInterval) ?? d.refreshInterval,
+            // Не `decodeIfPresent`: тот бросает на незнакомом значении, а
+            // бросок здесь стоит всего конфига — разбор файла обрывается, и
+            // человек молча теряет все свои настройки разом. Повод не
+            // выдуманный: сборка с Codex писала сюда `claude`, и такие файлы
+            // лежат на дисках. Незнакомый аккаунт — это первый.
+            activeAccount: (try? c.decode(UsageAccount.self, forKey: .activeAccount)) ?? d.activeAccount,
+            accounts: (try? c.decode(AccountsConfig.self, forKey: .accounts)) ?? d.accounts,
             provider: try c.decodeIfPresent(ProviderPreference.self, forKey: .provider) ?? d.provider,
             workHours: try c.decodeIfPresent(WorkHours.self, forKey: .workHours) ?? d.workHours,
             menuBarStyle: try c.decodeIfPresent(MenuBarStyle.self, forKey: .menuBarStyle) ?? d.menuBarStyle,

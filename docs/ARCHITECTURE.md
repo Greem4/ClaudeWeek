@@ -79,6 +79,14 @@ SwiftUI` — значит, расчёт просочился в UI или нао
   `shapeIsEstimate` (разбивка). Это разные вещи, и смешивать их нельзя.
 - **«Что лежит в кеше»** → `CachedUsage`: проценты, границы окна, подобранный
   `weeklyBudget`, `officialWindowEnd` и последняя сессия.
+- **«Откуда программа знает про второй аккаунт»** → `Accounts.swift`:
+  `AccountLocation` раскладывает конфиг-дом на пути (транскрипты, кеш, отсечка,
+  индекс), `AccountDirectory` спрашивает `claude auth status`, кто в этот дом
+  вошёл. Имя записи Keychain второго дома Claude Code нигде не публикует,
+  поэтому оно не выводится формулой, а находится по организации —
+  `ResolvedKeychainCredentials`. Аккаунту без входа достаётся
+  `SignedOutCredentials`, а не `nil`: `nil` в `ResolvingProvider` означает
+  «Keychain по умолчанию», то есть запись первого аккаунта.
 
 ### Инварианты ядра
 
@@ -413,7 +421,7 @@ swift build                     # оба таргета
 # объявления: ключи kSecUseAuthenticationUI в Keychain.swift оставлены
 # намеренно, замены им нет, и группа понижена обратно до предупреждения.
 swift build -Xswiftc -warnings-as-errors -Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration
-swift run ClaudeWeekTests       # 477 проверок, без сети и без UI
+swift run ClaudeWeekTests       # 534 проверки, без сети и без UI
 swift run ClaudeWeekApp         # запустить из исходников (появится вторая иконка!)
 ./scripts/signing-cert.sh       # один раз: постоянный сертификат подписи
 ./scripts/make-app.sh           # собрать dist/ClaudeWeek.app
@@ -593,8 +601,11 @@ Intel — собирает у себя, `install.sh` соберёт нативн
 | `~/.config/claude-week/alerts.json` | о каких порогах уведомления уже говорили: окна лимитов, последние объявленные проценты, момент последнего баннера. Удаление безопасно — вернётся одно повторное уведомление |
 | `~/.config/claude-week/state.json` | с какого момента считается локальный расход и на каком аккаунте: `countFrom` и метка организации. Отдельно от кеша намеренно — тот перезаписывается каждым обновлением, а отсечка обязана его пережить. Удаление вернёт в счёт расход прежнего аккаунта |
 | `~/.config/claude-week/index.json` | индекс прочитанных транскриптов (инкрементальное чтение); схема 2 — записи хранят семейство модели и токены, из них считается разбивка. Индекс прошлой схемы не переносится, а отстраивается заново: версия проверяется до разбора записей |
+| `~/.config/claude-week/secondary-*.json` | то же самое для второго аккаунта: `secondary-cache.json`, `secondary-alerts.json`, `secondary-state.json`, `secondary-index.json`. Порознь намеренно — общий кеш позволил бы обновлению одного аккаунта стереть снимок другого, а общая отсечка отдала бы счёт не тому лимиту. У первого аккаунта имена прежние: в них лежит накопленный счёт, и переезд обнулил бы его |
 | `~/.claude/projects/**/*.jsonl` | транскрипты Claude Code — вход локального источника |
+| `~/.claude-b/` | конфиг-дом второго аккаунта, если он заведён: свои транскрипты в `projects/`, своя запись Keychain. Путь задаётся ключом `accounts.secondaryHome`; каталога нет — переключателя в панели тоже нет |
 | `~/Library/Logs/ClaudeWeek.log` | лог запущенного через LaunchAgent приложения |
 | `~/Library/LaunchAgents/com.greem4.claudeweek.plist` | автозапуск |
 | `~/Applications/ClaudeWeek.app` | установленная копия |
-| Keychain `Claude Code-credentials` | токен Claude Code (только читаем) |
+| Keychain `Claude Code-credentials` | токен Claude Code первого аккаунта (только читаем) |
+| Keychain, запись второго аккаунта | имя Claude Code собирает внутри себя и не публикует. Не угадываем: среди записей `*-credentials` берём ту, чей `organizationUuid` совпал с `orgId` из `claude auth status` для этого дома. Совпадений не одно — читаем «нет доступа», а не выбираем наугад |
