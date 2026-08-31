@@ -3,7 +3,6 @@ import Foundation
 public enum SourceKind: String, Codable, Sendable {
     case official
     case local
-    case codex
 }
 
 /// Одни сутки окна: накопительный план к их концу и такой же накопительный
@@ -84,29 +83,10 @@ public struct SessionUsage: Codable, Sendable, Equatable {
     /// Расход лимита сессии, 0…100.
     public let usedPercent: Double
     public let resetsAt: Date
-    /// Длина короткого окна. У Claude это пять часов; Codex сообщает её
-    /// вместе с лимитом, и полагаться там на жёстко прошитые пять нельзя.
-    public let windowDurationMinutes: Int
 
-    public init(usedPercent: Double, resetsAt: Date, windowDurationMinutes: Int = 5 * 60) {
+    public init(usedPercent: Double, resetsAt: Date) {
         self.usedPercent = usedPercent
         self.resetsAt = resetsAt
-        self.windowDurationMinutes = max(windowDurationMinutes, 1)
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case usedPercent, resetsAt, windowDurationMinutes
-    }
-
-    /// Старый кеш не знает длины окна — это всегда была пятичасовая сессия
-    /// Claude, поэтому отсутствие нового ключа однозначно восстанавливается.
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(
-            usedPercent: try c.decode(Double.self, forKey: .usedPercent),
-            resetsAt: try c.decode(Date.self, forKey: .resetsAt),
-            windowDurationMinutes: try c.decodeIfPresent(Int.self, forKey: .windowDurationMinutes) ?? 5 * 60
-        )
     }
 
     /// Окно сессии ещё не истекло. Проверять обязательно: сессия короче суток,

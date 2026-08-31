@@ -24,14 +24,12 @@ cd "$ROOT"
 # `$(...)` увёл бы туда же вывод самой сборки, а `exit 1` при ненайденном
 # бинаре погасил бы только подоболочку, и скрипт поехал бы дальше.
 SLICE=""
-BIN_DIR=""
 build_slice() {
     local arch="$1"
     echo "==> swift build -c $CONFIG --arch $arch"
     swift build -c "$CONFIG" --arch "$arch" --product ClaudeWeekApp
-    BIN_DIR="$(swift build -c "$CONFIG" --arch "$arch" --product ClaudeWeekApp \
-        --show-bin-path)"
-    SLICE="$BIN_DIR/ClaudeWeekApp"
+    SLICE="$(swift build -c "$CONFIG" --arch "$arch" --product ClaudeWeekApp \
+        --show-bin-path)/ClaudeWeekApp"
     [ -x "$SLICE" ] || { echo "не нашёл бинарь $arch: $SLICE" >&2; exit 1; }
 }
 
@@ -47,8 +45,7 @@ elif [ -n "$ARCH" ]; then
 else
     echo "==> swift build -c $CONFIG"
     swift build -c "$CONFIG" --product ClaudeWeekApp
-    BIN_DIR="$(swift build -c "$CONFIG" --product ClaudeWeekApp --show-bin-path)"
-    SLICE="$BIN_DIR/ClaudeWeekApp"
+    SLICE="$(swift build -c "$CONFIG" --product ClaudeWeekApp --show-bin-path)/ClaudeWeekApp"
     [ -x "$SLICE" ] || { echo "не нашёл бинарь: $SLICE" >&2; exit 1; }
     SLICES+=("$SLICE")
 fi
@@ -66,20 +63,6 @@ else
 fi
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
-
-# Ресурсный бандл SwiftPM с иконками поставщиков. Без него `Bundle.module` в
-# приложении обрывается fatalError'ом ещё до отрисовки панели, поэтому его
-# отсутствие — ошибка сборки, а не пропущенное украшение. У универсального
-# бандла срезы кладут одинаковые ресурсы, хватает любого из проходов.
-RES_BUNDLE="$BIN_DIR/ClaudeWeek_ClaudeWeekApp.bundle"
-if [ -d "$RES_BUNDLE" ]; then
-    rm -rf "$APP/Contents/Resources/$(basename "$RES_BUNDLE")"
-    cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
-    echo "==> ресурсы: $(basename "$RES_BUNDLE")"
-else
-    echo "не нашёл ресурсный бандл: $RES_BUNDLE" >&2
-    exit 1
-fi
 
 # Версия у программы одна — та, что в Version.swift; в plist она попадает
 # отсюда, а не переписывается руками во втором месте.

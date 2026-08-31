@@ -182,14 +182,10 @@ public enum Store {
     public static var directory: URL { ConfigStore.directory }
     public static var indexURL: URL { directory.appendingPathComponent("index.json") }
     public static var cacheURL: URL { directory.appendingPathComponent("cache.json") }
-    /// Codex хранится отдельно: общий файл позволил бы последнему обновлению
-    /// одного аккаунта стереть мгновенный снимок другого.
-    public static var codexCacheURL: URL { directory.appendingPathComponent("codex-cache.json") }
     /// Что уже сказано уведомлениями. Отдельно от кеша: тот перезаписывается
     /// каждым обновлением и целиком описывает расход, а это — память о
     /// разговоре с человеком, и терять её вместе с протухшим снимком нельзя.
     public static var alertsURL: URL { directory.appendingPathComponent("alerts.json") }
-    public static var codexAlertsURL: URL { directory.appendingPathComponent("codex-alerts.json") }
     /// Отсечка счёта и аккаунт, на котором он ведётся.
     public static var stateURL: URL { directory.appendingPathComponent("state.json") }
 

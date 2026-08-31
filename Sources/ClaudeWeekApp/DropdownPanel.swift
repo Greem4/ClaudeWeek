@@ -318,16 +318,9 @@ final class DropdownPanel {
         panel.invalidateShadow()
     }
 
-    /// Наблюдатель без очереди — намеренно. С `queue: .main` блок уходит в
-    /// `OperationQueue` и правит кромку не в момент уведомления, а следующим
-    /// проходом цикла: между ними успевает отрисоваться кадр, где окно уже
-    /// новой высоты, а стоит по старому месту. На смене содержимого — из
-    /// недели в разбивку по моделям и обратно — это и видно как полосы,
-    /// нарисованные выше места и съезжающие вниз. Уведомление приходит на
-    /// главном потоке, поэтому синхронная обработка законна.
     private func observeResize() {
         resizeObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didResizeNotification, object: panel, queue: nil
+            forName: NSWindow.didResizeNotification, object: panel, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.pinToAnchor() }
         }

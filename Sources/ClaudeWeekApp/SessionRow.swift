@@ -89,7 +89,7 @@ struct SessionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
-                Text(Formatting.limitWindow(session.windowDurationMinutes, lang: s.lang))
+                Text(s.pick("5 Ч", "5 H"))
                     .font(Theme.dayFont)
                     .foregroundStyle(palette.secondaryText.color)
                     .frame(width: Theme.dayLabelWidth, alignment: .leading)
@@ -183,12 +183,11 @@ struct SessionRow: View {
     private var voiceOverLabel: String {
         let percent = Formatting.percent(session.usedPercent, withSign: false)
         let verdict = session.isExhausted ? s.pick(", лимит исчерпан", ", limit spent") : ""
-        let window = Formatting.limitWindowSpoken(session.windowDurationMinutes, lang: s.lang)
         return s.pick("""
-        \(window), потрачено \(percent) процентов\(verdict), \
+        Пятичасовая сессия, потрачено \(percent) процентов\(verdict), \
         сброс \(reset), \(source.spokenName(s))
         """, """
-        \(window), \(percent) per cent spent\(verdict), \
+        Five-hour session, \(percent) per cent spent\(verdict), \
         resets \(reset), \(source.spokenName(s))
         """)
     }

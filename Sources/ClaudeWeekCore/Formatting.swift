@@ -6,34 +6,6 @@ import Foundation
 /// Язык приходит параметром и по умолчанию русский — тот, на котором программа
 /// говорила до появления второго. Панель и настройки передают выбранный явно.
 public enum Formatting {
-    /// Короткая метка окна для левой колонки панели: «5 Ч», «15 МИН».
-    public static func limitWindow(_ minutes: Int, lang: Lang = .ru) -> String {
-        let safe = max(minutes, 1)
-        if safe.isMultiple(of: 24 * 60) {
-            let days = safe / (24 * 60)
-            return L10n(lang).pick("\(days) Д", "\(days) D")
-        }
-        if safe.isMultiple(of: 60) {
-            let hours = safe / 60
-            return L10n(lang).pick("\(hours) Ч", "\(hours) H")
-        }
-        return L10n(lang).pick("\(safe) МИН", "\(safe) MIN")
-    }
-
-    /// Полное название того же окна для VoiceOver.
-    public static func limitWindowSpoken(_ minutes: Int, lang: Lang = .ru) -> String {
-        let safe = max(minutes, 1)
-        if safe.isMultiple(of: 24 * 60) {
-            let days = safe / (24 * 60)
-            return L10n(lang).pick("окно \(days) дн.", "\(days)-day window")
-        }
-        if safe.isMultiple(of: 60) {
-            let hours = safe / 60
-            return L10n(lang).pick("окно \(hours) ч.", "\(hours)-hour window")
-        }
-        return L10n(lang).pick("окно \(safe) мин.", "\(safe)-minute window")
-    }
-
     static let shortWeekdays = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"]
     static let fullWeekdays = [
         "Воскресенье", "Понедельник", "Вторник", "Среда",

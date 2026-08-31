@@ -30,13 +30,6 @@ if let raw = arguments.first(where: { $0.hasPrefix("--provider=") })?
     }
     config.provider = choice
 }
-if let raw = arguments.first(where: { $0.hasPrefix("--account=") })?
-    .dropFirst("--account=".count) {
-    guard let choice = UsageAccount(rawValue: String(raw)) else {
-        exit(CLI.complain("неизвестный аккаунт «\(raw)»: бывают claude и codex"))
-    }
-    config.activeAccount = choice
-}
 
 // Язык из аргумента перекрывает конфиг и на один запуск, и на снимки: так
 // английские картинки для документации снимаются, ничего не переключая руками.

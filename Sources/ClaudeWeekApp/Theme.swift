@@ -261,15 +261,6 @@ enum Theme {
     /// Сноски — на два кегля мельче основного текста, как в меню.
     static let captionFontSize = menuFontSize - 2
 
-    /// Насколько центр строки текста стоит выше её базовой линии — полусумма
-    /// подъёма и спуска шрифта меню (`descender` отрицательный). Нужна там,
-    /// где по базовой линии выравнивают не текст: картинка отдаёт за базовую
-    /// линию свою нижнюю кромку и без поправки встаёт над строкой.
-    static let textCenterAboveBaseline: CGFloat = {
-        let font = NSFont.menuFont(ofSize: 0)
-        return (font.ascender + font.descender) / 2
-    }()
-
     static let titleFont = Font.system(size: menuFontSize, weight: .semibold).monospacedDigit()
     static let dayFont = Font.system(size: menuFontSize).monospacedDigit()
     /// Подпись текущих суток: тот же кегль, но полужирная. Одного цвета ей не

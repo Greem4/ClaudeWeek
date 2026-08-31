@@ -17,7 +17,6 @@ struct PopoverView: View {
     @State private var showsSourceText = false
 
     var onRefresh: () -> Void = {}
-    var onAccountChange: (UsageAccount) -> Void = { _ in }
     var onSettings: () -> Void = {}
     var onQuit: () -> Void = {}
 
@@ -145,11 +144,6 @@ struct PopoverView: View {
                             : palette.primaryText.color
                     )
 
-                AccountPicker(
-                    selection: model.config.activeAccount,
-                    onSelect: onAccountChange
-                )
-
                 Spacer(minLength: 4)
 
                 if !showsSessionRow {
@@ -197,7 +191,7 @@ struct PopoverView: View {
         // Пометки об источнике под заголовком больше нет — её место занял
         // кружок. VoiceOver цвет с заливкой не читает, поэтому источник он
         // получает подсказкой, и только когда кружок стоит здесь.
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .combine)
         .accessibilityHint(showsSessionRow ? "" : model.sourceState.spokenName(s))
     }
 
@@ -254,7 +248,8 @@ struct PopoverView: View {
     private func models(_ snapshot: UsageSnapshot) -> some View {
         VStack(spacing: Theme.rowSpacing) {
             if snapshot.byModel.isEmpty {
-                Text(emptyBreakdownText)
+                Text(s.pick("разбивки нет: транскриптов за это окно не нашлось",
+                            "no breakdown: no transcripts found for this window"))
                     .font(Theme.captionFont)
                     .foregroundStyle(palette.secondaryText.color)
                     .fixedSize(horizontal: false, vertical: true)
@@ -285,15 +280,6 @@ struct PopoverView: View {
                     .padding(.top, 2)
             }
         }
-    }
-
-    private var emptyBreakdownText: String {
-        if model.config.activeAccount == .codex {
-            return s.pick("разбивки по моделям нет в данных Codex",
-                          "Codex data has no per-model breakdown")
-        }
-        return s.pick("разбивки нет: транскриптов за это окно не нашлось",
-                      "no breakdown: no transcripts found for this window")
     }
 
     private func toggleModels() {

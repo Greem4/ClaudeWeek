@@ -10,7 +10,6 @@ runFormattingTests(t)
 runAlertTests(t)
 await runLocalProviderTests(t)
 await runOfficialProviderTests(t)
-await runCodexProviderTests(t)
 await runUpdaterTests(t)
 
 t.report()
