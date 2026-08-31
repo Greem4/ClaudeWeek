@@ -12,6 +12,16 @@ final class StatusItemController: NSObject {
     /// у AppKit-частей нет окружения SwiftUI, но конфиг у них общий.
     private var s: L10n { model.strings }
     private var provider: any UsageProvider
+    /// Снимок каждого аккаунта живёт отдельно: переключение не должно на
+    /// мгновение подписывать цифры одного аккаунта именем другого.
+    private var snapshots: [UsageAccount: UsageSnapshot] = [:]
+    /// Ответ старого провайдера может прийти уже после переключения аккаунта.
+    /// Поколение делает такой ответ безвредным, не отменяя сетевой запрос.
+    private var refreshGeneration = 0
+    /// Кто вошёл в каждый дом — по ответу `claude auth status`. Нужен и до
+    /// первого запроса: без организации второй аккаунт не найдёт свою запись
+    /// Keychain, а не найдя, не должен брать чужую.
+    private var accountStatuses: [UsageAccount: AccountStatus] = [:]
     private let update = UpdateController()
     private let notifications = NotificationController()
 
@@ -38,7 +48,11 @@ final class StatusItemController: NSObject {
     init(config: Config = ConfigStore.load(), configURL: URL = ConfigStore.fileURL) {
         self.configURL = configURL
         model = PanelModel(config: config)
-        provider = ResolvingProvider(config: config)
+        provider = ResolvingProvider.forAccount(
+            config.activeAccount,
+            config: config,
+            status: .signedOut
+        )
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -60,6 +74,84 @@ final class StatusItemController: NSObject {
         }
         restoreFromCache()
         render()
+        // Кто вошёл в дома, спрашиваем до первого запроса: провайдер второго
+        // аккаунта без этого ответа не знает, какую запись Keychain брать.
+        loadAccountStatuses { [weak self] in self?.refresh() }
+    }
+
+    /// Спрашивает Claude Code, кто вошёл в каждый дом, и пересобирает
+    /// провайдер под ответ. Дома, которого нет на диске, не касаемся: это и
+    /// есть признак «второго аккаунта не завели».
+    private func loadAccountStatuses(then act: (() -> Void)? = nil) {
+        let config = model.config
+        Task { [weak self] in
+            var found: [UsageAccount: AccountStatus] = [:]
+            for account in UsageAccount.allCases {
+                let location = AccountLocation(account: account, config: config)
+                guard location.exists else { continue }
+                found[account] = await AccountDirectory.shared.status(of: location)
+            }
+            guard let self else { return }
+            adopt(found)
+            act?()
+        }
+    }
+
+    private func adopt(_ statuses: [UsageAccount: AccountStatus]) {
+        accountStatuses = statuses
+        model.showsAccountPicker = AccountLocation(account: .secondary, config: model.config).exists
+        model.accountTitles = UsageAccount.allCases.reduce(into: [:]) { titles, account in
+            let fallback = account.fallbackTitle(s.lang)
+            titles[account] = statuses[account]?.title(fallback: fallback) ?? fallback
+        }
+        provider = Self.makeProvider(config: model.config, status: statuses[model.config.activeAccount])
+        render()
+    }
+
+    private static func makeProvider(config: Config, status: AccountStatus?) -> any UsageProvider {
+        ResolvingProvider.forAccount(
+            config.activeAccount,
+            config: config,
+            status: status ?? .signedOut
+        )
+    }
+
+    /// Меняет аккаунт панели целиком. Прошлый снимок запоминаем, чтобы
+    /// обратный щелчок был мгновенным, а отсутствующие данные не подменяем
+    /// цифрами другого аккаунта даже на время нового запроса.
+    private func selectAccount(_ account: UsageAccount) {
+        let previous = model.config.activeAccount
+        guard account != previous else { return }
+
+        if let snapshot = model.snapshot {
+            snapshots[previous] = snapshot
+        }
+
+        refreshGeneration += 1
+        model.isRefreshing = false
+        model.expandsWeek = false
+        model.showsModels = false
+        model.notice = nil
+
+        var config = model.config
+        config.activeAccount = account
+        model.config = config
+        provider = Self.makeProvider(config: config, status: accountStatuses[account])
+
+        let now = Date()
+        if let snapshot = snapshots[account], snapshot.window.contains(now) {
+            model.apply(snapshot, at: now)
+        } else {
+            snapshots[account] = nil
+            model.snapshot = nil
+            model.status = .loading
+            model.now = now
+        }
+
+        settings?.adopt(config)
+        queueConfigWrite(config)
+        render()
+        scheduleResetRefresh()
         refresh()
     }
 
@@ -67,7 +159,9 @@ final class StatusItemController: NSObject {
     /// секунду-другую, и всё это время строка меню иначе висела бы пустой.
     /// Возраст подписывает сама модель — правило свежести одно на всех.
     private func restoreFromCache() {
-        guard let cache = Store.loadCache(), cache.isFresh(at: Date()) else { return }
+        let location = AccountLocation(account: model.config.activeAccount, config: model.config)
+        guard let cache = Store.loadCache(from: location.cacheURL),
+              cache.isFresh(at: Date()) else { return }
         let snapshot = cache.snapshot(config: model.config)
         model.apply(snapshot)
         // Кеш — такой же повод сказать про лимит, как свежий ответ: машину
@@ -102,6 +196,7 @@ final class StatusItemController: NSObject {
                 model: model,
                 update: update,
                 onRefresh: { [weak self] in self?.refresh() },
+                onAccountChange: { [weak self] account in self?.selectAccount(account) },
                 onSettings: { [weak self] in self?.openSettings() },
                 onQuit: { NSApp.terminate(nil) }
             )
@@ -281,12 +376,17 @@ final class StatusItemController: NSObject {
         dropdown.pin(from: button)
     }
 
-    private func applyFromSettings(_ config: Config) {
+    private func applyFromSettings(_ incoming: Config) {
+        // Окно настроек аккаунтом не управляет. Пока оно открыто, переключатель
+        // панели мог сработать, и старая копия конфига не должна его вернуть.
+        var config = incoming
+        config.activeAccount = model.config.activeAccount
         let providerChanged = config.provider != model.config.provider
             || config.timeZone != model.config.timeZone
             || config.weekStart != model.config.weekStart
             || config.workHours != model.config.workHours
             || config.weeklyBudget != model.config.weeklyBudget
+            || config.accounts != model.config.accounts
         // Интервал живёт в таймере, а не в провайдере: не перезапустив таймер,
         // новый интервал ждал бы перезапуска приложения.
         let intervalChanged = config.refreshInterval != model.config.refreshInterval
@@ -301,8 +401,26 @@ final class StatusItemController: NSObject {
         render()
         if notificationsEnabled { notifications.apply(config.notifications) }
 
-        // Ползунок шлёт по десятку изменений в секунду — на диск ходим
-        // с задержкой, применяя к панели каждое сразу.
+        queueConfigWrite(config)
+
+        guard providerChanged else {
+            if intervalChanged { startTimers() }
+            return
+        }
+        refreshGeneration += 1
+        model.isRefreshing = false
+        // Дом аккаунта мог поменяться — тогда и вошедший в него другой, и
+        // прежний ответ `auth status` про него больше ничего не значит.
+        loadAccountStatuses { [weak self] in
+            self?.startTimers()
+            self?.refresh()
+        }
+    }
+
+    /// Ползунок шлёт по десятку изменений в секунду — на диск ходим с
+    /// задержкой, применяя к панели каждое сразу. Тем же путём сохраняется и
+    /// выбранный аккаунт, поэтому конкурирующих записей конфига нет.
+    private func queueConfigWrite(_ config: Config) {
         saveTask?.cancel()
         pendingConfigWrite = config
         saveTask = Task { [weak self] in
@@ -310,14 +428,6 @@ final class StatusItemController: NSObject {
             guard !Task.isCancelled else { return }
             self?.flushConfigWrite()
         }
-
-        guard providerChanged else {
-            if intervalChanged { startTimers() }
-            return
-        }
-        provider = ResolvingProvider(config: config)
-        startTimers()
-        refresh()
     }
 
     /// Пишет отложенную правку немедленно, если она ещё не легла на диск.
@@ -344,13 +454,30 @@ final class StatusItemController: NSObject {
     /// отсечку он перечитывает на каждом обходе транскриптов, а вот показать
     /// панели старый снимок после сброса было бы прямым враньём.
     private func resetCounting() {
-        let account = (try? KeychainCredentials().load())?.accountMark
+        let active = model.config.activeAccount
+        let location = AccountLocation(account: active, config: model.config)
+        // Метку берём у того аккаунта, чей счёт сбрасываем, а не у первого:
+        // иначе отсечка второго подписалась бы чужой организацией и на
+        // следующем же обходе сочлась за смену аккаунта.
+        let mark = ResolvingProvider.credentials(
+            for: active,
+            config: model.config,
+            status: accountStatuses[active] ?? .signedOut
+        )
+        let account = (try? mark.load())?.accountMark
         do {
-            try Store.resetCounting(at: Date(), account: account)
+            try Store.resetCounting(
+                at: Date(),
+                account: account,
+                stateURL: location.countingStateURL,
+                cacheURL: location.cacheURL,
+                alertsURL: location.alertsURL
+            )
         } catch {
             Log.warn("не смог начать счёт заново: \(error)")
             return
         }
+        snapshots[active] = nil
         model.snapshot = nil
         render()
         refresh()
@@ -362,7 +489,17 @@ final class StatusItemController: NSObject {
         var config = config
         config.provider = .official
         do {
-            let snapshot = try await ResolvingProvider(config: config).fetch()
+            // Проверяем тот аккаунт, что показан в панели: кнопка отвечает на
+            // «а ходит ли оно по моему ключу», и ответ про соседний аккаунт
+            // был бы хуже молчания.
+            let status = await AccountDirectory.shared.status(
+                of: AccountLocation(account: config.activeAccount, config: config)
+            )
+            let snapshot = try await ResolvingProvider.forAccount(
+                config.activeAccount,
+                config: config,
+                status: status
+            ).fetch()
             // Метод статический, окружения у него нет — язык берём из того же
             // конфига, с которым проверяют доступ.
             let spent = Formatting.percent(snapshot.usedPercent)
@@ -512,14 +649,34 @@ final class StatusItemController: NSObject {
         guard config != model.config else { return }
         Log.info("конфиг изменился, применяю")
         let notificationsEnabled = config.notifications.enabled && !model.config.notifications.enabled
+        let previousAccount = model.config.activeAccount
+        if let snapshot = model.snapshot {
+            snapshots[previousAccount] = snapshot
+        }
         model.config = config
+        if config.activeAccount != previousAccount {
+            let now = Date()
+            model.notice = nil
+            if let snapshot = snapshots[config.activeAccount], snapshot.window.contains(now) {
+                model.apply(snapshot, at: now)
+            } else {
+                model.snapshot = nil
+                model.status = .loading
+                model.now = now
+            }
+        }
         update.strings = config.strings
         if notificationsEnabled { notifications.apply(config.notifications) }
         settings?.adopt(config)
         applyAppearance()
-        provider = ResolvingProvider(config: config)
-        startTimers()
-        refresh()
+        refreshGeneration += 1
+        model.isRefreshing = false
+        loadAccountStatuses { [weak self] in
+            self?.startTimers()
+            self?.render()
+            self?.scheduleResetRefresh()
+            self?.refresh()
+        }
     }
 
     // MARK: Обновление
@@ -528,22 +685,56 @@ final class StatusItemController: NSObject {
         guard !model.isRefreshing else { return }
         model.isRefreshing = true
         let provider = provider
+        let account = model.config.activeAccount
+        let generation = refreshGeneration
 
         Task { [weak self] in
+            let result: Result<UsageSnapshot, Error>
             do {
-                let snapshot = try await provider.fetch()
-                self?.model.apply(snapshot)
-                if let self { notifications.consider(snapshot, config: model.config) }
+                result = .success(try await provider.fetch())
             } catch {
-                Log.warn("не смог обновить данные: \(error)")
-                self?.model.apply(error: error)
+                result = .failure(error)
             }
-            self?.model.isRefreshing = false
-            self?.render()
+
+            // Пока запрос шёл, могли переключить аккаунт или сменить конфиг.
+            // Отменять сетевой вызов ради этого не нужно — достаточно не
+            // принимать его ответ.
+            guard let self,
+                  generation == refreshGeneration,
+                  account == model.config.activeAccount else { return }
+
+            switch result {
+            case .success(let snapshot):
+                snapshots[account] = snapshot
+                model.apply(snapshot)
+                notifications.consider(snapshot, config: model.config)
+            case .failure(let error):
+                Log.warn("не смог обновить данные: \(error)")
+                model.apply(error: error)
+                // Отказ у аккаунта, в который не входили, — не поломка, а
+                // ровно то, чего и следовало ждать. Общее «нет данных» тут
+                // прячет причину, которую человек может устранить за минуту.
+                if accountStatuses[account]?.loggedIn == false, model.snapshot == nil {
+                    model.notice = signInNotice(for: account)
+                }
+            }
+            model.isRefreshing = false
+            render()
             // Окно снимка могло смениться — переставляем будильник под него.
             // Отсюда же он ставится и в первый раз: `init` заканчивается
             // обновлением, а до его ответа окна может не быть вовсе.
-            self?.scheduleResetRefresh()
+            scheduleResetRefresh()
         }
+    }
+
+    /// Что делать, чтобы аккаунт заработал. Путь дома называем прямо: он же
+    /// уходит в `CLAUDE_CONFIG_DIR`, и подставлять его человеку по памяти —
+    /// лишний шаг к ошибке.
+    private func signInNotice(for account: UsageAccount) -> String {
+        let home = AccountLocation(account: account, config: model.config).home.path
+        return s.pick(
+            "В этот аккаунт ещё не вошли. Запустите Claude Code с CLAUDE_CONFIG_DIR=\(home) и выполните /login.",
+            "This account is not signed in yet. Start Claude Code with CLAUDE_CONFIG_DIR=\(home) and run /login."
+        )
     }
 }

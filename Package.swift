@@ -11,7 +11,11 @@ let package = Package(
 
         .executableTarget(
             name: "ClaudeWeekApp",
-            dependencies: ["ClaudeWeekCore"]
+            dependencies: ["ClaudeWeekCore"],
+            // Знак Claude в переключателе аккаунтов: подходящего SF Symbol у
+            // сервиса нет, а рисовать его в коде — держать вторую копию
+            // фирменного знака, которая разойдётся с настоящим.
+            resources: [.process("Assets")]
         ),
 
         // XCTest и swift-testing без Xcode недоступны, поэтому проверки —

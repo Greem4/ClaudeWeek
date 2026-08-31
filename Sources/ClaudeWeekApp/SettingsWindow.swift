@@ -42,6 +42,11 @@ final class SettingsModel {
     private(set) var account: String?
     /// С какого момента ведётся локальный счёт; nil — с начала окна.
     private(set) var countingSince: Date?
+    /// Оба аккаунта: где живёт дом каждого и кто в него вошёл. Заводится
+    /// здесь, а не в конфиге, потому что это не настройка, а наблюдение —
+    /// отвечает `claude auth status`, и переспросить его дешевле, чем держать
+    /// вторую копию, которая разойдётся после ближайшего входа.
+    private(set) var accountRows: [AccountRow] = []
 
     /// Обновление идёт мимо конфига, и состояние у него общее с панелью и
     /// меню — сюда приходит тот же контроллер, а не его копия.
@@ -77,22 +82,54 @@ final class SettingsModel {
     /// перерисовку вкладки незачем, а между показами плист мог снести
     /// `uninstall.sh` или рука.
     func refreshDiagnostics() {
-        let cache = Store.loadCache()
+        // Всё ниже — про аккаунт, показанный в панели: у второго и снимок, и
+        // отсечка счёта, и запись Keychain свои.
+        let location = AccountLocation(account: config.activeAccount, config: config)
+        let cache = Store.loadCache(from: location.cacheURL)
         pickedBudget = cache?.weeklyBudget
         // Момент из кеша мог остаться в прошлой неделе — проекция вперёд
         // целыми неделями даёт тот, который наступит следующим.
         officialReset = cache?.projectedWindow(at: Date(), config: config)?.end
         launchAtLogin = LoginItem.isEnabled
-        countingSince = Store.loadState().countFrom
+        countingSince = Store.loadState(from: location.countingStateURL).countFrom
         // В режиме «только локальная оценка» Keychain не читаем и здесь:
         // окно настроек — не повод нарушить обещание, данное на этой же
         // вкладке. Строка про аккаунт тогда просто не показывается.
         account = config.provider == .local
             ? nil
-            : (try? KeychainCredentials().load())?.accountMark
+            : (try? ResolvingProvider.credentials(
+                for: config.activeAccount,
+                config: config,
+                status: accountRows.first { $0.account == config.activeAccount }?.status ?? .signedOut
+              ).load())?.accountMark
+        reloadAccountRows()
         // Разрешение на уведомления снимают там же, где выдали, — в системных
         // настройках, мимо этого окна. Спрашиваем систему на каждый показ.
         notifications.refresh()
+    }
+
+    /// Перечитывает, кто вошёл в каждый дом. Кеш ответов сбрасываем: окно
+    /// настроек открывают как раз затем, чтобы увидеть последствия входа,
+    /// и старый ответ здесь был бы ровно тем, за чем сюда не приходили.
+    private func reloadAccountRows() {
+        let config = config
+        Task { [weak self] in
+            await AccountDirectory.shared.forget()
+            var rows: [AccountRow] = []
+            for account in UsageAccount.allCases {
+                let location = AccountLocation(account: account, config: config)
+                let status = location.exists
+                    ? await AccountDirectory.shared.status(of: location)
+                    : AccountStatus.signedOut
+                rows.append(AccountRow(
+                    account: account,
+                    home: location.home.path,
+                    exists: location.exists,
+                    status: status
+                ))
+            }
+            self?.accountRows = rows
+        }
     }
 
     /// Состояние возвращаем не из галочки, а из самого агента: включить его
@@ -200,6 +237,19 @@ final class SettingsModel {
         fresh.calibration = config.calibration
         config = fresh
     }
+}
+
+/// Один аккаунт в таблице настроек: где его дом и кто в него вошёл.
+struct AccountRow: Identifiable, Sendable {
+    let account: UsageAccount
+    let home: String
+    /// Каталог дома есть на диске. Отдельно от `status.loggedIn`: дома нет —
+    /// аккаунт не заводили вовсе, дом есть и выход — в него не вошли, и
+    /// советы человеку в этих двух случаях разные.
+    let exists: Bool
+    let status: AccountStatus
+
+    var id: UsageAccount { account }
 }
 
 /// Обычное окно приложения: с рамкой, в Mission Control, закрывается по ⌘W.

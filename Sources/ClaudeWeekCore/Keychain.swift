@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Security
 
@@ -5,22 +6,27 @@ import Security
 /// токен, которым уже пользуется Claude Code на этой машине, и потому видит
 /// ровно тот аккаунт, что показывает `/usage`.
 ///
-/// Форма записи (проверено на 2.1.221, 2026-08-04):
+/// Форма записи (проверено на 2.1.251, 2026-08-31):
 /// ```
-/// { "claudeAiOauth": { "accessToken": "sk-ant-oat01-…", "expiresAt": 1786…,
-///                      "refreshToken": …, "scopes": […],
-///                      "subscriptionType": … },
-///   "organizationUuid": … }
+/// { "claudeAiOauth": { "accessToken": "sk-ant-oat01-…", "expiresAt": 1788…,
+///                      "refreshToken": …, "refreshTokenExpiresAt": …,
+///                      "scopes": […], "subscriptionType": …,
+///                      "rateLimitTier": … } }
 /// ```
+/// На 2.1.221 рядом с `claudeAiOauth` лежал ещё и `organizationUuid`; в 2.1.251
+/// его нет ни на одном уровне. Кому принадлежит токен, запись больше не
+/// говорит — это знает только `claude auth status`.
 public struct OAuthCredentials: Sendable, Equatable {
     public let accessToken: String
     /// Момент истечения; nil — поля не было.
     public let expiresAt: Date?
     public let subscriptionType: String?
-    /// Организация, которой принадлежит аккаунт. Единственное в записи, что
-    /// переживает обновление токена: сам токен меняется раз в час, и отличить
-    /// по нему рабочий вход от домашнего нельзя, а этот UUID держится, пока
-    /// не вошли другим аккаунтом.
+    /// Организация, которой принадлежит аккаунт. Отличить аккаунт по самому
+    /// токену нельзя — он меняется раз в час, — а этот UUID держится, пока не
+    /// вошли другим аккаунтом.
+    ///
+    /// В записи Keychain его с 2.1.251 нет, поэтому приходит он обычно
+    /// снаружи, от `claude auth status`, — см. `attributed(to:)`.
     public let organizationUuid: String?
 
     public init(
@@ -50,10 +56,35 @@ public struct OAuthCredentials: Sendable, Equatable {
         guard let organizationUuid, !organizationUuid.isEmpty else { return nil }
         return "\(organizationUuid.prefix(8))·\(subscriptionType ?? "—")"
     }
+
+    /// Те же креды, но с проставленной принадлежностью. Нужно там, где
+    /// организацию назвал не Keychain, а `claude auth status`.
+    public func attributed(to organizationUuid: String) -> OAuthCredentials {
+        OAuthCredentials(
+            accessToken: accessToken,
+            expiresAt: expiresAt,
+            subscriptionType: subscriptionType,
+            organizationUuid: organizationUuid
+        )
+    }
 }
 
 public protocol CredentialsSource: Sendable {
     func load() throws -> OAuthCredentials
+}
+
+/// Кредов у аккаунта нет — в него ещё не вошли.
+///
+/// Нужен именно отдельный тип, а не `nil`: там, где источник кредов
+/// необязателен, `nil` означает «возьми Keychain по умолчанию», то есть запись
+/// первого аккаунта. Для второго дома это тихо подставило бы чужой токен и
+/// показало чужие цифры под его именем.
+public struct SignedOutCredentials: CredentialsSource {
+    public init() {}
+
+    public func load() throws -> OAuthCredentials {
+        throw UsageError.unauthorized
+    }
 }
 
 /// Читает запись Keychain, куда Claude Code кладёт свои OAuth-креды.
@@ -229,5 +260,75 @@ public struct KeychainCredentials: CredentialsSource {
         let raw = number.doubleValue
         guard raw > 0 else { return nil }
         return Date(timeIntervalSince1970: raw > 1e11 ? raw / 1000 : raw)
+    }
+}
+
+/// Креды конфиг-дома, чья запись Keychain названа не по умолчанию.
+///
+/// Аккаунты Claude Code различает конфиг-дом, и токен каждого дома лежит в
+/// своей записи. Имя записи Claude Code собирает из пути дома:
+/// `Claude Code-credentials-<первые 8 hex sha256 пути>`, а стандартному дому
+/// оставляет имя без приставки (наблюдалось на 2.1.251:
+/// `sha256("/Users/greem4/.claude-b")` начинается на `034e8c6f`, и запись
+/// второго дома называется `Claude Code-credentials-034e8c6f`).
+///
+/// Раньше запись искали иначе — перебором всех записей Claude Code со
+/// сверкой `organizationUuid` внутри каждой. Способ умер вместе с полем:
+/// в 2.1.251 запись состоит из одного `claudeAiOauth`, и `organizationUuid`
+/// в ней нет ни на одном уровне. Сверять стало нечем, и сопоставление по
+/// организации молча переставало находить хоть что-нибудь — второй аккаунт
+/// показывал «в этот аккаунт ещё не вошли», хотя вход был.
+///
+/// Имя по формуле — догадка о чужой внутренней детали, и это осознанная
+/// цена. Опасность, из-за которой формулу отвергали раньше, здесь не
+/// возникает: имя выводится из **дома**, а не из аккаунта, поэтому смена
+/// схемы именования в CLI даёт «записи нет» — честное «нет доступа», — а не
+/// чужой токен под нашим именем.
+public struct HomeKeychainCredentials: CredentialsSource {
+    /// Конфиг-дом аккаунта — то же, что уходит в `CLAUDE_CONFIG_DIR`.
+    private let home: URL
+    /// Запасной путь: креды файлом в самом доме аккаунта.
+    private let fileURL: URL
+    /// Чей это дом — организация из `claude auth status`.
+    ///
+    /// Приписывается снаружи, потому что в самой записи принадлежности
+    /// больше нет, а `accountMark` без неё не собрать: отсечка счёта
+    /// перестала бы замечать вход другим аккаунтом.
+    private let organizationUuid: String?
+
+    public init(home: URL, fileURL: URL, organizationUuid: String? = nil) {
+        self.home = home
+        self.fileURL = fileURL
+        self.organizationUuid = organizationUuid
+    }
+
+    public func load() throws -> OAuthCredentials {
+        let credentials = try KeychainCredentials(
+            service: HomeKeychainCredentials.service(for: home),
+            fileURL: fileURL
+        ).load()
+        // Своё в записи всегда важнее приписанного: вернётся поле в запись —
+        // возьмём его, и приписывать станет нечего.
+        guard credentials.organizationUuid == nil, let organizationUuid else { return credentials }
+        return credentials.attributed(to: organizationUuid)
+    }
+
+    /// Имя записи Keychain, в которой Claude Code держит токен этого дома.
+    ///
+    /// Путь берётся приведённым: `~/.claude-b` и `~/.claude-b/` — один дом, и
+    /// хвостовой слеш в конфиге не должен уводить нас к несуществующей записи.
+    public static func service(for home: URL) -> String {
+        let base = KeychainCredentials.defaultService
+        let path = home.standardizedFileURL.path
+        guard path != AccountLocation.defaultHome.standardizedFileURL.path else { return base }
+        return "\(base)-\(digest(path))"
+    }
+
+    /// Первые четыре байта sha256 пути, шестнадцатеричной строкой.
+    static func digest(_ path: String) -> String {
+        SHA256.hash(data: Data(path.utf8))
+            .prefix(4)
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 }
