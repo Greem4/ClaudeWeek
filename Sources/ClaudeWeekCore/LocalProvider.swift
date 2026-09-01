@@ -204,6 +204,16 @@ struct MessageUsage {
 public struct LocalUsage: Sendable {
     /// Условная стоимость недели в долларах.
     public let totalCost: Double
+    /// Стоимость окна до отсечки счёта — то, что в счёт нынешнего аккаунта
+    /// не идёт. В `totalCost` и `costByDay` её нет намеренно: локальная
+    /// оценка итога считает только свой расход. Нужна тому, у кого итог уже
+    /// есть от сервера: он-то знает про всю неделю, и форму надо разложить
+    /// по всему окну, а не по огрызку после отсечки.
+    public let costBeforeCount: Double
+    /// Момент отсечки, если она стоит внутри окна. Нужен там же, где и
+    /// `costBeforeCount`: разложить досчётный расход можно только зная, по
+    /// какому отрезку недели он размазан.
+    public let countFrom: Date?
     /// Стоимость по суткам окна; nil — сутки ещё не наступили.
     public let costByDay: [Double?]
     /// Чем именно потрачено — от дорогого к дешёвому.
@@ -213,8 +223,14 @@ public struct LocalUsage: Sendable {
     public let filesRead: Int
     public let window: WeekWindow
 
+    /// Вся стоимость окна, вместе с досчётной. Ноль — форму строить не из
+    /// чего, ни своей, ни чужой.
+    public var grossCost: Double { totalCost + costBeforeCount }
+
     public init(
         totalCost: Double,
+        costBeforeCount: Double = 0,
+        countFrom: Date? = nil,
         costByDay: [Double?],
         byModel: [ModelUsage] = [],
         recordCount: Int,
@@ -223,6 +239,8 @@ public struct LocalUsage: Sendable {
         window: WeekWindow
     ) {
         self.totalCost = totalCost
+        self.costBeforeCount = costBeforeCount
+        self.countFrom = countFrom
         self.costByDay = costByDay
         self.byModel = byModel
         self.recordCount = recordCount
@@ -402,6 +420,7 @@ public actor LocalProvider: UsageProvider {
         var perDay = [Double](repeating: 0, count: window.slotCount)
         var perModel: [String: (cost: Double, tokens: TokenCounts, messages: Int)] = [:]
         var total = 0.0
+        var beforeCount = 0.0
         var counted = 0
 
         for entry in index.files.values {
@@ -413,12 +432,17 @@ public actor LocalProvider: UsageProvider {
                 // Записи позже `now` бывают при калибровке: она смотрит
                 // на прошлый момент, а индекс уже знает про более свежие.
                 guard record.timestamp <= now,
-                      // Всё, что раньше отсечки, накоплено прежним аккаунтом:
-                      // в лимит нынешнего оно не идёт, хотя лежит в тех же
-                      // файлах транскриптов.
-                      countFrom.map({ record.timestamp >= $0 }) ?? true,
                       let day = window.dayIndex(for: record.timestamp)
                 else { continue }
+                // Всё, что раньше отсечки, накоплено прежним аккаунтом: в
+                // лимит нынешнего оно не идёт, хотя лежит в тех же файлах
+                // транскриптов. Но и выбрасывать его насовсем нельзя —
+                // из него собирается форма недели, когда итог приходит от
+                // сервера: сервер-то считает всю неделю целиком.
+                guard countFrom.map({ record.timestamp >= $0 }) ?? true else {
+                    beforeCount += record.cost
+                    continue
+                }
                 perDay[day] += record.cost
                 total += record.cost
                 counted += 1
@@ -438,6 +462,8 @@ public actor LocalProvider: UsageProvider {
 
         return LocalUsage(
             totalCost: total,
+            costBeforeCount: beforeCount,
+            countFrom: countFrom,
             costByDay: costByDay,
             byModel: LocalProvider.breakdown(perModel, total: total),
             recordCount: counted,

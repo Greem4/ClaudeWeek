@@ -88,12 +88,21 @@ private struct TranscriptSandbox {
 
     /// Одно сообщение Opus заданной условной стоимости: вход $5 за Mtok.
     func write(cost: Double, at timestamp: String) {
-        let tokens = Int(cost / 5 * 1_000_000)
-        let line = """
-        {"type":"assistant","uuid":"\(UUID().uuidString)","timestamp":"\(timestamp)",\
-        "message":{"model":"claude-opus-5","usage":{"input_tokens":\(tokens),"output_tokens":0}}}
-        """
-        try? (line + "\n").write(
+        write([(cost, timestamp)])
+    }
+
+    /// Несколько сообщений одним файлом: расход по разные стороны отсечки
+    /// счёта проверяется только вместе — по одному на прогон о нём ничего
+    /// не скажешь.
+    func write(_ entries: [(cost: Double, at: String)]) {
+        let lines = entries.map { entry in
+            let tokens = Int(entry.cost / 5 * 1_000_000)
+            return """
+            {"type":"assistant","uuid":"\(UUID().uuidString)","timestamp":"\(entry.at)",\
+            "message":{"model":"claude-opus-5","usage":{"input_tokens":\(tokens),"output_tokens":0}}}
+            """
+        }
+        try? (lines.joined(separator: "\n") + "\n").write(
             to: root.appendingPathComponent("сессия.jsonl"), atomically: true, encoding: .utf8
         )
     }
@@ -387,6 +396,59 @@ func runOfficialProviderTests(_ t: Harness) async {
         _ = try await resolving(tiny).fetch()
         t.close(Store.loadCache(from: sandbox.cacheURL)?.weeklyBudget ?? 0, 20,
                 "по 2 % бюджет не перетирается — держим прежний", tolerance: 1e-9)
+    }
+
+    // Сброс счёта отсекает прежний расход от локальной оценки — но не от
+    // недельного итога: сервер считает всю неделю целиком. Раньше форма в
+    // этом случае пропадала совсем, и панель показывала прочерки во всех
+    // сутках при непустой неделе.
+    await t.suite("форма недели: расход до отсечки не пропадает") {
+        let sandbox = TranscriptSandbox()
+        defer { sandbox.cleanup() }
+        // Две одинаковые траты по разные стороны отсечки: половина недели
+        // накоплена до сброса счёта, половина — после.
+        sandbox.write([
+            (cost: 10, at: "2026-08-01T10:00:00.000Z"),
+            (cost: 10, at: "2026-08-04T06:00:00.000Z"),
+        ])
+        try Store.saveState(
+            CountingState(countFrom: ISO8601.parse("2026-08-03T00:00:00.000Z")),
+            to: sandbox.stateURL
+        )
+
+        let snapshot = try await ResolvingProvider(
+            config: config(),
+            credentials: FakeCredentials(),
+            transport: FakeTransport(answers: [(200, realResponse)]),
+            cacheURL: sandbox.cacheURL,
+            localRoot: sandbox.root,
+            indexURL: sandbox.indexURL,
+            stateURL: sandbox.stateURL,
+            alertsURL: sandbox.alertsURL,
+            clock: { testNow }
+        ).fetch()
+
+        // До отсечки в окне 34 рабочих часа: вечер пятницы (8), суббота и
+        // воскресенье (по 13). Ночь понедельника до 04:00 рабочей не считается,
+        // так что весь досчётный кусок разложен по этим 34 часам — и приходит
+        // к своим 25 % ровно в сутках отсечки.
+        t.close(snapshot.usedPercent, 50, "итог недели — от сервера, отсечка его не трогает")
+        t.close(snapshot.byDay[0].usedPercent ?? -1, 25 * 8 / 34,
+                "досчётный расход идёт вдоль плана, а не горкой в первых сутках", tolerance: 1e-9)
+        t.close(snapshot.byDay[1].usedPercent ?? -1, 25 * 21 / 34,
+                "к концу субботы — своя доля тех же 25 %", tolerance: 1e-9)
+        t.close(snapshot.byDay[2].usedPercent ?? -1, 25,
+                "в сутках отсечки досчётный кусок исчерпан", tolerance: 1e-9)
+        t.close(snapshot.byDay[3].usedPercent ?? -1, 25,
+                "дальше он просто тянется: значения накопительные", tolerance: 1e-9)
+        t.close(snapshot.byDay[4].usedPercent ?? -1, 50,
+                "свой расход добавился в свои сутки", tolerance: 1e-9)
+        t.check(snapshot.byDay[5].usedPercent == nil, "будущие сутки по-прежнему без факта")
+
+        // Ровный темп плана перерасхода дать не может — а горкой в первых
+        // сутках он зажигал ⚠ в строке, где ничего не случилось.
+        t.check(snapshot.byDay.prefix(3).allSatisfy { $0.overspendPercent == 0 },
+                "разложенный по плану расход перерасхода не рисует")
     }
 
     await t.suite("снимок официального источника") {

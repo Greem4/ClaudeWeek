@@ -242,7 +242,8 @@ public struct UsageSnapshot: Sendable {
     /// пятница приходит к 100 %. Сутки за скобкой остаются в недельной.
     public func rows(at now: Date) -> [DayUsage] {
         let base = window.scaleBase(at: now)
-        return window.rowOrder(at: now).compactMap { index in
+        let order = window.rowOrder(at: now)
+        let rows = order.compactMap { index -> DayUsage? in
             guard byDay.indices.contains(index) else { return nil }
             let day = byDay[index]
             guard let base, index >= base else { return day }
@@ -255,6 +256,38 @@ public struct UsageSnapshot: Sendable {
                 isPartial: day.isPartial
             )
         }
+        return fillingTail(rows, at: now, order: order, base: base)
+    }
+
+    /// Доливает в последнюю строку ряда расход тех последних суток окна,
+    /// которым строки не досталось.
+    ///
+    /// Огрызок перед сбросом среди ночи плана не набирает и своей строки не
+    /// получает (`WeekWindow.rowSlots`), но потрачено в нём по-настоящему.
+    /// Показать этот расход больше негде, а без него ряд заканчивался бы
+    /// числом меньше недельного итога — и разница молча расходилась бы с
+    /// футером, где итог свой.
+    private func fillingTail(_ rows: [DayUsage], at now: Date, order: [Int], base: Int?) -> [DayUsage] {
+        let tail = window.slotCount - 1
+        guard tail >= 0, byDay.indices.contains(tail), !order.contains(tail),
+              now >= window.dayStart(tail), let last = rows.last
+        else { return rows }
+
+        let used = base.map { rebased(byDay[tail].usedPercent, base: $0) } ?? byDay[tail].usedPercent
+        // Значения накопительные: меньше того, что уже в строке, хвост дать
+        // не может, а равное доливать незачем.
+        guard let used, used > (last.usedPercent ?? 0) else { return rows }
+
+        var result = rows
+        result[result.count - 1] = DayUsage(
+            index: last.index,
+            start: last.start,
+            end: last.end,
+            planPercent: last.planPercent,
+            usedPercent: used,
+            isPartial: last.isPartial
+        )
+        return result
     }
 
     /// Факт в шкале ряда: какая доля остатка, что был к началу недели, съедена

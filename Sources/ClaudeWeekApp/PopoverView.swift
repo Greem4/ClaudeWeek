@@ -49,28 +49,36 @@ struct PopoverView: View {
                     calendar: model.config.calendar,
                     animated: !reduceMotion
                 )
+                .id(model.config.activeAccount)
             }
 
             Divider().overlay(palette.separator.color)
 
-            if let snapshot = model.snapshot {
-                // Разбивка встаёт ровно на место дней, в ту же сетку: щелчок
-                // по цифрам меняет содержание строк, а не открывает второе
-                // место, где те же проценты сказаны по-своему. Дневной план
-                // выключен в настройках — дней вовсе нет, и на их месте одна
-                // полоса на всю неделю, тем же видом, что у сессии.
-                if model.showsModels {
-                    models(snapshot)
-                } else if appearance.showsPlan {
-                    days(snapshot)
+            // Полосы привязаны к аккаунту: у другого аккаунта другие цифры,
+            // а не изменившиеся свои. Без этого переключение проигрывалось
+            // анимацией — полосы уезжали в ноль и приползали на новое место,
+            // хотя показывают уже совсем другую неделю.
+            Group {
+                if let snapshot = model.snapshot {
+                    // Разбивка встаёт ровно на место дней, в ту же сетку: щелчок
+                    // по цифрам меняет содержание строк, а не открывает второе
+                    // место, где те же проценты сказаны по-своему. Дневной план
+                    // выключен в настройках — дней вовсе нет, и на их месте одна
+                    // полоса на всю неделю, тем же видом, что у сессии.
+                    if model.showsModels {
+                        models(snapshot)
+                    } else if appearance.showsPlan {
+                        days(snapshot)
+                    } else {
+                        weekRow(snapshot)
+                    }
+                } else if let notice = model.notice {
+                    noticeRow(notice)
                 } else {
-                    weekRow(snapshot)
+                    placeholders
                 }
-            } else if let notice = model.notice {
-                noticeRow(notice)
-            } else {
-                placeholders
             }
+            .id(model.config.activeAccount)
 
             Divider().overlay(palette.separator.color)
             footer

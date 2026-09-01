@@ -280,8 +280,18 @@ public struct WeekWindow: Sendable, Equatable {
     public func rowSlots(at date: Date) -> Range<Int> {
         guard splitsResetDay else { return 0..<slotCount }
         let lastDayStart = dayBounds[slotCount - 1]
-        let offset = date >= lastDayStart ? 1 : 0
+        let offset = date >= lastDayStart && tailEarnsPlan ? 1 : 0
         return offset..<(offset + rowCount)
+    }
+
+    /// Растёт ли план в последних сутках окна. При сбросе среди ночи их
+    /// огрызок целиком лежит вне рабочих часов, плана не набирает нисколько
+    /// и приходит к тем же 100 %, что и предыдущие сутки, — две одинаковые
+    /// сотни подряд в ряду. Тогда день сброса остаётся в нём своей первой
+    /// половиной: у неё хотя бы есть собственный вес.
+    private var tailEarnsPlan: Bool {
+        guard splitsResetDay else { return true }
+        return workHours.seconds(from: dayBounds[slotCount - 1], to: end, calendar: calendar) > 0
     }
 
     /// Номера суток окна в том порядке, в каком они лягут строками панели.

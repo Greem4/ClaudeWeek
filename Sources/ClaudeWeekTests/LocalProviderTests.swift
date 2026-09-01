@@ -394,5 +394,7 @@ func runLocalProviderTests(_ t: Harness) async {
         t.close(after.totalCost, 5, "и стоимость считается по ней одной")
         t.close(after.costByDay.compactMap { $0 }.reduce(0, +), 5,
                 "суточные полосы тоже без прежнего расхода")
+        t.close(after.costBeforeCount, 5, "но прежний расход помнится отдельно")
+        t.close(after.grossCost, 10, "вся стоимость окна — обе стороны отсечки")
     }
 }
