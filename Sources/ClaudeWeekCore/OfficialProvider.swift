@@ -310,7 +310,9 @@ public actor OfficialProvider: UsageProvider {
     /// Локальный расчёт за то же окно; nil — транскриптов нет или они пусты.
     private func localUsage(window: WeekWindow, now: Date) async -> LocalUsage? {
         guard let shape else { return nil }
-        guard let local = try? await shape.scan(window: window, now: now), local.totalCost > 0 else {
+        // Годится и расход, целиком отсечённый сбросом счёта: итог недели
+        // здесь свой, от сервера, и форму надо разложить по всему окну.
+        guard let local = try? await shape.scan(window: window, now: now), local.grossCost > 0 else {
             Log.debug("локальной формы нет — панель покажет только итог")
             return nil
         }
@@ -319,14 +321,48 @@ public actor OfficialProvider: UsageProvider {
 
     /// Форма недели: доля каждых суток в локальной стоимости, умноженная на
     /// официальный процент. Итог точный, форма правдоподобная.
+    ///
+    /// Расход до отсечки счёта раскладывается по плану отрезка «начало окна →
+    /// отсечка». Подённой правды о нём нет — отсечка на то и стоит, чтобы
+    /// прежний счёт не смешивался с нынешним, — но и потерять его нельзя:
+    /// сервер эти проценты уже насчитал, и без них ряд стоял бы пустым при
+    /// непустой неделе. Ровный темп в рабочие часы — та же догадка, по
+    /// которой считается план, и единственная, которая не выдумывает ни
+    /// всплеска, ни простоя: сложенный горкой в одни сутки, этот расход
+    /// зажигал в них перерасход, которого не было.
     private func shapeByDay(_ local: LocalUsage?, total: Double, window: WeekWindow) -> [Double?] {
-        guard let local else { return Array(repeating: nil, count: window.slotCount) }
+        guard let local, local.grossCost > 0 else {
+            return Array(repeating: nil, count: window.slotCount)
+        }
 
+        let carried = local.costBeforeCount / local.grossCost * total
+        let spread = carriedShares(local.countFrom, window: window)
         var running = 0.0
-        return local.costByDay.map { cost in
+
+        return local.costByDay.enumerated().map { index, cost in
             guard let cost else { return nil }
             running += cost
-            return running / local.totalCost * total
+            let share = index < spread.count ? spread[index] : 1
+            return carried * share + running / local.grossCost * total
+        }
+    }
+
+    /// Какая доля досчётного расхода приходится на конец каждых суток окна.
+    ///
+    /// Считается планом: доля рабочего времени, прошедшего к концу этих суток,
+    /// от всего рабочего времени до отсечки. Ряд от этого идёт вдоль плановой
+    /// линии и упирается в общий досчётный процент ровно в сутках отсечки.
+    /// Рабочего времени до неё нет вовсе (сброс счёта в первую же ночь окна) —
+    /// весь кусок отдаём первым суткам: делить нечего, а терять нельзя.
+    private func carriedShares(_ countFrom: Date?, window: WeekWindow) -> [Double] {
+        guard let cut = countFrom, cut > window.start else {
+            return Array(repeating: 1, count: window.slotCount)
+        }
+        let whole = window.progress(at: cut)
+        guard whole > 0 else { return Array(repeating: 1, count: window.slotCount) }
+
+        return (0..<window.slotCount).map { index in
+            min(window.progress(at: window.dayStart(index + 1)) / whole, 1)
         }
     }
 }

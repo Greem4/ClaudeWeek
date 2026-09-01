@@ -230,4 +230,28 @@ func runPlanTests(_ t: Harness) {
         t.equal(snapshot.rows(at: at(2026, 8, 14, 9, 0)).last?.usedPercent, nil,
                 "факт последней строки берётся у её же суток")
     }
+
+    // Сброс среди ночи: последние сутки окна лежат вне рабочих часов, строки
+    // им не достаётся — но расход в них настоящий, и потеряться он не должен.
+    t.suite("строки дней: расход последних суток без строки") {
+        let night = WeekWindow(containing: at(2026, 8, 12, 12, 0), config: config(weekday: 3, hour: 2))
+        let now = at(2026, 8, 18, 0, 30)
+        let snapshot = UsageSnapshot.make(
+            usedPercent: 60,
+            cumulativeByDay: [5, 15, 25, 35, 45, 50, 55, 60],
+            window: night,
+            source: .local,
+            fetchedAt: now,
+            isEstimate: true
+        )
+        let rows = snapshot.rows(at: now)
+        t.equal(rows.map(\.index), [0, 1, 2, 3, 4, 5, 6], "ночной огрызок в ряд не попал")
+        t.close(rows.last?.usedPercent ?? 0, 60,
+                "и его расход долит в последнюю строку — до недельного итога")
+        t.close(rows[5].usedPercent ?? 0, 50, "остальные строки считают по своим суткам")
+
+        // До полуночи доливать нечего: огрызок ещё не начался.
+        t.close(snapshot.rows(at: at(2026, 8, 17, 23, 0)).last?.usedPercent ?? 0, 55,
+                "пока сутки огрызка не наступили, последняя строка своя")
+    }
 }
