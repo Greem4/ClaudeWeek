@@ -16,6 +16,8 @@
 
 ## [Не выпущено]
 
+## [0.2.3] — 2026-09-01
+
 ### Исправлено
 
 - **Ряд недели больше не приходит к 100 % дважды.** При сбросе среди ночи
@@ -486,7 +488,8 @@
 локальной оценкой как запасным вариантом, окно настроек, лицензия MIT, CI и
 образ, собираемый по тегу под Apple Silicon.
 
-[Не выпущено]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.2...HEAD
+[Не выпущено]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Greem4/ClaudeWeek/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Greem4/ClaudeWeek/compare/v0.1.14...v0.2.0
